@@ -62,24 +62,20 @@ func NewDeck(deckType DeckType) (*Deck, error) {
 	return deck, nil
 }
 
-// Cards возвращает копию оставшихся карт в колоде.
 func (d *Deck) Cards() []Card {
 	cardsCopy := make([]Card, len(d.cards))
 	copy(cardsCopy, d.cards)
 	return cardsCopy
 }
 
-// Type возвращает тип колоды (24, 36 или 52).
 func (d *Deck) Type() DeckType {
 	return d.deckType
 }
 
-// Trump возвращает козырную карту колоды.
 func (d *Deck) Trump() Card {
 	return d.trump
 }
 
-// CardsLeft возвращает количество оставшихся карт в колоде.
 func (d *Deck) CardsLeft() int {
 	return len(d.cards)
 }

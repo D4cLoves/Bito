@@ -27,12 +27,10 @@ func TestNewDeck_SizesAndUniqueness(t *testing.T) {
 			t.Errorf("len(deck.Cards()) = %d, want %d", len(cards), dt)
 		}
 
-		// Проверяем, что козырь совпадает с нижней картой колоды
 		if deck.Trump() != cards[len(cards)-1] {
 			t.Errorf("deck.Trump() = %v, want last card %v", deck.Trump(), cards[len(cards)-1])
 		}
 
-		// Проверяем уникальность всех карт в колоде (нет дубликатов)
 		seen := make(map[Card]bool)
 		for _, card := range cards {
 			if seen[card] {
@@ -74,7 +72,6 @@ func TestDeck_Draw(t *testing.T) {
 		}
 	}
 
-	// Колода пуста, следующий вызов должен вернуть ErrEmptyDeck
 	card, err := deck.Draw()
 	if !errors.Is(err, ErrEmptyDeck) {
 		t.Errorf("Draw() on empty deck err = %v, want %v", err, ErrEmptyDeck)
@@ -120,13 +117,11 @@ func TestDeck_DrawMany(t *testing.T) {
 	t.Run("draw more than remaining", func(t *testing.T) {
 		deck, _ := NewDeck(Deck24)
 
-		// Забираем 20 карт, остается 4
 		_, err := deck.DrawMany(20)
 		if err != nil {
 			t.Fatalf("DrawMany(20) error: %v", err)
 		}
 
-		// Запрашиваем 10 при остатке 4 -> должны получить все 4
 		cards, err := deck.DrawMany(10)
 		if err != nil {
 			t.Fatalf("DrawMany(10) error: %v", err)
@@ -138,7 +133,6 @@ func TestDeck_DrawMany(t *testing.T) {
 			t.Errorf("deck.CardsLeft() = %d, want 0", deck.CardsLeft())
 		}
 
-		// Теперь колода пуста
 		emptyCards, err := deck.DrawMany(1)
 		if !errors.Is(err, ErrEmptyDeck) || emptyCards != nil {
 			t.Errorf("DrawMany(1) on empty deck = (%v, %v), want (nil, %v)", emptyCards, err, ErrEmptyDeck)
