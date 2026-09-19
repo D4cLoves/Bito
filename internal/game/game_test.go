@@ -141,6 +141,9 @@ func TestNewGame_Success(t *testing.T) {
 	if game.DefenderIdx() != (game.AttackerIdx()+1)%2 {
 		t.Errorf("DefenderIdx() = %d, want %d", game.DefenderIdx(), (game.AttackerIdx()+1)%2)
 	}
+	if game.InitialAttackerIdx() != game.AttackerIdx() {
+		t.Errorf("InitialAttackerIdx() = %d, want %d", game.InitialAttackerIdx(), game.AttackerIdx())
+	}
 }
 
 func setupTestGame(mode GameMode) (*Game, *Player, *Player) {
@@ -152,6 +155,7 @@ func setupTestGame(mode GameMode) (*Game, *Player, *Player) {
 	p2.ClearHand()
 	game.attackerIdx = 0
 	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
 
 	return game, p1, p2
 }
@@ -203,6 +207,76 @@ func TestGame_Attack(t *testing.T) {
 	game.phase = PhaseDealing
 	if err := game.Attack(p1.ID(), c6Spades); !errors.Is(err, ErrWrongPhase) {
 		t.Errorf("Attack dealing phase err = %v, want %v", err, ErrWrongPhase)
+	}
+}
+
+func TestGame_AutoAttack(t *testing.T) {
+	game, p1, p2 := setupTestGame(ModePodkidnoy)
+	trumpSuit := game.deck.Trump().Suit
+
+	nonTrumpSuit := Hearts
+	if trumpSuit == Hearts {
+		nonTrumpSuit = Spades
+	}
+
+	cTrumpLow := Card{Suit: trumpSuit, Rank: Rank6}
+	cNonTrumpHigh := Card{Suit: nonTrumpSuit, Rank: RankAce}
+	cNonTrumpLow := Card{Suit: nonTrumpSuit, Rank: Rank7}
+
+	p1.AddCards([]Card{cTrumpLow, cNonTrumpHigh, cNonTrumpLow})
+	p2.AddCards([]Card{{Suit: Clubs, Rank: Rank8}, {Suit: Clubs, Rank: Rank9}})
+
+	card, err := game.AutoAttack(p1.ID())
+	if err != nil {
+		t.Fatalf("AutoAttack unexpected error: %v", err)
+	}
+	if card != cNonTrumpLow {
+		t.Errorf("AutoAttack card = %v, want lowest non-trump %v", card, cNonTrumpLow)
+	}
+
+	p1.ClearHand()
+	p1.AddCard(cTrumpLow)
+	game.table.Clear()
+
+	card, err = game.AutoAttack(p1.ID())
+	if err != nil {
+		t.Fatalf("AutoAttack with only trumps unexpected error: %v", err)
+	}
+	if card != cTrumpLow {
+		t.Errorf("AutoAttack card = %v, want %v", card, cTrumpLow)
+	}
+
+	if _, err := game.AutoAttack(p2.ID()); !errors.Is(err, ErrNotYourTurn) {
+		t.Errorf("AutoAttack by non-attacker err = %v, want %v", err, ErrNotYourTurn)
+	}
+
+	game.phase = PhaseFinished
+	if _, err := game.AutoAttack(p1.ID()); !errors.Is(err, ErrGameOver) {
+		t.Errorf("AutoAttack game over err = %v, want %v", err, ErrGameOver)
+	}
+
+	game.phase = PhaseGivingMore
+	if _, err := game.AutoAttack(p1.ID()); !errors.Is(err, ErrWrongPhase) {
+		t.Errorf("AutoAttack wrong phase err = %v, want %v", err, ErrWrongPhase)
+	}
+
+	game.phase = PhaseBattle
+	if _, err := game.AutoAttack("unknown"); !errors.Is(err, ErrPlayerNotFound) {
+		t.Errorf("AutoAttack unknown player err = %v, want %v", err, ErrPlayerNotFound)
+	}
+
+	pInactive := NewPlayer("inactive", "Ghost")
+	pInactive.SetState(PlayerFinished)
+	game.players = append(game.players, pInactive)
+	if _, err := game.AutoAttack("inactive"); !errors.Is(err, ErrPlayerNotActive) {
+		t.Errorf("AutoAttack inactive player err = %v, want %v", err, ErrPlayerNotActive)
+	}
+	game.players = game.players[:2]
+
+	p1.ClearHand()
+	game.table.Clear()
+	if _, err := game.AutoAttack(p1.ID()); !errors.Is(err, ErrNoCardsAvailable) {
+		t.Errorf("AutoAttack empty hand err = %v, want %v", err, ErrNoCardsAvailable)
 	}
 }
 
@@ -293,6 +367,9 @@ func TestGame_Transfer(t *testing.T) {
 	if gamePerevod.AttackerIdx() != 1 || gamePerevod.DefenderIdx() != 2 {
 		t.Errorf("After transfer (attackerIdx, defenderIdx) = (%d, %d), want (1, 2)",
 			gamePerevod.AttackerIdx(), gamePerevod.DefenderIdx())
+	}
+	if gamePerevod.InitialAttackerIdx() != 0 {
+		t.Errorf("InitialAttackerIdx after transfer = %d, want 0", gamePerevod.InitialAttackerIdx())
 	}
 	if gamePerevod.Table().PairsCount() != 2 {
 		t.Errorf("Table pairs after transfer = %d, want 2", gamePerevod.Table().PairsCount())
@@ -408,6 +485,7 @@ func TestGame_Multiplayer_Pass(t *testing.T) {
 
 	game.attackerIdx = 0
 	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
 
 	c6Spades := Card{Suit: Spades, Rank: Rank6}
 	c7Spades := Card{Suit: Spades, Rank: Rank7}
@@ -448,6 +526,7 @@ func TestGame_GameOver_Winner_Loser(t *testing.T) {
 	p2.ClearHand()
 	game.attackerIdx = 0
 	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
 
 	for game.deck.CardsLeft() > 0 {
 		_, _ = game.deck.Draw()
@@ -485,6 +564,7 @@ func TestGame_GameOver_Draw(t *testing.T) {
 	p2.ClearHand()
 	game.attackerIdx = 0
 	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
 
 	for game.deck.CardsLeft() > 0 {
 		_, _ = game.deck.Draw()
@@ -505,6 +585,81 @@ func TestGame_GameOver_Draw(t *testing.T) {
 	if !game.IsDraw() {
 		t.Error("IsDraw want true")
 	}
+	if game.WinnerID() != "" {
+		t.Errorf("WinnerID on Draw = %q, want empty", game.WinnerID())
+	}
+}
+
+func TestGame_Surrender(t *testing.T) {
+	p1 := NewPlayer("p1", "Alice")
+	p2 := NewPlayer("p2", "Bob")
+	game, _ := NewGame(ModePodkidnoy, Deck36, []*Player{p1, p2})
+
+	if err := game.Surrender("unknown"); !errors.Is(err, ErrPlayerNotFound) {
+		t.Errorf("Surrender unknown player err = %v, want %v", err, ErrPlayerNotFound)
+	}
+
+	pInactive := NewPlayer("inactive", "Ghost")
+	pInactive.SetState(PlayerFinished)
+	game.players = append(game.players, pInactive)
+	if err := game.Surrender("inactive"); !errors.Is(err, ErrPlayerNotActive) {
+		t.Errorf("Surrender inactive player err = %v, want %v", err, ErrPlayerNotActive)
+	}
+	game.players = game.players[:2]
+
+	if err := game.Surrender(p1.ID()); err != nil {
+		t.Fatalf("Surrender unexpected error: %v", err)
+	}
+
+	if game.Phase() != PhaseFinished {
+		t.Errorf("Phase after surrender = %v, want PhaseFinished", game.Phase())
+	}
+	if game.WinnerID() != p2.ID() {
+		t.Errorf("WinnerID = %v, want %v", game.WinnerID(), p2.ID())
+	}
+	if game.LoserID() != p1.ID() {
+		t.Errorf("LoserID = %v, want %v", game.LoserID(), p1.ID())
+	}
+	if p1.State() != PlayerSurrendered {
+		t.Errorf("p1 state = %v, want PlayerSurrendered", p1.State())
+	}
+	if p1.HandCount() != 0 {
+		t.Errorf("p1 handCount after surrender = %d, want 0", p1.HandCount())
+	}
+
+	if err := game.Surrender(p2.ID()); !errors.Is(err, ErrGameOver) {
+		t.Errorf("Surrender on finished game err = %v, want %v", err, ErrGameOver)
+	}
+
+	p3 := NewPlayer("p3", "Charlie")
+	p4 := NewPlayer("p4", "David")
+	game3, _ := NewGame(ModePodkidnoy, Deck36, []*Player{p1, p2, p3, p4})
+
+	c6 := Card{Suit: Spades, Rank: Rank6}
+	game3.attackerIdx = 0
+	game3.defenderIdx = 1
+	p1.AddCard(c6)
+	_ = game3.Attack(p1.ID(), c6)
+
+	if err := game3.Surrender(p2.ID()); err != nil {
+		t.Fatalf("Defender surrender in 4p game unexpected error: %v", err)
+	}
+	if game3.Phase() != PhaseBattle {
+		t.Errorf("Phase after defender surrender = %v, want PhaseBattle", game3.Phase())
+	}
+	if game3.Table().PairsCount() != 0 {
+		t.Errorf("Table pairs after defender surrender = %d, want 0", game3.Table().PairsCount())
+	}
+
+	gameAttackerSurr, _ := NewGame(ModePodkidnoy, Deck36, []*Player{p1, p2, p3})
+	gameAttackerSurr.attackerIdx = 0
+	gameAttackerSurr.defenderIdx = 1
+	if err := gameAttackerSurr.Surrender(p1.ID()); err != nil {
+		t.Fatalf("Attacker surrender on empty table unexpected error: %v", err)
+	}
+	if gameAttackerSurr.Attacker().ID() != p2.ID() {
+		t.Errorf("New attacker after p1 surrender = %v, want %v", gameAttackerSurr.Attacker().ID(), p2.ID())
+	}
 }
 
 func TestGame_EdgeCases(t *testing.T) {
@@ -518,6 +673,7 @@ func TestGame_EdgeCases(t *testing.T) {
 	p3.ClearHand()
 	game.attackerIdx = 0
 	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
 
 	c6 := Card{Suit: Spades, Rank: Rank6}
 	c7 := Card{Suit: Spades, Rank: Rank7}
