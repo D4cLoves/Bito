@@ -15,36 +15,30 @@ const (
 	disconnectGraceDur = 30 * time.Second
 )
 
-// Room represents an isolated in-memory game room running its own Event Loop.
+type IncomingMessage struct {
+	Client *Client
+	Data   []byte
+}
+
 type Room struct {
-	id       string
-	gameMode game.GameMode
-	deckType game.DeckType
-	maxUsers int
-
-	// Connected clients mapped by PlayerID.
-	clients map[string]*Client
-
-	// Active game engine instance (only accessed by room's event loop goroutine).
-	game *game.Game
-
-	// Event loop communication channels.
+	id                string
+	gameMode          game.GameMode
+	deckType          game.DeckType
+	maxUsers          int
+	clients           map[string]*Client
+	game              *game.Game
 	register          chan *Client
 	unregister        chan *Client
 	incoming          chan IncomingMessage
 	turnTimeout       chan struct{}
 	disconnectTimeout chan string
 	stop              chan struct{}
-
-	// Timers.
-	turnTimer        *time.Timer
-	disconnectTimers map[string]*time.Timer
-
-	mu     sync.RWMutex
-	closed bool
+	turnTimer         *time.Timer
+	disconnectTimers  map[string]*time.Timer
+	mu                sync.RWMutex
+	closed            bool
 }
 
-// NewRoom creates a new game room.
 func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int) *Room {
 	return &Room{
 		id:                id,
@@ -55,24 +49,26 @@ func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
 		incoming:          make(chan IncomingMessage, 100),
-		turnTimeout:       make(chan struct{}),
-		disconnectTimeout: make(chan string),
+		turnTimeout:       make(chan struct{}, 1),
+		disconnectTimeout: make(chan string, 10),
 		stop:              make(chan struct{}),
 		disconnectTimers:  make(map[string]*time.Timer),
 	}
 }
 
-// ID returns the room identifier.
 func (r *Room) ID() string {
 	return r.id
 }
 
-// RegisterClient safely requests registering a client into the room.
-func (r *Room) RegisterClient(c *Client) {
-	r.register <- c
+func (r *Room) RegisterClient(c *Client) bool {
+	select {
+	case r.register <- c:
+		return true
+	case <-r.stop:
+		return false
+	}
 }
 
-// HasGraceTimer checks if a player currently has an active disconnect timer (thread-safe).
 func (r *Room) HasGraceTimer(playerID string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -80,13 +76,11 @@ func (r *Room) HasGraceTimer(playerID string) bool {
 	return exists
 }
 
-// Run is the single-threaded Event Loop of the room (Actor Pattern).
-// All game logic and state modifications happen strictly within this goroutine.
 func (r *Room) Run() {
-	log.Printf("[Room %s] event loop started", r.id)
+	log.Printf("[Room %s] цикл событий запущен", r.id)
 	defer func() {
 		r.cleanup()
-		log.Printf("[Room %s] event loop stopped", r.id)
+		log.Printf("[Room %s] цикл событий остановлен", r.id)
 	}()
 
 	for {
@@ -112,7 +106,6 @@ func (r *Room) Run() {
 	}
 }
 
-// Close terminates the room's event loop.
 func (r *Room) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -122,35 +115,62 @@ func (r *Room) Close() {
 	}
 }
 
-// handleRegister handles client connection or reconnection.
 func (r *Room) handleRegister(client *Client) {
 	playerID := client.ID()
 
-	// 1. Check if this is a reconnecting player with an active grace period timer.
 	r.mu.Lock()
 	timer, exists := r.disconnectTimers[playerID]
 	if exists {
 		timer.Stop()
 		delete(r.disconnectTimers, playerID)
-		log.Printf("[Room %s] player %s reconnected within grace period", r.id, playerID)
+		log.Printf("[Room %s] игрок %s вернулся в игру во время льготного периода", r.id, playerID)
 	}
 	r.mu.Unlock()
 
-	r.clients[playerID] = client
+	if r.game != nil {
+		if r.game.Phase() != game.PhaseFinished {
+			player, _ := r.game.PlayerByID(game.PlayerID(playerID))
+			if player == nil {
+				r.sendError(client, "партия уже идет, стол заполнен")
+				client.Close()
+				return
+			}
 
-	// 2. If the game is already in progress, immediately sync the state for this reconnected player.
-	if r.game != nil && r.game.Phase() != game.PhaseFinished {
-		r.sendGameStateTo(client)
-		return
+			r.clients[playerID] = client
+
+			notifyMsg, err := NewMessage(TypePlayerReconnected, PlayerStatusPayload{PlayerID: playerID})
+			if err == nil {
+				for id, c := range r.clients {
+					if id != playerID {
+						c.Send(notifyMsg)
+					}
+				}
+			}
+
+			r.sendGameStateTo(client)
+			return
+		} else {
+			r.sendError(client, "партия уже завершена")
+			client.Close()
+			return
+		}
 	}
 
-	// 3. If game not started yet, check if we reached the required player count.
-	if r.game == nil && len(r.clients) == r.maxUsers {
+	if len(r.clients) >= r.maxUsers {
+		if _, alreadyPresent := r.clients[playerID]; !alreadyPresent {
+			r.sendError(client, "стол уже заполнен")
+			client.Close()
+			return
+		}
+	}
+
+	r.clients[playerID] = client
+
+	if len(r.clients) == r.maxUsers {
 		r.startGame()
 	}
 }
 
-// handleUnregister handles player disconnection and starts grace period.
 func (r *Room) handleUnregister(client *Client) {
 	playerID := client.ID()
 	currentClient, exists := r.clients[playerID]
@@ -159,39 +179,52 @@ func (r *Room) handleUnregister(client *Client) {
 	}
 
 	delete(r.clients, playerID)
-	close(client.send)
+	client.Close()
 
-	// If game is not active, nothing more to do.
 	if r.game == nil || r.game.Phase() == game.PhaseFinished {
+		if len(r.clients) == 0 {
+			r.Close()
+		}
 		return
 	}
 
-	log.Printf("[Room %s] player %s disconnected, starting 30s grace period", r.id, playerID)
+	log.Printf("[Room %s] игрок %s потерял связь, запущен таймер ожидания 30 сек", r.id, playerID)
 
-	// Start 30-second Grace Period timer for reconnect.
+	notifyMsg, err := NewMessage(TypePlayerDisconnected, PlayerStatusPayload{PlayerID: playerID})
+	if err == nil {
+		for _, c := range r.clients {
+			c.Send(notifyMsg)
+		}
+	}
+
 	r.mu.Lock()
 	r.disconnectTimers[playerID] = time.AfterFunc(disconnectGraceDur, func() {
-		r.disconnectTimeout <- playerID
+		select {
+		case r.disconnectTimeout <- playerID:
+		case <-r.stop:
+		}
 	})
 	r.mu.Unlock()
 }
 
-// handleDisconnectTimeout handles expired grace period (technical defeat / fold).
 func (r *Room) handleDisconnectTimeout(playerID string) {
 	r.mu.Lock()
 	delete(r.disconnectTimers, playerID)
 	r.mu.Unlock()
 
+	if _, connected := r.clients[playerID]; connected {
+		return
+	}
+
 	if r.game == nil || r.game.Phase() == game.PhaseFinished {
 		return
 	}
 
-	log.Printf("[Room %s] player %s grace period expired -> surrender", r.id, playerID)
+	log.Printf("[Room %s] время ожидания игрока %s истекло -> автоматическая сдача", r.id, playerID)
 	_ = r.game.Surrender(game.PlayerID(playerID))
 	r.onGameStateChanged()
 }
 
-// startGame initializes the game engine and sends initial state.
 func (r *Room) startGame() {
 	players := make([]*game.Player, 0, len(r.clients))
 	for _, c := range r.clients {
@@ -200,29 +233,33 @@ func (r *Room) startGame() {
 
 	newGame, err := game.NewGame(r.gameMode, r.deckType, players)
 	if err != nil {
-		log.Printf("[Room %s] failed to create game: %v", r.id, err)
+		log.Printf("[Room %s] ошибка создания игры: %v", r.id, err)
 		return
 	}
 
 	r.game = newGame
-	log.Printf("[Room %s] game started with %d players", r.id, len(players))
+	log.Printf("[Room %s] партия началась, участников: %d", r.id, len(players))
 
 	r.resetTurnTimer()
 	r.broadcastGameState()
 }
 
-// handleIncoming parses and processes client actions sequentially.
 func (r *Room) handleIncoming(msg IncomingMessage) {
-	if r.game == nil {
-		r.sendError(msg.Client, "game not started yet")
-		return
-	}
-
 	var raw struct {
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(msg.Data, &raw); err != nil {
-		r.sendError(msg.Client, "invalid json format")
+		r.sendError(msg.Client, "неверный формат JSON")
+		return
+	}
+
+	if raw.Type == TypeChat {
+		r.handleChat(msg.Client, msg.Data)
+		return
+	}
+
+	if r.game == nil {
+		r.sendError(msg.Client, "игра еще не началась")
 		return
 	}
 
@@ -257,12 +294,8 @@ func (r *Room) handleIncoming(msg IncomingMessage) {
 	case TypeSurrender:
 		err = r.game.Surrender(pID)
 
-	case TypeChat:
-		r.handleChat(msg.Client, msg.Data)
-		return
-
 	default:
-		err = errors.New("unknown message type: " + raw.Type)
+		err = errors.New("неизвестный тип действия: " + raw.Type)
 	}
 
 	if err != nil {
@@ -270,15 +303,16 @@ func (r *Room) handleIncoming(msg IncomingMessage) {
 		return
 	}
 
-	// Action applied successfully -> update timers & notify players.
 	r.onGameStateChanged()
 }
 
-// onGameStateChanged handles post-action routine: check game over, reset timer, broadcast state.
 func (r *Room) onGameStateChanged() {
 	if r.game.Phase() == game.PhaseFinished {
 		r.stopTurnTimer()
 		r.broadcastGameOver()
+		time.AfterFunc(30*time.Second, func() {
+			r.Close()
+		})
 		return
 	}
 
@@ -286,7 +320,6 @@ func (r *Room) onGameStateChanged() {
 	r.broadcastGameState()
 }
 
-// handleTurnTimeout handles automatic decision when a player runs out of 20 seconds.
 func (r *Room) handleTurnTimeout() {
 	if r.game == nil || r.game.Phase() == game.PhaseFinished {
 		return
@@ -295,42 +328,46 @@ func (r *Room) handleTurnTimeout() {
 	defender := r.game.Defender()
 	attacker := r.game.Attacker()
 
-	// If defender timed out during battle, defender takes the cards.
-	if r.game.Phase() == game.PhaseBattle && r.game.Table().PairsCount() > 0 {
-		log.Printf("[Room %s] turn timeout: defender %s takes cards", r.id, defender.ID())
+	if r.game.Phase() == game.PhaseBattle && r.game.Table().HasUnbeaten() && defender != nil {
+		log.Printf("[Room %s] таймаут хода: защитник %s автоматически берет карты", r.id, defender.ID())
 		_ = r.game.Take(defender.ID())
 		r.onGameStateChanged()
 		return
 	}
 
-	// If attacker timed out:
-	if attacker != nil {
-		if r.game.Table().PairsCount() == 0 {
-			// Attack with lowest non-trump card
-			card, err := r.game.AutoAttack(attacker.ID())
-			if err == nil {
-				log.Printf("[Room %s] turn timeout: auto-attacked card %s", r.id, card)
-				r.onGameStateChanged()
-				return
-			}
-		} else {
-			// Pass / bita
-			_ = r.game.Pass(attacker.ID())
+	if r.game.Phase() == game.PhaseBattle && r.game.Table().PairsCount() == 0 && attacker != nil {
+		card, err := r.game.AutoAttack(attacker.ID())
+		if err == nil {
+			log.Printf("[Room %s] таймаут хода: авто-ход картой %s", r.id, card)
 			r.onGameStateChanged()
 			return
 		}
 	}
+
+	if (r.game.Table().IsAllBeaten() && r.game.Phase() == game.PhaseBattle) || r.game.Phase() == game.PhaseGivingMore {
+		for _, p := range r.game.Players() {
+			if defender != nil && p.ID() == defender.ID() {
+				continue
+			}
+			if p.IsActive() {
+				_ = r.game.Pass(p.ID())
+			}
+		}
+		r.onGameStateChanged()
+		return
+	}
 }
 
-// resetTurnTimer resets the 20-second decision timer.
 func (r *Room) resetTurnTimer() {
 	r.stopTurnTimer()
 	r.turnTimer = time.AfterFunc(turnDuration, func() {
-		r.turnTimeout <- struct{}{}
+		select {
+		case r.turnTimeout <- struct{}{}:
+		case <-r.stop:
+		}
 	})
 }
 
-// stopTurnTimer stops the current turn timer.
 func (r *Room) stopTurnTimer() {
 	if r.turnTimer != nil {
 		r.turnTimer.Stop()
@@ -338,14 +375,12 @@ func (r *Room) stopTurnTimer() {
 	}
 }
 
-// broadcastGameState prepares personalized state views and sends to each client.
 func (r *Room) broadcastGameState() {
 	for _, client := range r.clients {
 		r.sendGameStateTo(client)
 	}
 }
 
-// sendGameStateTo sends personalized game state to a single client (zero-knowledge for opponent cards).
 func (r *Room) sendGameStateTo(client *Client) {
 	if r.game == nil {
 		return
@@ -393,7 +428,6 @@ func (r *Room) sendGameStateTo(client *Client) {
 	}
 }
 
-// broadcastGameOver notifies players about match outcome.
 func (r *Room) broadcastGameOver() {
 	payload := GameOverPayload{
 		WinnerID: string(r.game.WinnerID()),
@@ -411,7 +445,6 @@ func (r *Room) broadcastGameOver() {
 	}
 }
 
-// handleChat forwards chat message to all players at the table.
 func (r *Room) handleChat(sender *Client, rawData []byte) {
 	var chatMsg Message[ChatPayload]
 	if err := json.Unmarshal(rawData, &chatMsg); err != nil {
@@ -431,7 +464,6 @@ func (r *Room) handleChat(sender *Client, rawData []byte) {
 	}
 }
 
-// sendError sends a structured error message to a specific client.
 func (r *Room) sendError(client *Client, errMsg string) {
 	data, err := NewMessage(TypeError, ErrorPayload{Message: errMsg})
 	if err == nil {
@@ -439,15 +471,16 @@ func (r *Room) sendError(client *Client, errMsg string) {
 	}
 }
 
-// cleanup stops all timers and notifies clients upon room shutdown.
 func (r *Room) cleanup() {
 	r.stopTurnTimer()
 	r.mu.Lock()
 	for _, timer := range r.disconnectTimers {
 		timer.Stop()
 	}
+	r.disconnectTimers = make(map[string]*time.Timer)
 	r.mu.Unlock()
+
 	for _, c := range r.clients {
-		close(c.send)
+		c.Close()
 	}
 }

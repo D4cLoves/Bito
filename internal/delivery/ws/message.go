@@ -16,10 +16,12 @@ const (
 )
 
 const (
-	TypeGameState = "game_state"
-	TypeGameOver  = "game_over"
-	TypeError     = "error"
-	TypeTimerTick = "timer_tick"
+	TypeGameState          = "game_state"
+	TypeGameOver           = "game_over"
+	TypeError              = "error"
+	TypeTimerTick          = "timer_tick"
+	TypePlayerDisconnected = "player_disconnected"
+	TypePlayerReconnected  = "player_reconnected"
 )
 
 type Message[T any] struct {
@@ -48,6 +50,10 @@ type ChatPayload struct {
 
 type ErrorPayload struct {
 	Message string `json:"message"`
+}
+
+type PlayerStatusPayload struct {
+	PlayerID string `json:"playerId"`
 }
 
 type TimerTickPayload struct {
@@ -87,10 +93,3 @@ func NewMessage(msgType string, payload any) ([]byte, error) {
 		Payload: payload,
 	})
 }
-
-// IncomingMessage represents a raw packet received from a specific client connection.
-type IncomingMessage struct {
-	Client *Client
-	Data   []byte
-}
-

@@ -194,6 +194,15 @@ func TestRoom_GracePeriodReconnect(t *testing.T) {
 		t.Fatalf("expected disconnect timer for p1")
 	}
 
+	// Bob should receive disconnect notification
+	if len(c2.send) > 0 {
+		var statusMsg Message[PlayerStatusPayload]
+		_ = json.Unmarshal(<-c2.send, &statusMsg)
+		if statusMsg.Type != TypePlayerDisconnected || statusMsg.Payload.PlayerID != "p1" {
+			t.Errorf("expected player_disconnected message for p1, got %v", statusMsg)
+		}
+	}
+
 	// Alice reconnects with a new client connection
 	c1New := createTestClient("p1", "Alice", room)
 	room.RegisterClient(c1New)
@@ -204,6 +213,15 @@ func TestRoom_GracePeriodReconnect(t *testing.T) {
 		t.Errorf("expected disconnect timer to be cleared upon reconnect")
 	}
 
+	// Bob should receive reconnect notification
+	if len(c2.send) > 0 {
+		var statusMsg Message[PlayerStatusPayload]
+		_ = json.Unmarshal(<-c2.send, &statusMsg)
+		if statusMsg.Type != TypePlayerReconnected || statusMsg.Payload.PlayerID != "p1" {
+			t.Errorf("expected player_reconnected message for p1, got %v", statusMsg)
+		}
+	}
+
 	// Alice should receive immediate game state sync
 	if len(c1New.send) == 0 {
 		t.Fatalf("expected reconnected client to receive state sync")
@@ -212,5 +230,83 @@ func TestRoom_GracePeriodReconnect(t *testing.T) {
 	_ = json.Unmarshal(<-c1New.send, &syncState)
 	if syncState.Type != TypeGameState {
 		t.Errorf("expected type %s, got %s", TypeGameState, syncState.Type)
+	}
+}
+
+func TestRoom_ChatBeforeGameStart(t *testing.T) {
+	room := NewRoom("room-lobby-chat", game.ModePodkidnoy, game.Deck36, 2)
+	go room.Run()
+	defer room.Close()
+
+	c1 := createTestClient("p1", "Alice", room)
+	room.RegisterClient(c1)
+	time.Sleep(20 * time.Millisecond)
+
+	// Send chat while alone in lobby (game == nil)
+	chatPayload, _ := NewMessage(TypeChat, ChatPayload{Message: "Кто играть?"})
+	room.incoming <- IncomingMessage{
+		Client: c1,
+		Data:   chatPayload,
+	}
+
+	time.Sleep(30 * time.Millisecond)
+
+	if len(c1.send) == 0 {
+		t.Fatalf("expected Alice to receive her own chat message in lobby")
+	}
+
+	var chatMsg Message[ChatPayload]
+	_ = json.Unmarshal(<-c1.send, &chatMsg)
+	if chatMsg.Type != TypeChat || chatMsg.Payload.Message != "Кто играть?" {
+		t.Errorf("unexpected chat message: %v", chatMsg)
+	}
+}
+
+func TestRoom_LobbyCapacityLimit(t *testing.T) {
+	room := NewRoom("room-cap", game.ModePodkidnoy, game.Deck36, 2)
+	go room.Run()
+	defer room.Close()
+
+	c1 := createTestClient("p1", "Alice", room)
+	c2 := createTestClient("p2", "Bob", room)
+	c3 := createTestClient("p3", "Charlie", room)
+
+	room.RegisterClient(c1)
+	room.RegisterClient(c2)
+	time.Sleep(30 * time.Millisecond)
+
+	// Now try to register Charlie when game has already started with 2 players
+	room.RegisterClient(c3)
+	time.Sleep(30 * time.Millisecond)
+
+	// Charlie should receive an error and not be admitted
+	if len(c3.send) == 0 {
+		t.Fatalf("expected error for 3rd player trying to join full room")
+	}
+
+	var errMsg Message[ErrorPayload]
+	_ = json.Unmarshal(<-c3.send, &errMsg)
+	if errMsg.Type != TypeError {
+		t.Errorf("expected error message type, got %s", errMsg.Type)
+	}
+}
+
+func TestClient_SendOnClosedDoesNotPanic(t *testing.T) {
+	c := &Client{
+		id:   "p-test",
+		name: "Test",
+		send: make(chan []byte, 1),
+	}
+
+	// Close client
+	c.Close()
+
+	// Double close should not panic
+	c.Close()
+
+	// Send on closed should return false and NOT panic
+	ok := c.Send([]byte("hello"))
+	if ok {
+		t.Errorf("expected Send to return false on closed client")
 	}
 }

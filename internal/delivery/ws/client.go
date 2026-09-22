@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,11 +16,13 @@ const (
 )
 
 type Client struct {
-	id   string
-	name string
-	conn *websocket.Conn
-	room *Room
-	send chan []byte
+	id     string
+	name   string
+	conn   *websocket.Conn
+	room   *Room
+	send   chan []byte
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewClient(id, name string, conn *websocket.Conn, room *Room) *Client {
@@ -40,7 +43,16 @@ func (c *Client) Name() string {
 	return c.name
 }
 
+// Send потокобезопасно отправляет сообщение клиенту.
+// Если клиент закрыт или буфер переполнен — паники не происходит.
 func (c *Client) Send(data []byte) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return false
+	}
+
 	select {
 	case c.send <- data:
 		return true
@@ -49,15 +61,31 @@ func (c *Client) Send(data []byte) bool {
 	}
 }
 
+// Close безопасно закрывает канал отправки один раз.
 func (c *Client) Close() {
-	close(c.send)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.closed {
+		c.closed = true
+		close(c.send)
+	}
 }
 
 func (c *Client) ReadPump() {
 	defer func() {
-		c.room.unregister <- c
-		c.conn.Close()
+		select {
+		case c.room.unregister <- c:
+		case <-c.room.stop:
+		}
+		if c.conn != nil {
+			c.conn.Close()
+		}
 	}()
+
+	if c.conn == nil {
+		return
+	}
 
 	c.conn.SetReadLimit(maxMessageSize)
 	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -71,7 +99,11 @@ func (c *Client) ReadPump() {
 		if err != nil {
 			break
 		}
-		c.room.incoming <- IncomingMessage{Client: c, Data: message}
+		select {
+		case c.room.incoming <- IncomingMessage{Client: c, Data: message}:
+		case <-c.room.stop:
+			return
+		}
 	}
 }
 
@@ -79,12 +111,17 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if c.conn != nil {
+			c.conn.Close()
+		}
 	}()
 
 	for {
 		select {
 		case msg, ok := <-c.send:
+			if c.conn == nil {
+				return
+			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -95,6 +132,9 @@ func (c *Client) WritePump() {
 			}
 
 		case <-ticker.C:
+			if c.conn == nil {
+				return
+			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
