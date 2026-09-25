@@ -43,8 +43,6 @@ func (c *Client) Name() string {
 	return c.name
 }
 
-// Send потокобезопасно отправляет сообщение клиенту.
-// Если клиент закрыт или буфер переполнен — паники не происходит.
 func (c *Client) Send(data []byte) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -61,7 +59,6 @@ func (c *Client) Send(data []byte) bool {
 	}
 }
 
-// Close безопасно закрывает канал отправки один раз.
 func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
