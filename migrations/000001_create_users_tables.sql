@@ -4,21 +4,26 @@
 -- Включаем расширение для генерации UUID v4 (если вдруг база без gen_random_uuid)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 1. Таблица пользователей
+-- 1. Таблица пользователей (с поддержкой Soft Delete)
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255),
     name          VARCHAR(64) NOT NULL,
     password_hash VARCHAR(255),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at    TIMESTAMPTZ
 );
 
--- Уникальный функциональный индекс на email (регистронезависимый)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email)) WHERE email IS NOT NULL;
+-- Уникальный функциональный индекс на email (только для активных/не удаленных)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower 
+    ON users (LOWER(email)) 
+    WHERE email IS NOT NULL AND deleted_at IS NULL;
 
--- Уникальный функциональный индекс на никнейм (регистронезависимый)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_lower ON users (LOWER(name));
+-- Уникальный функциональный индекс на никнейм (только для активных/не удаленных)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_lower 
+    ON users (LOWER(name)) 
+    WHERE deleted_at IS NULL;
 
 -- 2. Таблица игровой статистики (Связь 1-к-1 с каскадным удалением)
 CREATE TABLE IF NOT EXISTS user_stats (
@@ -37,7 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_user_stats_elo ON user_stats(elo DESC);
 CREATE TABLE IF NOT EXISTS user_wallets (
     user_id    UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     balance    BIGINT NOT NULL DEFAULT 2500 CHECK (balance >= 0),
-    bonus      BIGINT NOT NULL DEFAULT 0 CHECK (bonus >= 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

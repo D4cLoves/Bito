@@ -21,6 +21,7 @@ type User struct {
 	PasswordHash string         `json:"-"`
 	CreatedAt    time.Time      `json:"createdAt"`
 	UpdatedAt    time.Time      `json:"updatedAt"`
+	DeletedAt    *time.Time     `json:"-"`
 	Stats        *UserStats     `json:"stats,omitempty"`
 	Wallet       *UserWallet    `json:"wallet,omitempty"`
 	Accounts     []OAuthAccount `json:"accounts,omitempty"`
@@ -38,7 +39,6 @@ type UserStats struct {
 type UserWallet struct {
 	UserID    uuid.UUID `json:"-"`
 	Balance   int64     `json:"balance"`
-	Bonus     int64     `json:"bonus"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
