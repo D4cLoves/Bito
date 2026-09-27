@@ -3,14 +3,24 @@ package config
 import "github.com/ilyakaznacheev/cleanenv"
 
 type Config struct {
-	ServerPort  string `env:"SERVER_PORT" envDefault:"8080"`
-	ServerEnv   string `env:"SERVER_ENV" envDefault:"development"`
-	DBHost      string `env:"DB_HOST" envDefault:"localhost"`
-	DBPort      string `env:"DB_PORT" envDefault:"5432"`
-	DBUser      string `env:"DB_USER" envDefault:"postgres"`
-	DBPassword  string `env:"DB_PASSWORD" envDefault:"1221"`
-	DBName      string `env:"DB_NAME" envDefault:"bito_db"`
-	DBSSLMode   string `env:"DB_SSL_MODE" envDefault:"disable"`
+	ServerPort string `env:"SERVER_PORT" envDefault:"8080"`
+	ServerEnv  string `env:"SERVER_ENV" envDefault:"development"`
+
+	DBHost     string `env:"DB_HOST" envDefault:"localhost"`
+	DBPort     string `env:"DB_PORT" envDefault:"5432"`
+	DBUser     string `env:"DB_USER" envDefault:"postgres"`
+	DBPassword string `env:"DB_PASSWORD" envDefault:"1221"`
+	DBName     string `env:"DB_NAME" envDefault:"bito_db"`
+	DBSSLMode  string `env:"DB_SSL_MODE" envDefault:"disable"`
+
+	RedisHost     string `env:"REDIS_HOST" envDefault:"localhost"`
+	RedisPort     string `env:"REDIS_PORT" envDefault:"6379"`
+	RedisPassword string `env:"REDIS_PASSWORD" envDefault:""`
+	RedisDB       int    `env:"REDIS_DB" envDefault:"0"`
+
+	SMTPHost  string `env:"SMTP_HOST" envDefault:"localhost"`
+	SMTPPort  string `env:"SMTP_PORT" envDefault:"1025"`
+	SMTPFrom  string `env:"SMTP_FROM" envDefault:"no-reply@bito.local"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -23,4 +33,5 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 	return cfg, nil
+
 }
