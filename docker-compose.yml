@@ -23,14 +23,13 @@ services:
     volumes:
       - redis_data:/data
 
-  # Mailpit: Локальный SMTP сервер с красивым веб-интерфейсом для тестирования кодов подтверждения email
   mailpit:
     image: axllent/mailpit:latest
     container_name: bito_mailpit
     restart: always
     ports:
-      - "1025:1025" # SMTP port
-      - "8025:8025" # Web UI (открыть в браузере http://localhost:8025)
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
   postgres_data:

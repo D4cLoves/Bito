@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -15,7 +16,7 @@ type Config struct {
 	DBUser     string `env:"DB_USER" envDefault:"postgres"`
 	DBPassword string `env:"DB_PASSWORD" envDefault:"1221"`
 	DBName     string `env:"DB_NAME" envDefault:"bito_db"`
-	DBSSLMode  string `env:"DB_SSL_MODE" envDefault:"disable"`
+	DBSSLMode  string `env:"DB_SSLMODE" envDefault:"disable"`
 
 	RedisHost     string `env:"REDIS_HOST" envDefault:"localhost"`
 	RedisPort     string `env:"REDIS_PORT" envDefault:"6379"`
@@ -33,12 +34,23 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{}
-	err := cleanenv.ReadConfig(".env", cfg)
-	if err != nil {
-		err = cleanenv.ReadEnv(cfg)
-		if err != nil {
+
+	envFiles := []string{".env", "../.env", "../../.env"}
+	var loaded bool
+	for _, f := range envFiles {
+		if _, err := os.Stat(f); err == nil {
+			if err := cleanenv.ReadConfig(f, cfg); err == nil {
+				loaded = true
+				break
+			}
+		}
+	}
+
+	if !loaded {
+		if err := cleanenv.ReadEnv(cfg); err != nil {
 			return nil, err
 		}
 	}
+
 	return cfg, nil
 }
