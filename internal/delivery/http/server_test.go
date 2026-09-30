@@ -16,7 +16,7 @@ import (
 func TestE2E_DurakWebSocketGame(t *testing.T) {
 	// 1. Создаем хаб и поднимаем тестовый HTTP-сервер
 	hub := ws.NewHub()
-	server := NewServer(":0", hub)
+	server := NewServer(":0", hub, nil)
 	ts := httptest.NewServer(server.httpServer.Handler)
 	defer ts.Close()
 

@@ -295,7 +295,7 @@ func (r *Room) handleIncoming(msg IncomingMessage) {
 		err = r.game.Surrender(pID)
 
 	default:
-		err = errors.New("неизвестный тип действия: " + raw.Type)
+		err = errors.New("unknown action type: " + raw.Type)
 	}
 
 	if err != nil {

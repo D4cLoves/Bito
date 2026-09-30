@@ -13,11 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrUserAlreadyExists = errors.New("user already exists")
-	ErrUserNotFound      = errors.New("user not found")
-)
-
 const pgErrUniqueViolation = "23505"
 
 type UserRepository struct {
@@ -52,7 +47,7 @@ func (r *UserRepository) CreateUser(
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgErrUniqueViolation {
-			return ErrUserAlreadyExists
+			return model.ErrUserAlreadyExists
 		}
 		return fmt.Errorf("user repo: insert user: %w", err)
 	}
@@ -115,7 +110,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
+			return nil, model.ErrUserNotFound
 		}
 		return nil, fmt.Errorf("user repo: get by id: %w", err)
 	}
@@ -151,7 +146,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
+			return nil, model.ErrUserNotFound
 		}
 		return nil, fmt.Errorf("user repo: get by email: %w", err)
 	}
@@ -187,7 +182,7 @@ func (r *UserRepository) GetByName(ctx context.Context, name string) (*model.Use
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
+			return nil, model.ErrUserNotFound
 		}
 		return nil, fmt.Errorf("user repo: get by name: %w", err)
 	}
@@ -211,11 +206,11 @@ func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
 	err := r.pool.QueryRow(ctx, querySQL, user.Name, user.PasswordHash, user.ID).Scan(&user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrUserNotFound
+			return model.ErrUserNotFound
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgErrUniqueViolation {
-			return ErrUserAlreadyExists
+			return model.ErrUserAlreadyExists
 		}
 		return fmt.Errorf("user repo: update user: %w", err)
 	}
@@ -236,7 +231,7 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if cmdTag.RowsAffected() == 0 {
-		return ErrUserNotFound
+		return model.ErrUserNotFound
 	}
 
 	return nil

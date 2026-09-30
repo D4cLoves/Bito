@@ -14,15 +14,17 @@ import (
 )
 
 type Server struct {
-	httpServer *http.Server
-	hub        *ws.Hub
-	router     *chi.Mux
+	httpServer  *http.Server
+	hub         *ws.Hub
+	router      *chi.Mux
+	authHandler *AuthHandler
 }
 
-func NewServer(addr string, hub *ws.Hub) *Server {
+func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler) *Server {
 	s := &Server{
-		hub:    hub,
-		router: chi.NewRouter(),
+		hub:         hub,
+		router:      chi.NewRouter(),
+		authHandler: authHandler,
 	}
 
 	s.setupMiddlewares()
@@ -63,6 +65,13 @@ func (s *Server) setupRoutes() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	if s.authHandler != nil {
+		s.router.Route("/api/v1/auth", func(r chi.Router) {
+			r.Post("/register", s.authHandler.Register)
+			r.Post("/login", s.authHandler.Login)
+		})
+	}
 }
 
 func (s *Server) Router() *chi.Mux {

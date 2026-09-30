@@ -49,3 +49,10 @@ type OAuthAccount struct {
 	ProviderUserID string        `json:"providerUserId"`
 	CreatedAt      time.Time     `json:"createdAt"`
 }
+
+type PendingRegistration struct {
+	Code         string `json:"code"`
+	Email        string `json:"email"`
+	Name         string `json:"name"`
+	PasswordHash string `json:"passwordHash"`
+}

@@ -1,6 +1,10 @@
 package config
 
-import "github.com/ilyakaznacheev/cleanenv"
+import (
+	"time"
+
+	"github.com/ilyakaznacheev/cleanenv"
+)
 
 type Config struct {
 	ServerPort string `env:"SERVER_PORT" envDefault:"8080"`
@@ -21,6 +25,10 @@ type Config struct {
 	SMTPHost  string `env:"SMTP_HOST" envDefault:"localhost"`
 	SMTPPort  string `env:"SMTP_PORT" envDefault:"1025"`
 	SMTPFrom  string `env:"SMTP_FROM" envDefault:"no-reply@bito.local"`
+
+	JWTSecret     string        `env:"JWT_SECRET" envDefault:"secretkeysecretkeysecretkey"`
+	JWTAccessTTL  time.Duration `env:"JWT_ACCESS_EXPIRY" envDefault:"15m"`
+	JWTRefreshTTL time.Duration `env:"JWT_REFRESH_EXPIRY" envDefault:"168h"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -33,5 +41,4 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 	return cfg, nil
-
 }
