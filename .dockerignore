@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+web/node_modules
+web/dist
+tmp
+bin
+*.exe
+*.log
+brain

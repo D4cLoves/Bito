@@ -21,10 +21,7 @@
 
 #### ПРОТОКОЛ ОБУЧЕНИЯ (SOCRATIC HARDCORE):
 
-1. **Табу на готовый код:**
-   - Категорически ЗАПРЕЩЕНО писать рабочий код или давать готовые куски функций за пользователя.
-   - Давай только алгоритм, структуру данных, граничные случаи и ссылки на рантайм/спеку. Кодить всё до единой строчки он обязан сам.
-   - Если пользователь ноет «напиши сам, мне лень» — отвечай: «Я за тебя думать и нажимать клавиши не нанимался. Включай мозги или меняй профессию».
+
 
 2. **Протокол допроса (Clarification & Grilling):**
    - На любой абстрактный вопрос («как сделать X?», «почему не работает?») отвечать исключительно встречным допросом из 3 конкретных технических вопросов:
@@ -65,13 +62,36 @@
 - **Почта/Коды:** SMTP сервис (локально Mailpit в Docker) для отправки кодов подтверждения email.
 
 #### Frontend:
-- **Фреймворк:** Vue 3 (Composition API) + TypeScript.
-- **Стейт-менеджмент:** Pinia.
-- **Сборщик и стили:** Vite + Tailwind CSS.
-- **UI & Анимации:** Адаптивный веб (Desktop + Mobile), плавная отрисовка карт и стола.
+- **Фреймворк:** Vue 3 (Composition API, `<script setup lang="ts">`) + TypeScript (Strict Mode, 0% `any`).
+- **Стейт-менеджмент:** Pinia (изолированные сторы: `authStore`, `lobbyStore`, `gameStore`, `chatStore`).
+- **Маршрутизация:** Vue Router 4 с защитой `meta: { requiresAuth: true }`.
+- **UI & Компоненты:** PrimeVue (пресет Aura Dark) + Tailwind CSS v4.
+- **Иконки:** PrimeIcons (`https://primevue.dev/icons/`, классы `pi pi-*`).
+- **Визуальная концепция «Obsidian Aura»:**
+  - Базовый фон: `bg-zinc-950` (#09090b).
+  - Поверхности стола и карточек: `bg-zinc-900/90` с границей `border-zinc-800/80` и `backdrop-blur-2xl`.
+  - Сукно стола: глубокий изумрудный овал `emerald-950/40` с мягким свечением (`box-shadow: 0 0 120px rgba(16, 185, 129, 0.07)`).
+  - Акценты: теплый янтарь `amber-400` (фишки, CTA), рубиновый `rose-500` (черви/буби, ошибки), `emerald-400` (крести/пики, онлайн).
+- **Анимации & Физика:** Anime.js (`https://animejs.com/`) + CSS GPU Hardware Acceleration (`translate3d`, `will-change`).
+  - Веерная раздача, бросок на стол с микро-вращением (`anime.random(-5, 5)`), сгребание в биту.
+  - Анимируются **только** GPU-свойства (`transform`, `opacity`). Изменение `top`/`left`/`margin` запрещено.
+  - Обязательный вызов `anime.remove(...)` в хуках `onUnmounted`.
+- **Pro-фичи:**
+  - Web Audio API Sound FX Engine (`useGameSound` без тяжелых mp3).
+  - Тактильный 3D Tilt на картах (`perspective(600px)`).
+  - Graceful WebSocket & Reconnect Bar с экспоненциальным backoff и бесшовной синхронизацией `game_state`.
+- **Контракт с бэкендом (Server-Authoritative):**
+  - Клиент — чистое отображение состояния сервера. Никакой локальной логики побед/правил.
+  - Модели `Card { suit: 'spades'|'clubs'|'diamonds'|'hearts', rank: 6..14 }`, `CardPair { attack, defend? }`.
+- **Чеклист перед коммитом:**
+  - `npm run build` (`vue-tsc -b && vite build`) без единого варнинга или ошибки типов.
+  - Палитра Obsidian / Zinc-950 + Aura accents.
+  - Адаптивность: 375px — 4K.
+  - Очищены все таймеры, слушатели и Anime.js инстансы при `onUnmounted`.
 
 #### Инфраструктура:
 - **Docker & Docker Compose:** локальный запуск PostgreSQL, Redis, Mailpit.
+
 
 ---
 
