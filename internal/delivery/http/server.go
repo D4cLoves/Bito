@@ -68,8 +68,12 @@ func (s *Server) setupRoutes() {
 
 	if s.authHandler != nil {
 		s.router.Route("/api/v1/auth", func(r chi.Router) {
-			r.Post("/register", s.authHandler.Register)
+			r.Post("/send-code", s.authHandler.SendCode)
+			r.Post("/verify-code", s.authHandler.VerifyCode)
+			r.Post("/register", s.authHandler.VerifyCode)
 			r.Post("/login", s.authHandler.Login)
+			r.Post("/refresh", s.authHandler.RefreshToken)
+			r.Post("/logout", s.authHandler.Logout)
 		})
 	}
 }

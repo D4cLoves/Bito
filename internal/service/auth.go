@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"bito/internal/model"
 
@@ -26,6 +27,8 @@ var (
 	ErrInvalidUsername    = errors.New("username must be between 3 and 32 characters")
 	ErrInvalidEmail       = errors.New("invalid email address")
 	ErrSamePassword       = errors.New("new password cannot be the same as old password")
+	ErrGeneratePassword   = errors.New("invalid generate code error")
+	ErrInvalidCode        = errors.New("invalid code")
 )
 
 type UserRepository interface {
@@ -36,42 +39,119 @@ type UserRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
+type CodeProvider interface {
+	GenerateNumericOTP() (string, error)
+}
+
+type MailerProvider interface {
+	SendVerificationCode(ctx context.Context, toEmail, code string) error
+}
+
+type RedisProvider interface {
+	SavePending(ctx context.Context, data *model.PendingRegistration, ttl time.Duration) error
+	VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error)
+	SaveRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error
+	ValidateAndRevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) (bool, error)
+	RevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) error
+}
+
+
 type AuthService struct {
-	repo UserRepository
+	repo  UserRepository
+	otp   CodeProvider
+	mail  MailerProvider
+	redis RedisProvider
 }
 
-func NewAuthService(repo UserRepository) *AuthService {
-	return &AuthService{repo: repo}
+func NewAuthService(repo UserRepository, otp CodeProvider, mail MailerProvider, redis RedisProvider) *AuthService {
+	return &AuthService{
+		repo:  repo,
+		otp:   otp,
+		mail:  mail,
+		redis: redis,
+	}
 }
 
-func (s *AuthService) RegisterUser(ctx context.Context, email, username, password string) (*model.User, error) {
+func (s *AuthService) SendCode(ctx context.Context, email, username, password string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
 
 	if email == "" || !strings.Contains(email, "@") {
-		return nil, ErrInvalidEmail
+		return ErrInvalidEmail
 	}
 
 	if len(username) < minUsernameLength || len(username) > maxUsernameLength {
-		return nil, ErrInvalidUsername
+		return ErrInvalidUsername
 	}
 
 	if len(password) < minPasswordLength {
-		return nil, ErrPasswordTooShort
+		return ErrPasswordTooShort
 	}
 	if len(password) > maxPasswordLength {
-		return nil, ErrPasswordTooLong
+		return ErrPasswordTooLong
 	}
 
+	// 1. Проверяем, существует ли пользователь в базе
+	existingUser, err := s.repo.GetByEmail(ctx, email)
+	if err != nil && !errors.Is(err, model.ErrUserNotFound) {
+		return fmt.Errorf("check existing email: %w", err)
+	}
+	if existingUser != nil {
+		return model.ErrUserAlreadyExists
+	}
+
+	// 2. Хешируем пароль
 	hashedPassword, err := HashPassword(password)
 	if err != nil {
-		return nil, fmt.Errorf("register user: %w", err)
+		return fmt.Errorf("hash password: %w", err)
 	}
 
-	user := &model.User{
+	// 3. Генерируем 6-значный OTP код
+	code, err := s.otp.GenerateNumericOTP()
+	if err != nil {
+		return ErrGeneratePassword
+	}
+
+	// 4. Сохраняем в Redis с правильным TTL (15 минут)1111
+	pending := &model.PendingRegistration{
+		Code:         code,
 		Email:        email,
 		Name:         username,
 		PasswordHash: hashedPassword,
+	}
+
+	if err := s.redis.SavePending(ctx, pending, 15*time.Minute); err != nil {
+		return fmt.Errorf("save pending registration in redis: %w", err)
+	}
+
+	// 5. Отправляем письмо с кодом
+	if err := s.mail.SendVerificationCode(ctx, email, code); err != nil {
+		return fmt.Errorf("send verification code: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code string) (*model.User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	code = strings.TrimSpace(code)
+
+	if email == "" || !strings.Contains(email, "@") {
+		return nil, ErrInvalidEmail
+	}
+	if len(code) != 6 {
+		return nil, ErrInvalidCode
+	}
+
+	pending, err := s.redis.VerifyAndGetPending(ctx, email, code)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &model.User{
+		Email:        pending.Email,
+		Name:         pending.Name,
+		PasswordHash: pending.PasswordHash,
 	}
 
 	stats := &model.UserStats{}
@@ -81,13 +161,15 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, username, passwor
 		if errors.Is(err, model.ErrUserAlreadyExists) {
 			return nil, model.ErrUserAlreadyExists
 		}
-		return nil, fmt.Errorf("register user: %w", err)
+		return nil, fmt.Errorf("create user: %w", err)
 	}
-
-	user.PasswordHash = ""
 
 	return user, nil
 }
+
+
+
+
 
 func (s *AuthService) LoginUser(ctx context.Context, email, password string) (*model.User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -207,6 +289,26 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID uuid.UUID) error
 	}
 	return nil
 }
+
+func (s *AuthService) SaveSession(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error {
+	return s.redis.SaveRefreshToken(ctx, userID, tokenID, ttl)
+}
+
+func (s *AuthService) ValidateAndRevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
+	valid, err := s.redis.ValidateAndRevokeRefreshToken(ctx, userID, tokenID)
+	if err != nil {
+		return fmt.Errorf("validate session: %w", err)
+	}
+	if !valid {
+		return model.ErrSessionExpired
+	}
+	return nil
+}
+
+func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
+	return s.redis.RevokeRefreshToken(ctx, userID, tokenID)
+}
+
 
 func HashPassword(password string) (string, error) {
 	passByte := []byte(password)

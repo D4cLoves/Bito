@@ -15,7 +15,9 @@ import (
 	deliveryHTTP "bito/internal/delivery/http"
 	"bito/internal/delivery/ws"
 	"bito/internal/pkg/jwt"
+	"bito/internal/pkg/mailer"
 	"bito/internal/repository/postgres"
+	redisRepo "bito/internal/repository/redis"
 	"bito/internal/service"
 )
 
@@ -37,17 +39,29 @@ func Run() {
 	}
 	defer pool.Close()
 
-	// 4. Репозиторий
+	// 4. Клиент и репозиторий Redis
+	redisClient, err := redisRepo.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to redis: %v", err)
+	}
+	defer redisClient.Close()
+	authRedisRepo := redisRepo.NewAuthRepository(redisClient)
+
+	// 5. Репозиторий пользователей
 	userRepo := postgres.NewUserRepository(pool)
 
-	// 5. JWT Менеджер
-	tokenManager := jwt.NewTokenManager(cfg.JWTSecret, cfg.JWTAccessTTL)
+	// 6. JWT Менеджер
+	tokenManager := jwt.NewTokenManager(cfg.JWTSecret, cfg.JWTAccessTTL, cfg.JWTRefreshTTL)
 
-	// 6. Бизнес-логика (AuthService)
-	authService := service.NewAuthService(userRepo)
+	// 7. Почтовый сервис и генератор OTP
+	mailerClient := mailer.New(cfg)
+	otpService := service.NewOTPService()
 
-	// 7. HTTP Хендлер
-	authHandler := deliveryHTTP.NewAuthHandler(authService, tokenManager)
+	// 8. Бизнес-логика (AuthService)
+	authService := service.NewAuthService(userRepo, otpService, mailerClient, authRedisRepo)
+
+	// 9. HTTP Хендлер
+	authHandler := deliveryHTTP.NewAuthHandler(authService, tokenManager, cfg.JWTRefreshTTL)
 
 	// 8. WebSocket Hub
 	hub := ws.NewHub()

@@ -7,4 +7,6 @@ var (
 	ErrUserAlreadyExists = errors.New("user already exists")
 	ErrPendingNotFound   = errors.New("registration request not found or expired")
 	ErrCodeMismatch      = errors.New("invalid verification code")
+	ErrSessionExpired    = errors.New("session expired or revoked")
 )
+
