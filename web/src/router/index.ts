@@ -1,23 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '../views/auth/LoginView.vue'
-import RegisterView from '../views/auth/RegisterView.vue'
+import LandingView from '../views/landing/LandingView.vue'
 
+// Вход и регистрация живут в карточке на лендинге; старые адреса ведут туда.
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/',
-      redirect: '/login',
+      name: 'landing',
+      component: LandingView,
     },
     {
       path: '/login',
-      name: 'login',
-      component: LoginView,
+      redirect: { name: 'landing', query: { auth: 'login' } },
     },
     {
       path: '/register',
-      name: 'register',
-      component: RegisterView,
+      redirect: { name: 'landing' },
     },
     {
       path: '/lobby',
@@ -28,15 +27,12 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth && !token) {
-    next({ name: 'login' })
-  } else if ((to.name === 'login' || to.name === 'register') && token) {
-    next({ name: 'lobby' })
-  } else {
-    next()
+    return { name: 'landing', query: { auth: 'login' } }
   }
+  return true
 })
 
 export default router

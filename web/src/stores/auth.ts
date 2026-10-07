@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { loginUser, registerUser } from '../api/auth'
-import type { LoginRequest, RegisterRequest, UserResponse } from '../types/auth'
+import { loginUser, refreshAccessToken, sendVerificationCode, verifyCodeAndRegister } from '../api/auth'
+import type { LoginRequest, RegisterRequest, VerifyCodeRequest, UserResponse } from '../types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
+  const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
   const user = ref<UserResponse | null>(null)
   
   const savedUser = localStorage.getItem('user')
@@ -25,15 +26,21 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
   }
 
-  async function login(payload: LoginRequest) {
+  function persistSession(data: { accessToken: string; refreshToken: string; user: UserResponse }) {
+    token.value = data.accessToken
+    refreshToken.value = data.refreshToken
+    user.value = data.user
+    localStorage.setItem('token', data.accessToken)
+    localStorage.setItem('refreshToken', data.refreshToken)
+    localStorage.setItem('user', JSON.stringify(data.user))
+  }
+
+  async function login(payload: LoginRequest): Promise<boolean> {
     isLoading.value = true
     error.value = null
     try {
       const data = await loginUser(payload)
-      token.value = data.accessToken
-      user.value = data.user
-      localStorage.setItem('token', data.accessToken)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      persistSession(data)
       return true
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -47,15 +54,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(payload: RegisterRequest) {
+  async function requestCode(payload: RegisterRequest): Promise<boolean> {
     isLoading.value = true
     error.value = null
     try {
-      const data = await registerUser(payload)
-      token.value = data.accessToken
-      user.value = data.user
-      localStorage.setItem('token', data.accessToken)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      await sendVerificationCode(payload)
       return true
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -66,25 +69,61 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     } finally {
       isLoading.value = false
+    }
+  }
+
+  async function verifyAndRegister(payload: VerifyCodeRequest): Promise<boolean> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const data = await verifyCodeAndRegister(payload)
+      persistSession(data)
+      return true
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        error.value = err.message
+      } else {
+        error.value = 'Неизвестная ошибка'
+      }
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function refreshSession(): Promise<boolean> {
+    if (!refreshToken.value) return false
+    try {
+      const data = await refreshAccessToken(refreshToken.value)
+      persistSession(data)
+      return true
+    } catch {
+      logout()
+      return false
     }
   }
 
   function logout() {
     token.value = null
+    refreshToken.value = null
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
   }
 
   return {
     user,
     token,
+    refreshToken,
     isLoading,
     error,
     isAuthenticated,
     clearError,
     login,
-    register,
+    requestCode,
+    verifyAndRegister,
+    refreshSession,
     logout,
   }
 })

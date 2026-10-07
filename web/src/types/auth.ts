@@ -4,6 +4,12 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface VerifyCodeRequest {
+  email: string
+  code: string
+}
+
+
 export interface LoginRequest {
   email: string
   password: string
@@ -18,8 +24,14 @@ export interface UserResponse {
 
 export interface AuthResponse {
   accessToken: string
+  refreshToken: string
   user: UserResponse
 }
+
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
 
 export interface ApiError {
   error: string

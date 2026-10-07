@@ -8,7 +8,7 @@ const authStore = useAuthStore()
 
 function handleLogout() {
   authStore.logout()
-  router.push('/login')
+  router.push('/')
 }
 </script>
 

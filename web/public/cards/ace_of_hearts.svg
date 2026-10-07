@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 540" width="360" height="540">
+  <defs>
+    <!-- Subtle drop shadow filter for card surface -->
+    <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.04" />
+    </filter>
+  </defs>
+
+  <!-- Card Base -->
+  <rect x="2" y="2" width="356" height="536" rx="28" ry="28" fill="#ffffff" stroke="#e7e5e0" stroke-width="1.5" />
+
+  <!-- TOP-LEFT INDEX -->
+  <g transform="translate(28, 30)">
+    <!-- Letter A with delicate serif typography -->
+    <text x="12" y="28" font-family="'Plus Jakarta Sans', 'Geist', 'Georgia', serif" font-size="34" font-weight="700" fill="#dc2626" text-anchor="middle">A</text>
+    <!-- Small Heart Symbol -->
+    <path d="M12 55 C12 55 2 46 2 39 C2 34 6 31 10 31 C11.5 31 12 32 12 32 C12 32 12.5 31 14 31 C18 31 22 34 22 39 C22 46 12 55 12 55 Z" fill="#dc2626" />
+  </g>
+
+  <!-- CENTER LARGE HEART EMBLEM -->
+  <g transform="translate(180, 260)">
+    <path
+      d="M0 115 
+         C-15 100 -95 38 -95 -32 
+         C-95 -82 -56 -115 -10 -115 
+         C12 -115 0 -95 0 -95 
+         C0 -95 -12 -115 10 -115 
+         C56 -115 95 -82 95 -32 
+         C95 38 15 100 0 115 Z"
+      fill="#dc2626"
+    />
+  </g>
+
+  <!-- BOTTOM-RIGHT INDEX (Inverted) -->
+  <g transform="translate(332, 510) rotate(180)">
+    <text x="12" y="28" font-family="'Plus Jakarta Sans', 'Geist', 'Georgia', serif" font-size="34" font-weight="700" fill="#dc2626" text-anchor="middle">A</text>
+    <path d="M12 55 C12 55 2 46 2 39 C2 34 6 31 10 31 C11.5 31 12 32 12 32 C12 32 12.5 31 14 31 C18 31 22 34 22 39 C22 46 12 55 12 55 Z" fill="#dc2626" />
+  </g>
+</svg>

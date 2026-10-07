@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 540" width="360" height="540">
+  <!-- Card Base -->
+  <rect x="2" y="2" width="356" height="536" rx="28" ry="28" fill="#ffffff" stroke="#e7e5e0" stroke-width="1.5" />
+
+  <!-- TOP-LEFT INDEX -->
+  <g transform="translate(28, 30)">
+    <!-- Letter A with delicate serif typography -->
+    <text x="12" y="28" font-family="'Plus Jakarta Sans', 'Geist', 'Georgia', serif" font-size="34" font-weight="700" fill="#141210" text-anchor="middle">A</text>
+    <!-- Small Spade Symbol -->
+    <path
+      d="M12 31
+         C12 31 3 42 3 48
+         C3 52 6 55 10 55
+         C11.5 55 12 54 12 54
+         C12 54 12.5 55 14 55
+         C18 55 21 52 21 48
+         C21 42 12 31 12 31 Z"
+      fill="#141210"
+    />
+    <!-- Small Spade Stem -->
+    <path d="M11 53 L10 59 C9.5 60 8.5 60.5 7 61 L17 61 C15.5 60.5 14.5 60 14 59 L13 53 Z" fill="#141210" />
+  </g>
+
+  <!-- CENTER LARGE SPADE EMBLEM -->
+  <g transform="translate(180, 255)">
+    <!-- Main Spade Body -->
+    <path
+      d="M0 -115
+         C-15 -98 -95 -38 -95 32
+         C-95 78 -56 108 -12 108
+         C-2 108 0 102 0 102
+         C0 102 2 108 12 108
+         C56 108 95 78 95 32
+         C95 -38 15 -98 0 -115 Z"
+      fill="#141210"
+    />
+    <!-- Spade Base Stem -->
+    <path
+      d="M-8 96
+         L-18 126
+         C-22 133 -32 135 -48 138
+         L48 138
+         C32 135 22 133 18 126
+         L8 96 Z"
+      fill="#141210"
+    />
+  </g>
+
+  <!-- BOTTOM-RIGHT INDEX (Inverted) -->
+  <g transform="translate(332, 510) rotate(180)">
+    <text x="12" y="28" font-family="'Plus Jakarta Sans', 'Geist', 'Georgia', serif" font-size="34" font-weight="700" fill="#141210" text-anchor="middle">A</text>
+    <path
+      d="M12 31
+         C12 31 3 42 3 48
+         C3 52 6 55 10 55
+         C11.5 55 12 54 12 54
+         C12 54 12.5 55 14 55
+         C18 55 21 52 21 48
+         C21 42 12 31 12 31 Z"
+      fill="#141210"
+    />
+    <path d="M11 53 L10 59 C9.5 60 8.5 60.5 7 61 L17 61 C15.5 60.5 14.5 60 14 59 L13 53 Z" fill="#141210" />
+  </g>
+</svg>
