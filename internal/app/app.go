@@ -68,7 +68,7 @@ func Run() {
 
 	// 9. HTTP Сервер (твой конструктор с настроенными роутами /api/v1/auth)
 	serverAddr := fmt.Sprintf(":%s", cfg.ServerPort)
-	server := deliveryHTTP.NewServer(serverAddr, hub, authHandler)
+	server := deliveryHTTP.NewServer(serverAddr, hub, authHandler, deliveryHTTP.NewTableHandler(hub), tokenManager)
 
 	// Запуск сервера в отдельной горутине
 	go func() {

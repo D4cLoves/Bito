@@ -68,7 +68,6 @@ func (h *Hub) GetRoom(id string) (*Room, bool) {
 	return room, ok
 }
 
-// ListOpenRooms returns tables still waiting for players, oldest first.
 func (h *Hub) ListOpenRooms() []RoomInfo {
 	h.mu.RLock()
 	rooms := make([]RoomInfo, 0, len(h.rooms))

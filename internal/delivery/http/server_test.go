@@ -23,7 +23,7 @@ func newTestWSServer(t *testing.T) (*jwt.TokenManager, *ws.Hub, string) {
 	t.Helper()
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
 	hub := ws.NewHub(tokenManager, []string{testAllowedOrigin})
-	server := NewServer(":0", hub, nil)
+	server := NewServer(":0", hub, nil, NewTableHandler(hub), tokenManager)
 	ts := httptest.NewServer(server.httpServer.Handler)
 	t.Cleanup(ts.Close)
 

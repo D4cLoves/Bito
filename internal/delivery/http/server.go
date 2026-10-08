@@ -14,17 +14,21 @@ import (
 )
 
 type Server struct {
-	httpServer  *http.Server
-	hub         *ws.Hub
-	router      *chi.Mux
-	authHandler *AuthHandler
+	httpServer   *http.Server
+	hub          *ws.Hub
+	router       *chi.Mux
+	authHandler  *AuthHandler
+	tableHandler *TableHandler
+	tokens       TokenValidator
 }
 
-func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler) *Server {
+func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler, tableHandler *TableHandler, tokens TokenValidator) *Server {
 	s := &Server{
-		hub:         hub,
-		router:      chi.NewRouter(),
-		authHandler: authHandler,
+		hub:          hub,
+		router:       chi.NewRouter(),
+		authHandler:  authHandler,
+		tableHandler: tableHandler,
+		tokens:       tokens,
 	}
 
 	s.setupMiddlewares()
@@ -74,6 +78,14 @@ func (s *Server) setupRoutes() {
 			r.Post("/login", s.authHandler.Login)
 			r.Post("/refresh", s.authHandler.RefreshToken)
 			r.Post("/logout", s.authHandler.Logout)
+		})
+	}
+
+	if s.tableHandler != nil {
+		s.router.Route("/api/v1/tables", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Post("/", s.tableHandler.Create)
+			r.Get("/", s.tableHandler.List)
 		})
 	}
 }
