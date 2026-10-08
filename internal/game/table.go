@@ -61,8 +61,7 @@ func (t *Table) AddDefense(attackCard, defendCard Card) error {
 		if t.pairs[i].Attack == attackCard {
 			found = true
 			if t.pairs[i].Defend == nil {
-				defendCopy := defendCard
-				t.pairs[i].Defend = &defendCopy
+				t.pairs[i].Defend = &defendCard
 				return nil
 			}
 		}
