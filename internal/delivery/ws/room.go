@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"bito/internal/game"
@@ -13,7 +14,20 @@ import (
 const (
 	turnDuration       = 20 * time.Second
 	disconnectGraceDur = 30 * time.Second
+	// emptyRoomTTL closes a table created via REST that nobody joined.
+	emptyRoomTTL = 5 * time.Minute
 )
+
+// RoomInfo is the lobby view of a table; safe to build from any goroutine.
+type RoomInfo struct {
+	ID         string    `json:"id"`
+	Mode       string    `json:"mode"`
+	Deck       int       `json:"deck"`
+	MaxPlayers int       `json:"maxPlayers"`
+	Players    int       `json:"players"`
+	CreatedBy  string    `json:"createdBy"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
 
 type IncomingMessage struct {
 	Client *Client
@@ -37,14 +51,20 @@ type Room struct {
 	disconnectTimers  map[string]*time.Timer
 	mu                sync.RWMutex
 	closed            bool
+	createdBy         string
+	createdAt         time.Time
+	playersCount      atomic.Int32
+	started           atomic.Bool
 }
 
-func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int) *Room {
+func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int, createdBy string) *Room {
 	return &Room{
 		id:                id,
 		gameMode:          mode,
 		deckType:          deckType,
 		maxUsers:          maxUsers,
+		createdBy:         createdBy,
+		createdAt:         time.Now(),
 		clients:           make(map[string]*Client),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
@@ -76,9 +96,32 @@ func (r *Room) HasGraceTimer(playerID string) bool {
 	return exists
 }
 
+func (r *Room) Started() bool {
+	return r.started.Load()
+}
+
+func (r *Room) PlayersCount() int {
+	return int(r.playersCount.Load())
+}
+
+// Info reads only immutable fields and atomics, so the hub may call it concurrently with Run.
+func (r *Room) Info() RoomInfo {
+	return RoomInfo{
+		ID:         r.id,
+		Mode:       r.gameMode.String(),
+		Deck:       int(r.deckType),
+		MaxPlayers: r.maxUsers,
+		Players:    r.PlayersCount(),
+		CreatedBy:  r.createdBy,
+		CreatedAt:  r.createdAt,
+	}
+}
+
 func (r *Room) Run() {
 	log.Printf("[Room %s] цикл событий запущен", r.id)
+	idle := time.NewTimer(emptyRoomTTL)
 	defer func() {
+		idle.Stop()
 		r.cleanup()
 		log.Printf("[Room %s] цикл событий остановлен", r.id)
 	}()
@@ -88,11 +131,19 @@ func (r *Room) Run() {
 		case <-r.stop:
 			return
 
+		case <-idle.C:
+			if len(r.clients) == 0 && r.game == nil {
+				log.Printf("[Room %s] за столом никого нет, закрываем", r.id)
+				return
+			}
+
 		case client := <-r.register:
 			r.handleRegister(client)
+			r.playersCount.Store(int32(len(r.clients)))
 
 		case client := <-r.unregister:
 			r.handleUnregister(client)
+			r.playersCount.Store(int32(len(r.clients)))
 
 		case msg := <-r.incoming:
 			r.handleIncoming(msg)
@@ -238,6 +289,7 @@ func (r *Room) startGame() {
 	}
 
 	r.game = newGame
+	r.started.Store(true)
 	log.Printf("[Room %s] партия началась, участников: %d", r.id, len(players))
 
 	r.resetTurnTimer()

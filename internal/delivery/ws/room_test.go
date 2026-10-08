@@ -19,7 +19,7 @@ func createTestClient(id, name string, room *Room) *Client {
 }
 
 func TestRoom_StartGameAndPersonalizedState(t *testing.T) {
-	room := NewRoom("room-1", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-1", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 
@@ -71,7 +71,7 @@ func TestRoom_StartGameAndPersonalizedState(t *testing.T) {
 }
 
 func TestRoom_HandleIncomingAction(t *testing.T) {
-	room := NewRoom("room-2", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-2", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 
@@ -127,7 +127,7 @@ func TestRoom_HandleIncomingAction(t *testing.T) {
 }
 
 func TestRoom_ChatBroadcast(t *testing.T) {
-	room := NewRoom("room-chat", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-chat", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 
@@ -170,7 +170,7 @@ func TestRoom_ChatBroadcast(t *testing.T) {
 }
 
 func TestRoom_GracePeriodReconnect(t *testing.T) {
-	room := NewRoom("room-grace", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-grace", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 
@@ -234,7 +234,7 @@ func TestRoom_GracePeriodReconnect(t *testing.T) {
 }
 
 func TestRoom_ChatBeforeGameStart(t *testing.T) {
-	room := NewRoom("room-lobby-chat", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-lobby-chat", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 
@@ -263,7 +263,7 @@ func TestRoom_ChatBeforeGameStart(t *testing.T) {
 }
 
 func TestRoom_LobbyCapacityLimit(t *testing.T) {
-	room := NewRoom("room-cap", game.ModePodkidnoy, game.Deck36, 2)
+	room := NewRoom("room-cap", game.ModePodkidnoy, game.Deck36, 2, "creator")
 	go room.Run()
 	defer room.Close()
 

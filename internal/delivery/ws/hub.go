@@ -3,12 +3,13 @@ package ws
 import (
 	"log"
 	"net/http"
-	"strconv"
+	"sort"
 	"sync"
 
 	"bito/internal/game"
 	"bito/internal/pkg/jwt"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -23,9 +24,6 @@ type Hub struct {
 	upgrader       websocket.Upgrader
 }
 
-// NewHub authenticates players by access token. allowedOrigins guards against
-// Cross-Site WebSocket Hijacking: the token may come from a cookie, so without
-// an origin check a page on any other site could connect with the victim's session.
 func NewHub(tokenValidator TokenValidator, allowedOrigins []string) *Hub {
 	origins := make(map[string]bool, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -45,30 +43,46 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string) *Hub {
 	}
 }
 
-func (h *Hub) GetOrCreateRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int) *Room {
-	h.mu.RLock()
-	if room, exists := h.rooms[id]; exists {
-		h.mu.RUnlock()
-		return room
-	}
-	h.mu.RUnlock()
-
+func (h *Hub) CreateRoom(mode game.GameMode, deckType game.DeckType, maxUsers int, createdBy string) *Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if room, exists := h.rooms[id]; exists {
-		return room
-	}
+	roomID := uuid.NewString()
 
-	room := NewRoom(id, mode, deckType, maxUsers)
-	h.rooms[id] = room
+	room := NewRoom(roomID, mode, deckType, maxUsers, createdBy)
+	h.rooms[roomID] = room
 
 	go func() {
 		room.Run()
-		h.RemoveRoom(id)
+		h.RemoveRoom(roomID)
 	}()
 
 	return room
+}
+
+func (h *Hub) GetRoom(id string) (*Room, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	room, ok := h.rooms[id]
+	return room, ok
+}
+
+// ListOpenRooms returns tables still waiting for players, oldest first.
+func (h *Hub) ListOpenRooms() []RoomInfo {
+	h.mu.RLock()
+	rooms := make([]RoomInfo, 0, len(h.rooms))
+	for _, room := range h.rooms {
+		if !room.Started() {
+			rooms = append(rooms, room.Info())
+		}
+	}
+	h.mu.RUnlock()
+
+	sort.Slice(rooms, func(i, j int) bool {
+		return rooms[i].CreatedAt.Before(rooms[j].CreatedAt)
+	})
+	return rooms
 }
 
 func (h *Hub) RemoveRoom(id string) {
@@ -104,29 +118,10 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		playerName = "Player_" + playerID
 	}
 
-	modeStr := query.Get("mode")
-	mode := game.ModePodkidnoy
-	if modeStr == "perevodnoy" {
-		mode = game.ModePerevodnoy
-	}
-
-	deckType := game.Deck36
-	if deckVal, err := strconv.Atoi(query.Get("deck")); err == nil {
-		switch deckVal {
-		case 24:
-			deckType = game.Deck24
-		case 36:
-			deckType = game.Deck36
-		case 52:
-			deckType = game.Deck52
-		default:
-			deckType = game.Deck36
-		}
-	}
-
-	maxUsers := 2
-	if usersVal, err := strconv.Atoi(query.Get("max_users")); err == nil && usersVal >= 2 && usersVal <= 6 {
-		maxUsers = usersVal
+	room, ok := h.GetRoom(roomID)
+	if !ok {
+		http.Error(w, "room not found", http.StatusNotFound)
+		return
 	}
 
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -134,8 +129,6 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Upgrade error: %v", err)
 		return
 	}
-
-	room := h.GetOrCreateRoom(roomID, mode, deckType, maxUsers)
 
 	client := NewClient(playerID, playerName, conn, room)
 	if !room.RegisterClient(client) {
@@ -148,8 +141,6 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	go client.ReadPump()
 }
 
-// tokenFromRequest reads the access token from the cookie set at login, falling back
-// to the "token" query parameter: browsers cannot set headers on a WebSocket handshake.
 func tokenFromRequest(r *http.Request) string {
 	if cookie, err := r.Cookie("accessToken"); err == nil && cookie.Value != "" {
 		return cookie.Value

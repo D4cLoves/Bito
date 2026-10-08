@@ -18,8 +18,8 @@ import (
 
 const testAllowedOrigin = "http://localhost:5173"
 
-// newTestWSServer starts the HTTP server with a real token manager and returns the /ws URL.
-func newTestWSServer(t *testing.T) (*jwt.TokenManager, string) {
+// newTestWSServer starts the HTTP server with a real token manager and returns the hub and the /ws URL.
+func newTestWSServer(t *testing.T) (*jwt.TokenManager, *ws.Hub, string) {
 	t.Helper()
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
 	hub := ws.NewHub(tokenManager, []string{testAllowedOrigin})
@@ -27,11 +27,11 @@ func newTestWSServer(t *testing.T) (*jwt.TokenManager, string) {
 	ts := httptest.NewServer(server.httpServer.Handler)
 	t.Cleanup(ts.Close)
 
-	return tokenManager, "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+	return tokenManager, hub, "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
 }
 
 func TestWS_RejectsUnauthenticated(t *testing.T) {
-	tokenManager, wsURL := newTestWSServer(t)
+	tokenManager, _, wsURL := newTestWSServer(t)
 	userID := uuid.New()
 
 	refreshToken, _, err := tokenManager.GenerateRefreshToken(userID, "Alice")
@@ -63,12 +63,13 @@ func TestWS_RejectsUnauthenticated(t *testing.T) {
 }
 
 func TestWS_OriginCheck(t *testing.T) {
-	tokenManager, wsURL := newTestWSServer(t)
+	tokenManager, hub, wsURL := newTestWSServer(t)
+	room := hub.CreateRoom(game.ModePodkidnoy, game.Deck36, 2, "creator")
 	accessToken, err := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
 	if err != nil {
 		t.Fatalf("failed to generate access token: %v", err)
 	}
-	url := wsURL + "?room_id=origin_table&token=" + accessToken
+	url := wsURL + "?room_id=" + room.ID() + "&token=" + accessToken
 
 	foreign := http.Header{"Origin": []string{"http://evil.example"}}
 	if conn, resp, err := websocket.DefaultDialer.Dial(url, foreign); err == nil {
@@ -88,7 +89,8 @@ func TestWS_OriginCheck(t *testing.T) {
 
 func TestE2E_DurakWebSocketGame(t *testing.T) {
 	// 1. Поднимаем тестовый сервер и выпускаем access-токены игрокам
-	tokenManager, wsURL := newTestWSServer(t)
+	tokenManager, hub, wsURL := newTestWSServer(t)
+	room := hub.CreateRoom(game.ModePodkidnoy, game.Deck36, 2, "creator")
 
 	aliceID := uuid.New()
 	aliceToken, err := tokenManager.GenerateAccessToken(aliceID, "Alice")
@@ -101,7 +103,7 @@ func TestE2E_DurakWebSocketGame(t *testing.T) {
 	}
 
 	// 2. Подключаем первого игрока (Алиса)
-	aliceURL := wsURL + "?room_id=test_table&token=" + aliceToken
+	aliceURL := wsURL + "?room_id=" + room.ID() + "&token=" + aliceToken
 	wsAlice, _, err := websocket.DefaultDialer.Dial(aliceURL, nil)
 	if err != nil {
 		t.Fatalf("Alice failed to connect: %v", err)
@@ -109,7 +111,7 @@ func TestE2E_DurakWebSocketGame(t *testing.T) {
 	defer wsAlice.Close()
 
 	// 3. Подключаем второго игрока (Боб) -> комната наполнилась (2 игрока) и стартует!
-	bobURL := wsURL + "?room_id=test_table&token=" + bobToken
+	bobURL := wsURL + "?room_id=" + room.ID() + "&token=" + bobToken
 	wsBob, _, err := websocket.DefaultDialer.Dial(bobURL, nil)
 	if err != nil {
 		t.Fatalf("Bob failed to connect: %v", err)
@@ -183,4 +185,58 @@ func TestE2E_DurakWebSocketGame(t *testing.T) {
 	}
 
 	t.Logf("УСПЕХ! Карта %v успешно легла на стол по сети через WebSocket!", cardToPlay)
+}
+
+func TestWS_UnknownRoomReturns404(t *testing.T) {
+	tokenManager, _, wsURL := newTestWSServer(t)
+	accessToken, err := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate access token: %v", err)
+	}
+
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL+"?room_id=missing&token="+accessToken, nil)
+	if err == nil {
+		conn.Close()
+		t.Fatal("expected handshake to fail for unknown room")
+	}
+	if resp == nil || resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %v", resp)
+	}
+}
+
+func TestHub_ListOpenRooms(t *testing.T) {
+	tokenManager, hub, wsURL := newTestWSServer(t)
+	room := hub.CreateRoom(game.ModePerevodnoy, game.Deck24, 2, "creator")
+
+	open := hub.ListOpenRooms()
+	if len(open) != 1 || open[0].ID != room.ID() {
+		t.Fatalf("expected the new room in open list, got %+v", open)
+	}
+	if open[0].Mode != "perevodnoy" || open[0].Deck != 24 || open[0].MaxPlayers != 2 || open[0].Players != 0 {
+		t.Errorf("unexpected room info: %+v", open[0])
+	}
+
+	for _, name := range []string{"Alice", "Bob"} {
+		token, err := tokenManager.GenerateAccessToken(uuid.New(), name)
+		if err != nil {
+			t.Fatalf("failed to generate token: %v", err)
+		}
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL+"?room_id="+room.ID()+"&token="+token, nil)
+		if err != nil {
+			t.Fatalf("%s failed to connect: %v", name, err)
+		}
+		defer conn.Close()
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !room.Started() {
+		if time.Now().After(deadline) {
+			t.Fatal("game did not start after table filled")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if open := hub.ListOpenRooms(); len(open) != 0 {
+		t.Errorf("started room must leave the open list, got %+v", open)
+	}
 }
