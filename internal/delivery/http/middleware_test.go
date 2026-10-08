@@ -1,0 +1,66 @@
+package http
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"bito/internal/pkg/jwt"
+
+	"github.com/google/uuid"
+)
+
+func TestAuthMiddleware(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	userID := uuid.New()
+
+	accessToken, err := tokenManager.GenerateAccessToken(userID, "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate access token: %v", err)
+	}
+	refreshToken, _, err := tokenManager.GenerateRefreshToken(userID, "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate refresh token: %v", err)
+	}
+
+	var gotID uuid.UUID
+	var gotOK bool
+	handler := AuthMiddleware(tokenManager)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotID, gotOK = UserIDFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	cases := []struct {
+		name     string
+		setup    func(r *http.Request)
+		wantCode int
+	}{
+		{"no token", func(r *http.Request) {}, http.StatusUnauthorized},
+		{"garbage bearer", func(r *http.Request) { r.Header.Set("Authorization", "Bearer garbage") }, http.StatusUnauthorized},
+		{"refresh token as bearer", func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+refreshToken) }, http.StatusUnauthorized},
+		{"valid bearer", func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+accessToken) }, http.StatusOK},
+		{"valid cookie", func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "accessToken", Value: accessToken}) }, http.StatusOK},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotID, gotOK = uuid.Nil, false
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			tc.setup(req)
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", w.Code, tc.wantCode)
+			}
+			if tc.wantCode == http.StatusOK && (!gotOK || gotID != userID) {
+				t.Errorf("context user = (%v, %v), want (%v, true)", gotID, gotOK, userID)
+			}
+			if tc.wantCode != http.StatusOK && gotOK {
+				t.Error("next handler must not run on rejected request")
+			}
+		})
+	}
+}
