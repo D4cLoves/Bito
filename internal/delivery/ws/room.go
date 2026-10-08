@@ -48,6 +48,7 @@ type Room struct {
 	disconnectTimeout chan string
 	stop              chan struct{}
 	turnTimer         *time.Timer
+	turnEndsAt        time.Time
 	disconnectTimers  map[string]*time.Timer
 	mu                sync.RWMutex
 	closed            bool
@@ -412,6 +413,7 @@ func (r *Room) handleTurnTimeout() {
 
 func (r *Room) resetTurnTimer() {
 	r.stopTurnTimer()
+	r.turnEndsAt = time.Now().Add(turnDuration)
 	r.turnTimer = time.AfterFunc(turnDuration, func() {
 		select {
 		case r.turnTimeout <- struct{}{}:
@@ -424,6 +426,7 @@ func (r *Room) stopTurnTimer() {
 	if r.turnTimer != nil {
 		r.turnTimer.Stop()
 		r.turnTimer = nil
+		r.turnEndsAt = time.Time{}
 	}
 }
 
@@ -472,6 +475,9 @@ func (r *Room) sendGameStateTo(client *Client) {
 		DefenderID:  defenderID,
 		MyHand:      myHand,
 		Players:     playersView,
+		Mode:        r.game.Mode().String(),
+		TurnLeftMs:  turnLeftMs(r.turnEndsAt),
+		YouPassed:   r.game.HasPassed(game.PlayerID(client.ID())),
 	}
 
 	data, err := NewMessage(TypeGameState, payload)
@@ -535,4 +541,11 @@ func (r *Room) cleanup() {
 	for _, c := range r.clients {
 		c.Close()
 	}
+}
+
+func turnLeftMs(endsAt time.Time) int64 {
+	if endsAt.IsZero() {
+		return 0
+	}
+	return max(time.Until(endsAt).Milliseconds(), 0)
 }

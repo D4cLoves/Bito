@@ -85,6 +85,9 @@ type GameStatePayload struct {
 	DefenderID  string          `json:"defenderId"`
 	MyHand      []game.Card     `json:"myHand"`
 	Players     []PlayerView    `json:"players"`
+	Mode        string          `json:"mode"`
+	TurnLeftMs  int64           `json:"turnLeftMs"`
+	YouPassed   bool            `json:"youPassed"`
 }
 
 func NewMessage(msgType string, payload any) ([]byte, error) {
