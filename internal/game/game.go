@@ -23,16 +23,13 @@ var (
 type GamePhase uint8
 
 const (
-	PhaseDealing GamePhase = iota
-	PhaseBattle
+	PhaseBattle GamePhase = iota
 	PhaseGivingMore
 	PhaseFinished
 )
 
 func (p GamePhase) String() string {
 	switch p {
-	case PhaseDealing:
-		return "dealing"
 	case PhaseBattle:
 		return "battle"
 	case PhaseGivingMore:
@@ -538,7 +535,7 @@ func (g *Game) Surrender(playerID PlayerID) error {
 	if idx == g.defenderIdx {
 		g.discard = append(g.discard, g.table.AllCards()...)
 		g.table.Clear()
-		g.refillHands(true)
+		g.refillHands()
 		g.checkGameOver()
 		if g.phase == PhaseFinished {
 			return nil
@@ -595,7 +592,7 @@ func (g *Game) finishRound() {
 	}
 	g.table.Clear()
 
-	g.refillHands(isBeaten)
+	g.refillHands()
 	g.checkGameOver()
 
 	if g.phase == PhaseFinished {
@@ -620,13 +617,11 @@ func (g *Game) finishRound() {
 	g.initialAttackerIdx = newAttackerIdx
 	g.isFirstRound = false
 	g.phase = PhaseBattle
-	g.passed = make(map[PlayerID]bool)
+		g.passed = make(map[PlayerID]bool)
 }
 
-func (g *Game) refillHands(isBeaten bool) {
-	g.refillPlayer(g.initialAttackerIdx)
-
-	for i := 1; i < len(g.players); i++ {
+func (g *Game) refillHands() {
+	for i := 0; i < len(g.players); i++ {
 		idx := (g.initialAttackerIdx + i) % len(g.players)
 		if idx == g.defenderIdx || !g.players[idx].IsActive() {
 			continue
@@ -634,7 +629,7 @@ func (g *Game) refillHands(isBeaten bool) {
 		g.refillPlayer(idx)
 	}
 
-	if isBeaten && g.players[g.defenderIdx].IsActive() {
+	if g.players[g.defenderIdx].IsActive() {
 		g.refillPlayer(g.defenderIdx)
 	}
 }

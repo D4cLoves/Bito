@@ -10,7 +10,6 @@ func TestGamePhase_String(t *testing.T) {
 		phase GamePhase
 		want  string
 	}{
-		{PhaseDealing, "dealing"},
 		{PhaseBattle, "battle"},
 		{PhaseGivingMore, "giving_more"},
 		{PhaseFinished, "finished"},
@@ -203,10 +202,6 @@ func TestGame_Attack(t *testing.T) {
 	game.phase = PhaseFinished
 	if err := game.Attack(p1.ID(), c6Spades); !errors.Is(err, ErrGameOver) {
 		t.Errorf("Attack game over err = %v, want %v", err, ErrGameOver)
-	}
-	game.phase = PhaseDealing
-	if err := game.Attack(p1.ID(), c6Spades); !errors.Is(err, ErrWrongPhase) {
-		t.Errorf("Attack dealing phase err = %v, want %v", err, ErrWrongPhase)
 	}
 }
 
@@ -424,8 +419,8 @@ func TestGame_Take_And_Pass(t *testing.T) {
 		t.Fatalf("Attacker pass unexpected error: %v", err)
 	}
 
-	if p2.HandCount() != 4 {
-		t.Errorf("p2 handCount after taking = %d, want 4 (2 initial + 2 taken)", p2.HandCount())
+	if p2.HandCount() != 6 {
+		t.Errorf("p2 handCount after taking = %d, want 6 (2 initial + 2 taken + 2 refilled last)", p2.HandCount())
 	}
 	if game.Table().PairsCount() != 0 {
 		t.Errorf("table pairs count after round = %d, want 0", game.Table().PairsCount())
@@ -659,6 +654,75 @@ func TestGame_Surrender(t *testing.T) {
 	}
 	if gameAttackerSurr.Attacker().ID() != p2.ID() {
 		t.Errorf("New attacker after p1 surrender = %v, want %v", gameAttackerSurr.Attacker().ID(), p2.ID())
+	}
+}
+
+func TestGame_Refill_SkipsSurrenderedInitialAttacker(t *testing.T) {
+	p1 := NewPlayer("p1", "Alice")
+	p2 := NewPlayer("p2", "Bob")
+	p3 := NewPlayer("p3", "Charlie")
+	game, _ := NewGame(ModePodkidnoy, Deck36, []*Player{p1, p2, p3})
+	p1.ClearHand()
+	p2.ClearHand()
+	p3.ClearHand()
+	game.attackerIdx = 0
+	game.defenderIdx = 1
+	game.initialAttackerIdx = 0
+
+	c6Spades := Card{Suit: Spades, Rank: Rank6}
+	c7Spades := Card{Suit: Spades, Rank: Rank7}
+	p1.AddCard(c6Spades)
+	p2.AddCard(c7Spades)
+
+	_ = game.Attack(p1.ID(), c6Spades)
+	_ = game.Defend(p2.ID(), c6Spades, c7Spades)
+
+	if err := game.Surrender(p1.ID()); err != nil {
+		t.Fatalf("Initial attacker surrender unexpected error: %v", err)
+	}
+	if game.Table().PairsCount() != 1 {
+		t.Fatalf("round should continue after p1 surrender, table pairs = %d", game.Table().PairsCount())
+	}
+
+	deckBefore := game.Deck().CardsLeft()
+	if err := game.Pass(p3.ID()); err != nil {
+		t.Fatalf("p3 Pass unexpected error: %v", err)
+	}
+
+	if p1.HandCount() != 0 {
+		t.Errorf("surrendered p1 handCount after refill = %d, want 0", p1.HandCount())
+	}
+	if p2.HandCount() != 6 || p3.HandCount() != 6 {
+		t.Errorf("Hands after refill: p2=%d, p3=%d, want (6, 6)", p2.HandCount(), p3.HandCount())
+	}
+	if drawn := deckBefore - game.Deck().CardsLeft(); drawn != 12 {
+		t.Errorf("cards drawn from deck = %d, want 12 (only active players refill)", drawn)
+	}
+}
+
+func TestGame_Refill_DefenderTookDrawsLast(t *testing.T) {
+	game, p1, p2 := setupTestGame(ModePodkidnoy)
+	c6Spades := Card{Suit: Spades, Rank: Rank6}
+	c8Hearts := Card{Suit: Hearts, Rank: Rank8}
+	p1.AddCard(c6Spades)
+	p2.AddCard(c8Hearts)
+
+	// Leave exactly 6 cards in the deck: attacker needs 6, defender gets nothing.
+	game.deck.cards = game.deck.cards[len(game.deck.cards)-6:]
+
+	_ = game.Attack(p1.ID(), c6Spades)
+	if err := game.Take(p2.ID()); err != nil {
+		t.Fatalf("Take unexpected error: %v", err)
+	}
+	if err := game.Pass(p1.ID()); err != nil {
+		t.Fatalf("Pass unexpected error: %v", err)
+	}
+
+	if p1.HandCount() != 6 {
+		t.Errorf("attacker handCount = %d, want 6 (draws first)", p1.HandCount())
+	}
+	if p2.HandCount() != 2 {
+		t.Errorf("defender handCount = %d, want 2 (draws last, deck exhausted)", p2.HandCount())
 	}
 }
 
