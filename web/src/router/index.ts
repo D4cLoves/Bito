@@ -24,6 +24,12 @@ const router = createRouter({
       component: () => import('../views/lobby/LobbyView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/table/:id',
+      name: 'table',
+      component: () => import('../views/table/TableView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 
