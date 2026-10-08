@@ -309,7 +309,6 @@ func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, token
 	return s.redis.RevokeRefreshToken(ctx, userID, tokenID)
 }
 
-
 func HashPassword(password string) (string, error) {
 	passByte := []byte(password)
 
