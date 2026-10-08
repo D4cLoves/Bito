@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const maxBodyBytes = 1 << 20
+
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
@@ -53,42 +55,25 @@ type ErrorResponse struct {
 
 type AuthService interface {
 	SendCode(ctx context.Context, email, username, password string) error
-	VerifyAndRegister(ctx context.Context, email, code string) (*model.User, error)
-	LoginUser(ctx context.Context, email, password string) (*model.User, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error)
-	SaveSession(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error
-	ValidateAndRevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error
-	RevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error
-}
-
-type TokenProvider interface {
-	GenerateTokenPair(userID uuid.UUID, username string) (*jwt.TokenPair, error)
-	ValidateRefreshToken(tokenString string) (*jwt.Claims, error)
+	VerifyAndRegister(ctx context.Context, email, code string) (*service.Session, error)
+	Login(ctx context.Context, email, password string) (*service.Session, error)
+	Refresh(ctx context.Context, refreshToken string) (*service.Session, error)
+	Logout(ctx context.Context, refreshToken string) error
 }
 
 type AuthHandler struct {
-	authService   AuthService
-	tokenProvider TokenProvider
-	refreshTTL    time.Duration
+	authService AuthService
 }
 
-func NewAuthHandler(authService AuthService, tokenProvider TokenProvider, refreshTTL time.Duration) *AuthHandler {
+func NewAuthHandler(authService AuthService) *AuthHandler {
 	return &AuthHandler{
-		authService:   authService,
-		tokenProvider: tokenProvider,
-		refreshTTL:    refreshTTL,
+		authService: authService,
 	}
 }
 
-// SendCode - Шаг 1 регистрации: валидация, сохранение черновика в Redis и отправка кода на почту
 func (ah *AuthHandler) SendCode(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-
 	var req RegisterRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -112,19 +97,13 @@ func (ah *AuthHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// VerifyCode - Шаг 2 регистрации: проверка кода из Redis, создание профиля и выдача токенов с сохранением в Redis
 func (ah *AuthHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-
 	var req VerifyCodeRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
-	user, err := ah.authService.VerifyAndRegister(r.Context(), req.Email, req.Code)
+	session, err := ah.authService.VerifyAndRegister(r.Context(), req.Email, req.Code)
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrUserAlreadyExists):
@@ -141,46 +120,16 @@ func (ah *AuthHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := ah.tokenProvider.GenerateTokenPair(user.ID, user.Name)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to generate tokens")
-		return
-	}
-
-	// Сохраняем сессию в Redis
-	if err := ah.authService.SaveSession(r.Context(), user.ID, tokens.TokenID, ah.refreshTTL); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to save session")
-		return
-	}
-
-	ah.setTokenCookies(w, tokens)
-
-	respondJSON(w, http.StatusCreated, AuthResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		User: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			Username:  user.Name,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
-	})
+	ah.writeSession(w, http.StatusCreated, session)
 }
 
-// Login - Вход по email и паролю с выдачей пары токенов и записью сессии в Redis
 func (ah *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-
 	var req LoginRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
-	user, err := ah.authService.LoginUser(r.Context(), req.Email, req.Password)
+	session, err := ah.authService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidCredentials),
@@ -192,47 +141,22 @@ func (ah *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := ah.tokenProvider.GenerateTokenPair(user.ID, user.Name)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to generate tokens")
-		return
-	}
-
-	// Сохраняем сессию в Redis
-	if err := ah.authService.SaveSession(r.Context(), user.ID, tokens.TokenID, ah.refreshTTL); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to save session")
-		return
-	}
-
-	ah.setTokenCookies(w, tokens)
-
-	respondJSON(w, http.StatusOK, AuthResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		User: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			Username:  user.Name,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
-	})
+	ah.writeSession(w, http.StatusOK, session)
 }
 
-// RefreshToken - Ротация токенов с проверкой сессии в Redis (Token Rotation)
 func (ah *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var refreshToken string
 
-	// 1. Пытаемся прочитать из тела JSON
 	if r.Body != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		var req RefreshRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.RefreshToken != "" {
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
 			refreshToken = req.RefreshToken
 		}
 	}
 
-	// 2. Если в теле нет, берем из HttpOnly Cookie
 	if refreshToken == "" {
-		if cookie, err := r.Cookie("refreshToken"); err == nil && cookie.Value != "" {
+		if cookie, err := r.Cookie("refreshToken"); err == nil {
 			refreshToken = cookie.Value
 		}
 	}
@@ -242,73 +166,31 @@ func (ah *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := ah.tokenProvider.ValidateRefreshToken(refreshToken)
+	session, err := ah.authService.Refresh(r.Context(), refreshToken)
 	if err != nil {
-		if errors.Is(err, jwt.ErrExpiredToken) {
+		switch {
+		case errors.Is(err, jwt.ErrExpiredToken):
 			respondError(w, http.StatusUnauthorized, "refresh token has expired")
-			return
-		}
-		respondError(w, http.StatusUnauthorized, "invalid refresh token")
-		return
-	}
-
-	// Проверяем сессию в Redis и удаляем старый токен (строгая одноразовая ротация)
-	if err := ah.authService.ValidateAndRevokeSession(r.Context(), claims.UserID, claims.ID); err != nil {
-		if errors.Is(err, model.ErrSessionExpired) {
+		case errors.Is(err, jwt.ErrInvalidToken):
+			respondError(w, http.StatusUnauthorized, "invalid refresh token")
+		case errors.Is(err, model.ErrSessionExpired):
 			respondError(w, http.StatusUnauthorized, "session expired or revoked")
-			return
+		case errors.Is(err, model.ErrUserNotFound):
+			respondError(w, http.StatusUnauthorized, "user not found or deactivated")
+		default:
+			respondError(w, http.StatusInternalServerError, "failed to refresh session")
 		}
-		respondError(w, http.StatusInternalServerError, "failed to validate session")
 		return
 	}
 
-	user, err := ah.authService.GetUserByID(r.Context(), claims.UserID)
-	if err != nil {
-		respondError(w, http.StatusUnauthorized, "user not found or deactivated")
-		return
-	}
-
-	// Token Rotation: генерируем новую пару токенов
-	tokens, err := ah.tokenProvider.GenerateTokenPair(user.ID, user.Name)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to generate tokens")
-		return
-	}
-
-	// Записываем новую сессию в Redis
-	if err := ah.authService.SaveSession(r.Context(), user.ID, tokens.TokenID, ah.refreshTTL); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to save session")
-		return
-	}
-
-	ah.setTokenCookies(w, tokens)
-
-	respondJSON(w, http.StatusOK, AuthResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		User: UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			Username:  user.Name,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
-	})
+	ah.writeSession(w, http.StatusOK, session)
 }
 
-// Logout - Завершение сессии и удаление токена из Redis
 func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	var refreshToken string
 	if cookie, err := r.Cookie("refreshToken"); err == nil && cookie.Value != "" {
-		refreshToken = cookie.Value
+		_ = ah.authService.Logout(r.Context(), cookie.Value)
 	}
 
-	if refreshToken != "" {
-		if claims, err := ah.tokenProvider.ValidateRefreshToken(refreshToken); err == nil {
-			_ = ah.authService.RevokeSession(r.Context(), claims.UserID, claims.ID)
-		}
-	}
-
-	// Инвалидируем cookies
 	http.SetCookie(w, &http.Cookie{
 		Name:     "accessToken",
 		Value:    "",
@@ -326,6 +208,32 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "logged out successfully",
+	})
+}
+
+// decodeJSON limits the body size and rejects unknown fields; on failure it writes 400 and returns false.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return false
+	}
+	return true
+}
+
+func (ah *AuthHandler) writeSession(w http.ResponseWriter, status int, s *service.Session) {
+	ah.setTokenCookies(w, s.Tokens)
+	respondJSON(w, status, AuthResponse{
+		AccessToken:  s.Tokens.AccessToken,
+		RefreshToken: s.Tokens.RefreshToken,
+		User: UserResponse{
+			ID:        s.User.ID,
+			Email:     s.User.Email,
+			Username:  s.User.Name,
+			CreatedAt: s.User.CreatedAt.Format(time.RFC3339),
+		},
 	})
 }
 

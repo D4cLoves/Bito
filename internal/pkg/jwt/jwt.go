@@ -23,7 +23,7 @@ type TokenPair struct {
 type Claims struct {
 	UserID    uuid.UUID `json:"user_id"`
 	Username  string    `json:"username"`
-	TokenType string    `json:"token_type"` // "access" or "refresh"
+	TokenType string    `json:"token_type"`
 	jwt.RegisteredClaims
 }
 
@@ -41,7 +41,6 @@ func NewTokenManager(secret string, accessTTL, refreshTTL time.Duration) *TokenM
 	}
 }
 
-// GenerateTokenPair создает пару access и refresh токенов с уникальным JTI
 func (tm *TokenManager) GenerateTokenPair(userID uuid.UUID, username string) (*TokenPair, error) {
 	access, err := tm.GenerateAccessToken(userID, username)
 	if err != nil {
@@ -60,7 +59,6 @@ func (tm *TokenManager) GenerateTokenPair(userID uuid.UUID, username string) (*T
 	}, nil
 }
 
-// GenerateAccessToken создает короткоживущий Access Token (15 минут)
 func (tm *TokenManager) GenerateAccessToken(userID uuid.UUID, username string) (string, error) {
 	now := time.Now()
 
@@ -84,7 +82,6 @@ func (tm *TokenManager) GenerateAccessToken(userID uuid.UUID, username string) (
 	return tokenString, nil
 }
 
-// GenerateRefreshToken создает долгоживущий Refresh Token (7 дней) с уникальным JTI (tokenID)
 func (tm *TokenManager) GenerateRefreshToken(userID uuid.UUID, username string) (string, string, error) {
 	now := time.Now()
 	tokenID := uuid.NewString()
@@ -110,7 +107,6 @@ func (tm *TokenManager) GenerateRefreshToken(userID uuid.UUID, username string) 
 	return tokenString, tokenID, nil
 }
 
-// ValidateAccessToken проверяет валидность access токена
 func (tm *TokenManager) ValidateAccessToken(tokenString string) (*Claims, error) {
 	claims, err := tm.parseToken(tokenString)
 	if err != nil {
@@ -122,7 +118,6 @@ func (tm *TokenManager) ValidateAccessToken(tokenString string) (*Claims, error)
 	return claims, nil
 }
 
-// ValidateRefreshToken проверяет валидность refresh токена
 func (tm *TokenManager) ValidateRefreshToken(tokenString string) (*Claims, error) {
 	claims, err := tm.parseToken(tokenString)
 	if err != nil {

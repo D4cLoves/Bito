@@ -77,7 +77,6 @@ func (r *AuthRepository) SaveRefreshToken(ctx context.Context, userID uuid.UUID,
 	return nil
 }
 
-// ValidateAndRevokeRefreshToken атомарно удаляет старый токен и возвращает true, если токен был активен
 func (r *AuthRepository) ValidateAndRevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) (bool, error) {
 	key := fmt.Sprintf("%s%s:%s", refreshTokenPrefix, userID.String(), tokenID)
 	deleted, err := r.client.Del(ctx, key).Result()

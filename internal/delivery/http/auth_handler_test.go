@@ -11,63 +11,71 @@ import (
 
 	"bito/internal/model"
 	"bito/internal/pkg/jwt"
+	"bito/internal/service"
 
 	"github.com/google/uuid"
 )
 
-type mockAuthService struct {
-	user        *model.User
-	err         error
+// fakeUserRepo serves a single user; only GetByID is exercised by refresh.
+type fakeUserRepo struct {
+	user *model.User
+}
+
+func (f *fakeUserRepo) CreateUser(ctx context.Context, user *model.User, stats *model.UserStats, wallet *model.UserWallet) error {
+	return nil
+}
+
+func (f *fakeUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
+	if f.user == nil || f.user.ID != id {
+		return nil, model.ErrUserNotFound
+	}
+	u := *f.user
+	return &u, nil
+}
+
+func (f *fakeUserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	return nil, model.ErrUserNotFound
+}
+
+func (f *fakeUserRepo) Update(ctx context.Context, user *model.User) error { return nil }
+
+func (f *fakeUserRepo) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+
+// fakeRedis keeps refresh sessions in memory, mirroring the Redis repository semantics.
+type fakeRedis struct {
 	activeTokens map[string]bool
 }
 
-func newMockAuthService(user *model.User) *mockAuthService {
-	return &mockAuthService{
-		user:         user,
-		activeTokens: make(map[string]bool),
-	}
-}
-
-func (m *mockAuthService) SendCode(ctx context.Context, email, username, password string) error {
-	return m.err
-}
-
-func (m *mockAuthService) VerifyAndRegister(ctx context.Context, email, code string) (*model.User, error) {
-	return m.user, m.err
-}
-
-func (m *mockAuthService) LoginUser(ctx context.Context, email, password string) (*model.User, error) {
-	return m.user, m.err
-}
-
-func (m *mockAuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.user, nil
-}
-
-func (m *mockAuthService) SaveSession(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error {
-	if m.activeTokens == nil {
-		m.activeTokens = make(map[string]bool)
-	}
-	m.activeTokens[tokenID] = true
+func (f *fakeRedis) SavePending(ctx context.Context, data *model.PendingRegistration, ttl time.Duration) error {
 	return nil
 }
 
-func (m *mockAuthService) ValidateAndRevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
-	if m.activeTokens != nil && m.activeTokens[tokenID] {
-		delete(m.activeTokens, tokenID)
-		return nil
-	}
-	return model.ErrSessionExpired
+func (f *fakeRedis) VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error) {
+	return nil, model.ErrPendingNotFound
 }
 
-func (m *mockAuthService) RevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
-	if m.activeTokens != nil {
-		delete(m.activeTokens, tokenID)
-	}
+func (f *fakeRedis) SaveRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error {
+	f.activeTokens[tokenID] = true
 	return nil
+}
+
+func (f *fakeRedis) ValidateAndRevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) (bool, error) {
+	if !f.activeTokens[tokenID] {
+		return false, nil
+	}
+	delete(f.activeTokens, tokenID)
+	return true, nil
+}
+
+func (f *fakeRedis) RevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) error {
+	delete(f.activeTokens, tokenID)
+	return nil
+}
+
+func newTestAuthHandler(user *model.User, tokenManager *jwt.TokenManager, refreshTTL time.Duration) (*AuthHandler, *fakeRedis) {
+	redis := &fakeRedis{activeTokens: make(map[string]bool)}
+	authService := service.NewAuthService(&fakeUserRepo{user: user}, nil, nil, redis, tokenManager, refreshTTL)
+	return NewAuthHandler(authService), redis
 }
 
 func TestAuthHandler_RefreshToken(t *testing.T) {
@@ -83,15 +91,14 @@ func TestAuthHandler_RefreshToken(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	authService := newMockAuthService(user)
-	handler := NewAuthHandler(authService, tokenManager, refreshTTL)
+	handler, redis := newTestAuthHandler(user, tokenManager, refreshTTL)
 
 	// 1. Generate valid refresh token and save its session
 	pair, err := tokenManager.GenerateTokenPair(userID, user.Name)
 	if err != nil {
 		t.Fatalf("failed to generate token pair: %v", err)
 	}
-	_ = authService.SaveSession(context.Background(), userID, pair.TokenID, refreshTTL)
+	_ = redis.SaveRefreshToken(context.Background(), userID, pair.TokenID, refreshTTL)
 
 	// Case 1: Success with JSON body
 	body, _ := json.Marshal(RefreshRequest{RefreshToken: pair.RefreshToken})
@@ -168,11 +175,10 @@ func TestAuthHandler_Logout(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	authService := newMockAuthService(user)
-	handler := NewAuthHandler(authService, tokenManager, refreshTTL)
+	handler, redis := newTestAuthHandler(user, tokenManager, refreshTTL)
 
 	pair, _ := tokenManager.GenerateTokenPair(userID, user.Name)
-	_ = authService.SaveSession(context.Background(), userID, pair.TokenID, refreshTTL)
+	_ = redis.SaveRefreshToken(context.Background(), userID, pair.TokenID, refreshTTL)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	req.AddCookie(&http.Cookie{
@@ -188,7 +194,7 @@ func TestAuthHandler_Logout(t *testing.T) {
 	}
 
 	// Verify token was revoked
-	if authService.activeTokens[pair.TokenID] {
+	if redis.activeTokens[pair.TokenID] {
 		t.Errorf("token should have been revoked from active sessions")
 	}
 }

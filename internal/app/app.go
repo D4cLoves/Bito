@@ -58,10 +58,10 @@ func Run() {
 	otpService := service.NewOTPService()
 
 	// 8. Бизнес-логика (AuthService)
-	authService := service.NewAuthService(userRepo, otpService, mailerClient, authRedisRepo)
+	authService := service.NewAuthService(userRepo, otpService, mailerClient, authRedisRepo, tokenManager, cfg.JWTRefreshTTL)
 
 	// 9. HTTP Хендлер
-	authHandler := deliveryHTTP.NewAuthHandler(authService, tokenManager, cfg.JWTRefreshTTL)
+	authHandler := deliveryHTTP.NewAuthHandler(authService)
 
 	// 8. WebSocket Hub
 	hub := ws.NewHub()

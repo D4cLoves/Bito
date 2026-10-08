@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bito/internal/model"
+	"bito/internal/pkg/jwt"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -30,6 +31,11 @@ var (
 	ErrGeneratePassword   = errors.New("invalid generate code error")
 	ErrInvalidCode        = errors.New("invalid code")
 )
+
+type Session struct {
+	User   *model.User
+	Tokens *jwt.TokenPair
+}
 
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *model.User, stats *model.UserStats, wallet *model.UserWallet) error
@@ -55,20 +61,28 @@ type RedisProvider interface {
 	RevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) error
 }
 
-
-type AuthService struct {
-	repo  UserRepository
-	otp   CodeProvider
-	mail  MailerProvider
-	redis RedisProvider
+type TokenProvider interface {
+	GenerateTokenPair(userID uuid.UUID, username string) (*jwt.TokenPair, error)
+	ValidateRefreshToken(tokenString string) (*jwt.Claims, error)
 }
 
-func NewAuthService(repo UserRepository, otp CodeProvider, mail MailerProvider, redis RedisProvider) *AuthService {
+type AuthService struct {
+	repo       UserRepository
+	otp        CodeProvider
+	mail       MailerProvider
+	redis      RedisProvider
+	tokens     TokenProvider
+	refreshTTL time.Duration
+}
+
+func NewAuthService(repo UserRepository, otp CodeProvider, mail MailerProvider, redis RedisProvider, tokens TokenProvider, refreshTTL time.Duration) *AuthService {
 	return &AuthService{
-		repo:  repo,
-		otp:   otp,
-		mail:  mail,
-		redis: redis,
+		repo:       repo,
+		otp:        otp,
+		mail:       mail,
+		redis:      redis,
+		tokens:     tokens,
+		refreshTTL: refreshTTL,
 	}
 }
 
@@ -132,7 +146,7 @@ func (s *AuthService) SendCode(ctx context.Context, email, username, password st
 	return nil
 }
 
-func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code string) (*model.User, error) {
+func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code string) (*Session, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	code = strings.TrimSpace(code)
 
@@ -164,14 +178,12 @@ func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code string)
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	return user, nil
+	user.PasswordHash = ""
+
+	return s.issueSession(ctx, user)
 }
 
-
-
-
-
-func (s *AuthService) LoginUser(ctx context.Context, email, password string) (*model.User, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (*Session, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 
 	if email == "" || password == "" {
@@ -192,7 +204,7 @@ func (s *AuthService) LoginUser(ctx context.Context, email, password string) (*m
 
 	user.PasswordHash = ""
 
-	return user, nil
+	return s.issueSession(ctx, user)
 }
 
 func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
@@ -290,11 +302,7 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID uuid.UUID) error
 	return nil
 }
 
-func (s *AuthService) SaveSession(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error {
-	return s.redis.SaveRefreshToken(ctx, userID, tokenID, ttl)
-}
-
-func (s *AuthService) ValidateAndRevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
+func (s *AuthService) validateAndRevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
 	valid, err := s.redis.ValidateAndRevokeRefreshToken(ctx, userID, tokenID)
 	if err != nil {
 		return fmt.Errorf("validate session: %w", err)
@@ -305,8 +313,38 @@ func (s *AuthService) ValidateAndRevokeSession(ctx context.Context, userID uuid.
 	return nil
 }
 
-func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, tokenID string) error {
-	return s.redis.RevokeRefreshToken(ctx, userID, tokenID)
+func (s *AuthService) issueSession(ctx context.Context, user *model.User) (*Session, error) {
+	tokens, err := s.tokens.GenerateTokenPair(user.ID, user.Name)
+	if err != nil {
+		return nil, fmt.Errorf("generate tokens: %w", err)
+	}
+	if err := s.redis.SaveRefreshToken(ctx, user.ID, tokens.TokenID, s.refreshTTL); err != nil {
+		return nil, fmt.Errorf("save session: %w", err)
+	}
+	return &Session{User: user, Tokens: tokens}, nil
+}
+
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Session, error) {
+	claims, err := s.tokens.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("validate refresh token: %w", err) // %w сохранит jwt.ErrExpiredToken для errors.Is
+	}
+	if err := s.validateAndRevokeSession(ctx, claims.UserID, claims.ID); err != nil {
+		return nil, err
+	}
+	user, err := s.GetUserByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return s.issueSession(ctx, user)
+}
+
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	claims, err := s.tokens.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return nil // токен битый — отзывать нечего, logout всё равно успешен
+	}
+	return s.redis.RevokeRefreshToken(ctx, claims.UserID, claims.ID)
 }
 
 func HashPassword(password string) (string, error) {
