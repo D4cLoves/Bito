@@ -2,31 +2,31 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { animate } from 'animejs'
 import type { JSAnimation } from 'animejs'
-import { requestJoin } from '../../composables/useLanding'
+import { plural, requestJoin } from '../../composables/useLanding'
 import { useReveal } from '../../composables/useReveal'
 
 // Конструктор стола: те же параметры, что принимает сервер — режим, колода, 2–6 игроков.
 type Mode = 'podkidnoy' | 'perevodnoy'
 
-const MODES: { id: Mode; name: string; tag: string; text: string }[] = [
+const MODES: { id: Mode; name: string; text: string }[] = [
   {
     id: 'podkidnoy',
-    name: 'Throw-in',
-    tag: 'Podkidnoy',
-    text: 'The classic. Everyone except the defender can toss in cards of a rank already on the table.',
+    name: 'Подкидной',
+    text: 'Классика. Все, кроме защитника, могут подкидывать карты того достоинства, что уже есть на столе.',
   },
   {
     id: 'perevodnoy',
-    name: 'Transfer',
-    tag: 'Perevodnoy',
-    text: 'The defender can pass the attack on with a card of the same rank — now the next player has to defend.',
+    name: 'Переводной',
+    text: 'Защитник может перевести атаку картой того же достоинства — и отбиваться придётся следующему.',
   },
 ]
 const DECKS = [
-  { size: 24, note: 'Nines and up. Short, sharp games.' },
-  { size: 36, note: 'Sixes and up. The way most people play.' },
-  { size: 52, note: 'The full deck. Long games, more to remember.' },
+  { size: 24, note: 'С девяток. Короткие и острые партии.' },
+  { size: 36, note: 'С шестёрок. Так играет большинство.' },
+  { size: 52, note: 'Полная колода. Партии дольше, запоминать больше.' },
 ]
+const cardsWord = (n: number) => plural(n, ['карта', 'карты', 'карт'])
+const playersWord = (n: number) => plural(n, ['игрок', 'игрока', 'игроков'])
 const PLAYERS = [2, 3, 4, 5, 6]
 const HAND = 6
 
@@ -60,7 +60,7 @@ function pickDeck(size: number) {
   deck.value = size
   if (!fits(players.value, size)) {
     const max = Math.floor(size / HAND)
-    hint.value = `${size} cards seat at most ${max}.`
+    hint.value = `На ${size} ${cardsWord(size)} — не больше ${max} ${playersWord(max)}.`
     players.value = max
   } else {
     hint.value = ''
@@ -114,12 +114,12 @@ onUnmounted(() => flow?.revert())
 <template>
   <section id="modes" ref="rootEl" class="modes">
     <div class="modes-copy">
-      <p class="eyebrow" data-reveal>Game Modes</p>
-      <h2 class="title" data-reveal>Set your table.</h2>
-      <p class="lead" data-reveal>Two classic rule sets, three deck sizes, two to six players. Try a combination.</p>
+      <p class="eyebrow" data-reveal>Режимы</p>
+      <h2 class="title" data-reveal>Соберите свой стол.</h2>
+      <p class="lead" data-reveal>Два классических варианта правил, три колоды, от двух до шести игроков. Попробуйте сочетания.</p>
 
       <div class="control" data-reveal>
-        <span class="control-label">Mode</span>
+        <span class="control-label">Режим</span>
         <div class="segmented">
           <button
             v-for="m in MODES"
@@ -133,14 +133,12 @@ onUnmounted(() => flow?.revert())
           </button>
         </div>
         <Transition name="swap" mode="out-in">
-          <p :key="mode" class="control-note">
-            <span class="tag">{{ modeInfo.tag }}</span> {{ modeInfo.text }}
-          </p>
+          <p :key="mode" class="control-note">{{ modeInfo.text }}</p>
         </Transition>
       </div>
 
       <div class="control" data-reveal>
-        <span class="control-label">Deck</span>
+        <span class="control-label">Колода</span>
         <div class="segmented">
           <button
             v-for="d in DECKS"
@@ -150,7 +148,7 @@ onUnmounted(() => flow?.revert())
             :class="{ on: deck === d.size }"
             @click="pickDeck(d.size)"
           >
-            {{ d.size }} cards
+            {{ d.size }} {{ cardsWord(d.size) }}
           </button>
         </div>
         <Transition name="swap" mode="out-in">
@@ -159,7 +157,7 @@ onUnmounted(() => flow?.revert())
       </div>
 
       <div class="control" data-reveal>
-        <span class="control-label">Players</span>
+        <span class="control-label">Игроки</span>
         <div class="segmented">
           <button
             v-for="n in PLAYERS"
@@ -168,7 +166,7 @@ onUnmounted(() => flow?.revert())
             class="seg seg--num"
             :class="{ on: players === n }"
             :disabled="!fits(n)"
-            :title="fits(n) ? '' : `Not enough cards for ${n} players`"
+            :title="fits(n) ? '' : `Не хватит карт на ${n} ${playersWord(n)}`"
             @click="pickPlayers(n)"
           >
             {{ n }}
@@ -176,12 +174,12 @@ onUnmounted(() => flow?.revert())
         </div>
         <Transition name="swap" mode="out-in">
           <p :key="hint || 'ok'" class="control-note" :class="{ warn: hint }">
-            {{ hint || `Six cards each — ${players * HAND} dealt.` }}
+            {{ hint || `По шесть карт каждому — раздаём ${players * HAND}.` }}
           </p>
         </Transition>
       </div>
 
-      <button type="button" class="pill-btn play" data-reveal @click="requestJoin">Play this table</button>
+      <button type="button" class="pill-btn play" data-reveal @click="requestJoin">Играть за таким столом</button>
     </div>
 
     <div class="modes-visual" data-reveal>
@@ -243,12 +241,12 @@ onUnmounted(() => flow?.revert())
           <span class="mini-hand">
             <i v-for="k in 3" :key="k" :style="{ transform: `rotate(${(k - 2) * 12}deg)` }"></i>
           </span>
-          <span class="seat-name">{{ s.you ? 'You' : s.id === 1 ? 'Defends' : `Player ${s.id + 1}` }}</span>
+          <span class="seat-name">{{ s.you ? 'Вы' : s.id === 1 ? 'Защита' : `Игрок ${s.id + 1}` }}</span>
         </div>
       </TransitionGroup>
 
       <p class="summary">
-        {{ modeInfo.name }} · {{ deck }} cards · {{ players }} players · {{ deckLeft }} left in the deck
+        {{ modeInfo.name }} · {{ deck }} {{ cardsWord(deck) }} · {{ players }} {{ playersWord(players) }} · в колоде {{ deckLeft }}
       </p>
     </div>
   </section>
@@ -357,11 +355,6 @@ onUnmounted(() => flow?.revert())
 
 .control-note.warn {
   color: #a2412f;
-}
-
-.tag {
-  font-style: italic;
-  color: #1b1916;
 }
 
 .swap-enter-active,

@@ -25,32 +25,32 @@ interface DemoCard {
 
 const STEPS = [
   {
-    title: 'Everyone gets six',
-    text: 'Each player is dealt six cards. What’s left becomes the deck.',
+    title: 'Всем по шесть',
+    text: 'Каждому раздают шесть карт. Остальные ложатся колодой.',
   },
   {
-    title: 'One suit rules',
-    text: 'The bottom card of the deck sets the trump. A trump beats any card of another suit.',
+    title: 'Козырь решает',
+    text: 'Нижняя карта колоды открывается и задаёт козырь. Козырь бьёт любую карту другой масти.',
   },
   {
-    title: 'Lead the attack',
-    text: 'The attacker opens the bout with any card from their hand.',
+    title: 'Заход',
+    text: 'Атакующий начинает кон любой картой с руки.',
   },
   {
-    title: 'Beat it',
-    text: 'The defender covers it with a higher card of the same suit — or any trump. Can’t? Take the whole table.',
+    title: 'Отбейся',
+    text: 'Защитник кроет старшей картой той же масти или козырем. Нечем крыть — забирает всё со стола.',
   },
   {
-    title: 'Pile on',
-    text: 'Attackers may toss in cards of a rank already on the table. Every one has to be beaten too.',
+    title: 'Подкидывай',
+    text: 'Атакующие могут подкинуть карты того же достоинства, что уже лежат на столе. Их тоже нужно побить.',
   },
   {
     title: 'Бито!',
-    text: 'All attacks beaten — the cards go to the discard pile, “bito”. That’s where our name comes from.',
+    text: 'Всё отбито — карты уходят в сброс, в «бито». Отсюда и наше название.',
   },
   {
-    title: 'Don’t be the durak',
-    text: 'Everyone draws back to six and play moves on. When the deck runs dry, the last player holding cards is the durak.',
+    title: 'Не останься дураком',
+    text: 'Все добирают до шести, и ход переходит дальше. Когда колода кончится, последний, у кого остались карты, — дурак.',
   },
 ]
 const STEP_MS = 1000
@@ -230,7 +230,7 @@ onUnmounted(() => {
   <section id="how-to-play" ref="sectionEl" class="htp" :style="{ height: `calc(100vh + ${STEPS.length * 75}vh)` }">
     <div class="htp-pin">
       <div class="htp-copy">
-        <p class="eyebrow">How to Play</p>
+        <p class="eyebrow">Как играть</p>
         <div class="step-head">
           <span class="step-num">{{ String(step + 1).padStart(2, '0') }}</span>
           <span class="step-total">/ {{ String(STEPS.length).padStart(2, '0') }}</span>
@@ -242,7 +242,7 @@ onUnmounted(() => {
           </div>
         </Transition>
 
-        <ol class="rail" aria-label="Steps">
+        <ol class="rail" aria-label="Шаги">
           <li v-for="(s, i) in STEPS" :key="s.title">
             <button type="button" class="rail-btn" :class="{ active: i === step, done: i < step }" @click="goToStep(i)">
               <span class="rail-dot"></span>
@@ -251,7 +251,7 @@ onUnmounted(() => {
           </li>
         </ol>
 
-        <button type="button" class="pill-btn play" @click="requestJoin">Take a seat</button>
+        <button type="button" class="pill-btn play" @click="requestJoin">Сесть за стол</button>
       </div>
 
       <div ref="tableWrap" class="htp-stage">
@@ -261,10 +261,10 @@ onUnmounted(() => {
           :style="{ width: `${W}px`, height: `${H}px`, transform: `translate(-50%, -50%) scale(${tableScale})` }"
         >
           <div class="felt"></div>
-          <span class="zone zone--deck">Deck</span>
-          <span class="zone zone--bito">Bito</span>
-          <span class="zone zone--you">You</span>
-          <span class="zone zone--opp">Opponent</span>
+          <span class="zone zone--deck">Колода</span>
+          <span class="zone zone--bito">Бито</span>
+          <span class="zone zone--you">Вы</span>
+          <span class="zone zone--opp">Соперник</span>
           <div class="slot" :style="{ left: `${SLOT_1.x - 46}px`, top: `${SLOT_1.y - 64}px` }"></div>
           <div class="slot" :style="{ left: `${SLOT_2.x - 46}px`, top: `${SLOT_2.y - 64}px` }"></div>
           <div class="slot slot--bito" :style="{ left: `${DISCARD.x - 46}px`, top: `${DISCARD.y - 64}px` }"></div>

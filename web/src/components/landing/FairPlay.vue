@@ -8,23 +8,23 @@ import { useReveal } from '../../composables/useReveal'
 const TILES = [
   {
     id: 'shuffle',
-    title: 'Shuffled with crypto/rand',
-    text: 'Every deck is shuffled on the server with a cryptographically secure Fisher–Yates. No seeds to guess.',
+    title: 'Тасует crypto/rand',
+    text: 'Каждую колоду сервер тасует криптостойким алгоритмом Фишера — Йетса. Угадать раскладку нельзя.',
   },
   {
     id: 'hidden',
-    title: 'Your hand stays yours',
-    text: 'The server only ever sends you your own cards. Opponents see how many you hold — never which.',
+    title: 'Ваши карты видите только вы',
+    text: 'Сервер присылает каждому только его карты. Соперники знают, сколько их у вас, но не какие.',
   },
   {
     id: 'timer',
-    title: '20 seconds a move',
-    text: 'A turn clock keeps games moving. Let it run out and the server makes the safe move for you.',
+    title: '20 секунд на ход',
+    text: 'Таймер не даёт партии зависнуть. Не успели — сервер сам сделает безопасный ход.',
   },
   {
     id: 'reconnect',
-    title: '30 seconds to come back',
-    text: 'Dropped connection? Your seat waits half a minute for you before the hand is forfeited.',
+    title: '30 секунд, чтобы вернуться',
+    text: 'Пропала связь? Место ждёт вас полминуты, и только потом партия засчитывается как сдача.',
   },
 ]
 
@@ -91,9 +91,9 @@ onUnmounted(() => running.forEach((a) => a.revert()))
 <template>
   <section id="fair-play" ref="rootEl" class="fair">
     <div class="head">
-      <p class="eyebrow" data-reveal>Fair Play</p>
-      <h2 class="title" data-reveal>No luck you didn’t deal.</h2>
-      <p class="lead" data-reveal>The rules live on the server, not in your browser. Here’s what that means at the table.</p>
+      <p class="eyebrow" data-reveal>Честная игра</p>
+      <h2 class="title" data-reveal>Никаких подтасовок.</h2>
+      <p class="lead" data-reveal>Правила живут на сервере, а не в вашем браузере. Вот что это значит за столом.</p>
     </div>
 
     <div class="grid">

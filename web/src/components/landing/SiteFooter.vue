@@ -10,9 +10,9 @@ useReveal(rootEl)
 <template>
   <footer ref="rootEl" class="end">
     <div class="cta" data-reveal>
-      <h2 class="cta-title">Take a seat.</h2>
-      <p class="cta-text">Six cards, one trump, no luck you didn’t earn.</p>
-      <button type="button" class="pill-btn" @click="requestJoin">Join Game</button>
+      <h2 class="cta-title">Садитесь за стол.</h2>
+      <p class="cta-text">Шесть карт, один козырь и честная раздача.</p>
+      <button type="button" class="pill-btn" @click="requestJoin">Сесть за стол</button>
     </div>
 
     <div class="bar">

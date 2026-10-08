@@ -5,24 +5,24 @@ import { useReveal } from '../../composables/useReveal'
 
 const ITEMS = [
   {
-    q: 'What is Durak?',
-    a: 'The most popular card game across Russia and much of Eastern Europe. You don’t try to win the most — you try not to be the last one left holding cards. That player is the durak, the fool.',
+    q: 'Что такое дурак?',
+    a: 'Самая популярная карточная игра в России и на всём постсоветском пространстве. Здесь не нужно набрать больше всех — нужно не остаться последним с картами на руках. Этот игрок и есть дурак.',
   },
   {
-    q: 'Is there real money involved?',
-    a: 'No. Chips are play money. Every new account starts with 2,500 of them, and there’s no way to cash in or cash out.',
+    q: 'Это игра на деньги?',
+    a: 'Нет. Фишки — игровая валюта. Каждый новый аккаунт получает 2 500 фишек, купить или вывести их нельзя.',
   },
   {
-    q: 'Which rules do you play?',
-    a: 'Throw-in (podkidnoy) and Transfer (perevodnoy), with 24, 36 or 52-card decks and two to six players at a table.',
+    q: 'По каким правилам играем?',
+    a: 'Подкидной и переводной, колоды на 24, 36 или 52 карты, за столом от двух до шести игроков.',
   },
   {
-    q: 'What do I need to sign up?',
-    a: 'A username, an email and a password. We send a 6-digit code to your email to make sure it’s really yours.',
+    q: 'Что нужно для регистрации?',
+    a: 'Ник, почта и пароль. Мы пришлём на почту 6-значный код, чтобы убедиться, что она ваша.',
   },
   {
-    q: 'What if my internet drops mid-game?',
-    a: 'Your seat is held for 30 seconds. Reconnect in time and you pick up exactly where you left off, with your hand intact.',
+    q: 'Что, если пропадёт интернет?',
+    a: 'Место держится за вами 30 секунд. Успеете переподключиться — продолжите с того же хода и с теми же картами.',
   },
 ]
 
@@ -59,8 +59,8 @@ function onLeave(el: Element, done: () => void) {
 <template>
   <section id="faq" ref="rootEl" class="faq">
     <div class="head">
-      <p class="eyebrow" data-reveal>FAQ</p>
-      <h2 class="title" data-reveal>Before you sit down.</h2>
+      <p class="eyebrow" data-reveal>Вопросы</p>
+      <h2 class="title" data-reveal>Пока вы не сели за стол.</h2>
     </div>
 
     <ul class="list">

@@ -57,13 +57,14 @@ const queenParallax = computed(() => ({
   transform: `translate3d(${pointerX.value * 14}px, ${pointerY.value * 11}px, 0) rotate(${pointerX.value * 0.8}deg)`,
 }))
 
-function handleCreateAccount() {
+// Регистрация и так открыта в карточке справа, поэтому в шапке — вход
+function handleHeaderButton() {
   sound.playClick()
   if (authStore.isAuthenticated) {
     router.push('/lobby')
     return
   }
-  joinCard.value?.openJoin()
+  joinCard.value?.openLogin()
 }
 
 // --------------------------------------------------------------------------
@@ -317,24 +318,24 @@ onUnmounted(() => {
           </a>
         </nav>
 
-        <button type="button" class="pill-btn header-btn" @click="handleCreateAccount">
-          {{ authStore.isAuthenticated ? 'Open Lobby' : 'Create Account' }}
+        <button type="button" class="pill-btn header-btn" @click="handleHeaderButton">
+          {{ authStore.isAuthenticated ? 'В лобби' : 'Войти' }}
         </button>
       </header>
 
       <!-- Заголовок и подзаголовок -->
       <div class="copy">
-        <h1 class="title">Pure Intellect.<br />Real-Time<br />Cards.</h1>
-        <p class="subtitle">Master strategy in an arena of pure skill. No luck, just your wits.</p>
+        <h1 class="title">Расчёт.<br />Карты.<br />Вживую.</h1>
+        <p class="subtitle">Карты раздаёт случай, а&nbsp;партию выигрывает голова.</p>
         <!-- Реальные параметры сервера: таймер хода 20 с, за столом 2–6 игроков -->
         <div class="rating">
           <svg class="star" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2" />
             <path d="M12 9v4.8l3 1.8M9.5 2.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
-          <span class="rating-score num"><span class="num-ghost">20s</span><span class="num-live">{{ secondsText }}s</span></span>
+          <span class="rating-score num"><span class="num-ghost">20&nbsp;с</span><span class="num-live">{{ secondsText }}&nbsp;с</span></span>
           <span class="rating-dot"></span>
-          <span class="rating-text">per move · 2–6 players a table</span>
+          <span class="rating-text">на ход · 2–6 игроков<span class="rating-extra"> за столом</span></span>
         </div>
       </div>
 
@@ -734,6 +735,13 @@ onUnmounted(() => {
 
 .compact .rating-text {
   font-size: 15px;
+}
+
+/* на телефоне хвост «за столом» не помещается в плашку */
+@media (max-width: 420px) {
+  .compact .rating-extra {
+    display: none;
+  }
 }
 
 .compact .cards {

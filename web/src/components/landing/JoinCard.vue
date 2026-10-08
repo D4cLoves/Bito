@@ -4,8 +4,9 @@ import { useRouter } from 'vue-router'
 import { animate, stagger, utils } from 'animejs'
 import { useAuthStore } from '../../stores/auth'
 import { useGameSound } from '../../composables/useGameSound'
+import { plural } from '../../composables/useLanding'
 
-// Вход и регистрация прямо в карточке «Join Game».
+// Вход и регистрация прямо в карточке на первом экране.
 // join → password → code → welcome; отдельная ветка login; signed — уже вошёл.
 type Step = 'join' | 'password' | 'code' | 'welcome' | 'login' | 'signed'
 
@@ -31,7 +32,7 @@ const otp = ref<string[]>(['', '', '', '', '', ''])
 const error = ref('')
 const busy = ref(false)
 const resendLeft = ref(0)
-const chipsShown = ref('+2,500 chips')
+const chipsShown = ref(formatChips(START_CHIPS))
 
 const cardEl = ref<HTMLElement | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
@@ -39,9 +40,13 @@ const errorEl = ref<HTMLElement | null>(null)
 const otpEls = ref<HTMLInputElement[]>([])
 
 let resendTimer: number | null = null
+
+function formatChips(n: number) {
+  return `+${n.toLocaleString('ru-RU')} ${plural(n, ['фишка', 'фишки', 'фишек'])}`
+}
 let fromHeight = 0
 
-const displayName = computed(() => authStore.user?.username || username.value.trim() || 'player')
+const displayName = computed(() => authStore.user?.username || username.value.trim() || 'игрок')
 
 const passwordScore = computed(() => {
   const p = password.value
@@ -136,14 +141,14 @@ async function fail(message: string) {
 
 function humanize(raw: string | null | undefined): string {
   const msg = (raw || '').toLowerCase()
-  if (msg.includes('invalid credentials')) return 'Wrong email or password.'
-  if (msg.includes('already exists')) return 'This email or username is already taken.'
-  if (msg.includes('неверный') || msg.includes('invalid verification')) return "That code doesn't match. Try again."
-  if (msg.includes('истек') || msg.includes('expired')) return 'The code has expired. Request a new one.'
+  if (msg.includes('invalid credentials')) return 'Неверная почта или пароль.'
+  if (msg.includes('already exists')) return 'Эта почта или ник уже заняты.'
+  if (msg.includes('неверный') || msg.includes('invalid verification')) return 'Код не подходит. Попробуйте ещё раз.'
+  if (msg.includes('истек') || msg.includes('expired')) return 'Срок действия кода истёк. Запросите новый.'
   if (msg.includes('связаться') || msg.includes('недоступен') || msg.includes('502')) {
-    return "Can't reach the server. Is the backend running?"
+    return 'Сервер не отвечает. Попробуйте чуть позже.'
   }
-  return raw || 'Something went wrong. Please try again.'
+  return raw || 'Что-то пошло не так. Попробуйте ещё раз.'
 }
 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
@@ -155,15 +160,15 @@ function submitJoin() {
   sound.playClick()
   const name = username.value.trim()
   const nameLength = [...name].length
-  if (nameLength < 3 || nameLength > 32) return fail('Username must be 3–32 characters.')
-  if (!emailOk(email.value)) return fail('Enter a valid email address.')
+  if (nameLength < 3 || nameLength > 32) return fail('Ник — от 3 до 32 символов.')
+  if (!emailOk(email.value)) return fail('Проверьте адрес почты.')
   go('password')
 }
 
 async function submitPassword() {
   sound.playClick()
-  if (password.value.length < MIN_PASSWORD) return fail(`Use at least ${MIN_PASSWORD} characters.`)
-  if (new TextEncoder().encode(password.value).length > MAX_PASSWORD) return fail('That password is too long.')
+  if (password.value.length < MIN_PASSWORD) return fail(`Минимум ${MIN_PASSWORD} символов.`)
+  if (new TextEncoder().encode(password.value).length > MAX_PASSWORD) return fail('Слишком длинный пароль.')
   await requestCode(true)
 }
 
@@ -255,7 +260,7 @@ function onOtpPaste(e: ClipboardEvent) {
 async function submitCode() {
   if (busy.value) return
   const code = otp.value.join('')
-  if (code.length !== 6) return fail('Enter all 6 digits.')
+  if (code.length !== 6) return fail('Введите все 6 цифр.')
 
   busy.value = true
   const ok = await authStore.verifyAndRegister({ email: email.value.trim(), code })
@@ -282,13 +287,13 @@ function countChips(delay = 380, withSound = true) {
     delay,
     ease: 'out(3)',
     onUpdate: () => {
-      chipsShown.value = `+${Math.round(counter.value).toLocaleString('en-US')} chips`
+      chipsShown.value = formatChips(Math.round(counter.value))
     },
     onComplete: () => {
       if (withSound) sound.playChipsWin()
     },
   })
-  chipsShown.value = '+0 chips'
+  chipsShown.value = formatChips(0)
 }
 
 // --------------------------------------------------------------------------
@@ -296,8 +301,8 @@ function countChips(delay = 380, withSound = true) {
 // --------------------------------------------------------------------------
 async function submitLogin() {
   sound.playClick()
-  if (!emailOk(email.value)) return fail('Enter a valid email address.')
-  if (!password.value) return fail('Enter your password.')
+  if (!emailOk(email.value)) return fail('Проверьте адрес почты.')
+  if (!password.value) return fail('Введите пароль.')
 
   busy.value = true
   const ok = await authStore.login({ email: email.value.trim(), password: password.value })
@@ -330,18 +335,21 @@ onUnmounted(() => {
   if (resendTimer) clearInterval(resendTimer)
 })
 
-// Вызов с любой кнопки «играть» на странице: открыть регистрацию и поставить фокус.
-function openJoin() {
+// Вызов с любой кнопки «играть» или «войти» на странице: открыть нужный шаг и поставить фокус.
+function open(mode: 'login' | 'join') {
   if (authStore.isAuthenticated) return
-  if (step.value !== 'join') {
-    switchTo('join')
+  if (step.value !== mode) {
+    switchTo(mode)
     return
   }
   // ждём, пока страница доедет наверх, иначе фокус дёрнет прокрутку
   window.setTimeout(() => cardEl.value?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true }), 450)
 }
 
-defineExpose({ switchTo, countChips, openJoin })
+const openJoin = () => open('join')
+const openLogin = () => open('login')
+
+defineExpose({ switchTo, countChips, openJoin, openLogin })
 </script>
 
 <template>
@@ -350,61 +358,61 @@ defineExpose({ switchTo, countChips, openJoin })
       <Transition :css="false" mode="out-in" @leave="onLeave" @enter="onEnter">
         <!-- Шаг 1: ник и почта (вид из макета) -->
         <form v-if="step === 'join'" key="join" class="step" novalidate @submit.prevent="submitJoin">
-          <h2 class="title" data-anim>Join Game</h2>
-          <input v-model="username" data-anim type="text" placeholder="Username" class="field" autocomplete="username" maxlength="32" />
-          <input v-model="email" data-anim type="email" placeholder="Email" class="field" autocomplete="email" />
+          <h2 class="title" data-anim>Сесть за стол</h2>
+          <input v-model="username" data-anim type="text" placeholder="Ник" class="field" autocomplete="username" maxlength="32" />
+          <input v-model="email" data-anim type="email" placeholder="Почта" class="field" autocomplete="email" />
           <div class="row" data-anim>
             <span class="chip">{{ chipsShown }}</span>
-            <button type="button" class="link" @click="switchTo('login')">Log in</button>
+            <button type="button" class="link" @click="switchTo('login')">Войти</button>
           </div>
           <p v-if="error" ref="errorEl" class="error">{{ error }}</p>
-          <button type="submit" class="pill-btn submit" data-anim>Join Game</button>
+          <button type="submit" class="pill-btn submit" data-anim>Продолжить</button>
         </form>
 
         <!-- Шаг 2: пароль -->
         <form v-else-if="step === 'password'" key="password" class="step" novalidate @submit.prevent="submitPassword">
           <div class="title-row" data-anim>
-            <h2 class="title">Set a password</h2>
-            <button type="button" class="back" aria-label="Back" @click="go('join', -1)">
+            <h2 class="title">Нужен пароль</h2>
+            <button type="button" class="back" aria-label="Назад" @click="go('join', -1)">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" /></svg>
             </button>
           </div>
-          <p class="note" data-anim>Almost there, {{ displayName }}. You'll use it to sign in.</p>
+          <p class="note" data-anim>Почти готово, {{ displayName }}. С ним вы будете входить.</p>
           <input v-model="username" type="text" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true" />
           <div class="field-wrap" data-anim>
             <input
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
-              placeholder="Password"
+              placeholder="Пароль"
               class="field field--icon"
               autocomplete="new-password"
             />
-            <button type="button" class="eye" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+            <button type="button" class="eye" :aria-label="showPassword ? 'Скрыть пароль' : 'Показать пароль'" @click="showPassword = !showPassword">
               <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
               <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
             </button>
           </div>
           <div class="strength" data-anim>
             <span v-for="i in 4" :key="i" class="strength-bar" :class="{ on: passwordScore >= i }"></span>
-            <span class="strength-text">{{ password.length >= MIN_PASSWORD ? 'Looks good' : `${MIN_PASSWORD}+ characters` }}</span>
+            <span class="strength-text">{{ password.length >= MIN_PASSWORD ? 'Подходит' : `от ${MIN_PASSWORD} символов` }}</span>
           </div>
           <p v-if="error" ref="errorEl" class="error">{{ error }}</p>
           <button type="submit" class="pill-btn submit" data-anim :disabled="busy">
             <span v-if="busy" class="dots"><i></i><i></i><i></i></span>
-            <span v-else>Send code</span>
+            <span v-else>Получить код</span>
           </button>
         </form>
 
         <!-- Шаг 3: код из письма -->
         <form v-else-if="step === 'code'" key="code" class="step" novalidate @submit.prevent="submitCode">
           <div class="title-row" data-anim>
-            <h2 class="title">Check your inbox</h2>
-            <button type="button" class="back" aria-label="Back" @click="go('password', -1)">
+            <h2 class="title">Код из письма</h2>
+            <button type="button" class="back" aria-label="Назад" @click="go('password', -1)">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" /></svg>
             </button>
           </div>
           <p class="note" data-anim>
-            We sent a 6-digit code to <strong :title="email.trim()">{{ email.trim() }}</strong>
+            Отправили 6-значный код на <strong :title="email.trim()">{{ email.trim() }}</strong>
           </p>
           <div class="otp" data-anim @paste="onOtpPaste">
             <input
@@ -418,70 +426,70 @@ defineExpose({ switchTo, countChips, openJoin })
               inputmode="numeric"
               autocomplete="one-time-code"
               maxlength="6"
-              :aria-label="`Digit ${i + 1}`"
+              :aria-label="`Цифра ${i + 1}`"
               @input="onOtpInput(i, $event)"
               @keydown="onOtpKeydown(i, $event)"
             />
           </div>
           <div class="row row--muted" data-anim>
-            <span v-if="resendLeft > 0">Resend in {{ resendLabel }}</span>
-            <button v-else type="button" class="link" :disabled="busy" @click="requestCode(false)">Resend code</button>
-            <button type="button" class="link" @click="go('join', -1)">Change email</button>
+            <span v-if="resendLeft > 0">Повтор через {{ resendLabel }}</span>
+            <button v-else type="button" class="link" :disabled="busy" @click="requestCode(false)">Отправить снова</button>
+            <button type="button" class="link" @click="go('join', -1)">Сменить почту</button>
           </div>
           <p v-if="error" ref="errorEl" class="error">{{ error }}</p>
           <button type="submit" class="pill-btn submit" data-anim :disabled="busy">
             <span v-if="busy" class="dots"><i></i><i></i><i></i></span>
-            <span v-else>Verify &amp; play</span>
+            <span v-else>Подтвердить</span>
           </button>
         </form>
 
         <!-- Шаг 4: готово -->
         <div v-else-if="step === 'welcome'" key="welcome" class="step">
-          <h2 class="title" data-anim>Welcome, {{ displayName }}</h2>
-          <p class="note" data-anim>Your seat is ready. Here's your starting stack.</p>
+          <h2 class="title" data-anim>Вы в игре, {{ displayName }}</h2>
+          <p class="note" data-anim>Место готово. Вот ваши стартовые фишки.</p>
           <div class="stack" data-anim>
             <span class="chip chip--big">{{ chipsShown }}</span>
           </div>
-          <button type="button" class="pill-btn submit" data-anim @click="openLobby">Open Lobby</button>
+          <button type="button" class="pill-btn submit" data-anim @click="openLobby">В лобби</button>
         </div>
 
         <!-- Вход -->
         <form v-else-if="step === 'login'" key="login" class="step" novalidate @submit.prevent="submitLogin">
-          <h2 class="title" data-anim>Welcome back</h2>
-          <input v-model="email" data-anim type="email" placeholder="Email" class="field" autocomplete="email" />
+          <h2 class="title" data-anim>С возвращением</h2>
+          <input v-model="email" data-anim type="email" placeholder="Почта" class="field" autocomplete="email" />
           <div class="field-wrap" data-anim>
             <input
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
-              placeholder="Password"
+              placeholder="Пароль"
               class="field field--icon"
               autocomplete="current-password"
             />
-            <button type="button" class="eye" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+            <button type="button" class="eye" :aria-label="showPassword ? 'Скрыть пароль' : 'Показать пароль'" @click="showPassword = !showPassword">
               <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
               <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
             </button>
           </div>
           <div class="row row--muted" data-anim>
-            <span>New to Bito?</span>
-            <button type="button" class="link" @click="switchTo('join')">Create account</button>
+            <span>Впервые в Bito?</span>
+            <button type="button" class="link" @click="switchTo('join')">Регистрация</button>
           </div>
           <p v-if="error" ref="errorEl" class="error">{{ error }}</p>
           <button type="submit" class="pill-btn submit" data-anim :disabled="busy">
             <span v-if="busy" class="dots"><i></i><i></i><i></i></span>
-            <span v-else>Sign in</span>
+            <span v-else>Войти</span>
           </button>
         </form>
 
         <!-- Уже вошёл -->
         <div v-else key="signed" class="step">
-          <h2 class="title" data-anim>Hi, {{ displayName }}</h2>
-          <p class="note" data-anim>Your table is waiting. Jump back in whenever you're ready.</p>
+          <h2 class="title" data-anim>Привет, {{ displayName }}</h2>
+          <p class="note" data-anim>Стол ждёт. Возвращайтесь, когда будете готовы.</p>
           <div class="row" data-anim>
             <span class="chip">{{ chipsShown.replace('+', '') }}</span>
-            <button type="button" class="link" @click="logout">Log out</button>
+            <button type="button" class="link" @click="logout">Выйти</button>
           </div>
-          <button type="button" class="pill-btn submit" data-anim @click="openLobby">Open Lobby</button>
+          <button type="button" class="pill-btn submit" data-anim @click="openLobby">В лобби</button>
         </div>
       </Transition>
     </div>

@@ -116,7 +116,7 @@ onUnmounted(() => {
 
 <template>
   <header ref="rootEl" class="site-header">
-    <a href="#" class="brand" aria-label="Bito — back to top" @click.prevent="requestJoin">
+    <a href="#" class="brand" aria-label="Bito — наверх" @click.prevent="requestJoin">
       <svg viewBox="0 0 40 38" aria-hidden="true">
         <rect x="17.5" y="4.5" width="18" height="26" rx="3.2" transform="rotate(12 26.5 17.5)" fill="none" stroke="currentColor" stroke-width="2" />
         <rect x="4" y="5.5" width="18" height="26" rx="3.2" transform="rotate(-14 13 18.5)" fill="#f5f4ef" stroke="currentColor" stroke-width="2" />
@@ -145,7 +145,7 @@ onUnmounted(() => {
     </nav>
 
     <button type="button" class="cta" @click="play">
-      {{ authStore.isAuthenticated ? 'Open Lobby' : 'Play now' }}
+      {{ authStore.isAuthenticated ? 'В лобби' : 'Играть' }}
     </button>
 
     <button
@@ -154,13 +154,13 @@ onUnmounted(() => {
       :class="{ open: menuOpen }"
       :aria-expanded="menuOpen"
       aria-controls="site-menu"
-      aria-label="Sections"
+      aria-label="Разделы"
       @click="menuOpen = !menuOpen"
     >
       <span></span><span></span>
     </button>
 
-    <nav id="site-menu" ref="menuEl" class="menu" aria-label="Sections">
+    <nav id="site-menu" ref="menuEl" class="menu" aria-label="Разделы">
       <a
         v-for="(s, i) in LANDING_SECTIONS"
         :key="s.id"
