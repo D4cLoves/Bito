@@ -327,7 +327,7 @@ func (s *AuthService) issueSession(ctx context.Context, user *model.User) (*Sess
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Session, error) {
 	claims, err := s.tokens.ValidateRefreshToken(refreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("validate refresh token: %w", err) // %w сохранит jwt.ErrExpiredToken для errors.Is
+		return nil, fmt.Errorf("validate refresh token: %w", err)
 	}
 	if err := s.validateAndRevokeSession(ctx, claims.UserID, claims.ID); err != nil {
 		return nil, err
@@ -342,7 +342,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Sessio
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	claims, err := s.tokens.ValidateRefreshToken(refreshToken)
 	if err != nil {
-		return nil // токен битый — отзывать нечего, logout всё равно успешен
+		return nil
 	}
 	return s.redis.RevokeRefreshToken(ctx, claims.UserID, claims.ID)
 }

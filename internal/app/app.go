@@ -64,7 +64,7 @@ func Run() {
 	authHandler := deliveryHTTP.NewAuthHandler(authService)
 
 	// 8. WebSocket Hub
-	hub := ws.NewHub()
+	hub := ws.NewHub(tokenManager, cfg.AllowedOrigins)
 
 	// 9. HTTP Сервер (твой конструктор с настроенными роутами /api/v1/auth)
 	serverAddr := fmt.Sprintf(":%s", cfg.ServerPort)

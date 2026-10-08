@@ -7,24 +7,41 @@ import (
 	"sync"
 
 	"bito/internal/game"
+	"bito/internal/pkg/jwt"
 
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true 
-	},
+type TokenValidator interface {
+	ValidateAccessToken(token string) (*jwt.Claims, error)
 }
 
 type Hub struct {
-	mu    sync.RWMutex
-	rooms map[string]*Room
+	mu             sync.RWMutex
+	rooms          map[string]*Room
+	tokenValidator TokenValidator
+	upgrader       websocket.Upgrader
 }
 
-func NewHub() *Hub {
+// NewHub authenticates players by access token. allowedOrigins guards against
+// Cross-Site WebSocket Hijacking: the token may come from a cookie, so without
+// an origin check a page on any other site could connect with the victim's session.
+func NewHub(tokenValidator TokenValidator, allowedOrigins []string) *Hub {
+	origins := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		origins[o] = true
+	}
+
 	return &Hub{
-		rooms: make(map[string]*Room),
+		rooms:          make(map[string]*Room),
+		tokenValidator: tokenValidator,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				// Non-browser clients (tests, CLI) send no Origin and cannot carry a victim's cookie.
+				return origin == "" || origins[origin]
+			},
+		},
 	}
 }
 
@@ -61,14 +78,26 @@ func (h *Hub) RemoveRoom(id string) {
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	accessToken := tokenFromRequest(r)
+	if accessToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := h.tokenValidator.ValidateAccessToken(accessToken)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	playerID := claims.UserID.String()
+	playerName := claims.Username
+
 	query := r.URL.Query()
 
 	roomID := query.Get("room_id")
-	playerID := query.Get("player_id")
-	playerName := query.Get("player_name")
-
-	if roomID == "" || playerID == "" {
-		http.Error(w, "missing room_id or player_id", http.StatusBadRequest)
+	if roomID == "" {
+		http.Error(w, "missing room_id", http.StatusBadRequest)
 		return
 	}
 	if playerName == "" {
@@ -100,13 +129,13 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		maxUsers = usersVal
 	}
 
-	room := h.GetOrCreateRoom(roomID, mode, deckType, maxUsers)
-
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Upgrade error: %v", err)
 		return
 	}
+
+	room := h.GetOrCreateRoom(roomID, mode, deckType, maxUsers)
 
 	client := NewClient(playerID, playerName, conn, room)
 	if !room.RegisterClient(client) {
@@ -117,4 +146,13 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	go client.WritePump()
 	go client.ReadPump()
+}
+
+// tokenFromRequest reads the access token from the cookie set at login, falling back
+// to the "token" query parameter: browsers cannot set headers on a WebSocket handshake.
+func tokenFromRequest(r *http.Request) string {
+	if cookie, err := r.Cookie("accessToken"); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	return r.URL.Query().Get("token")
 }

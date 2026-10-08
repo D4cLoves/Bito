@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,22 +10,98 @@ import (
 
 	"bito/internal/delivery/ws"
 	"bito/internal/game"
+	"bito/internal/pkg/jwt"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-func TestE2E_DurakWebSocketGame(t *testing.T) {
-	// 1. Создаем хаб и поднимаем тестовый HTTP-сервер
-	hub := ws.NewHub()
+const testAllowedOrigin = "http://localhost:5173"
+
+// newTestWSServer starts the HTTP server with a real token manager and returns the /ws URL.
+func newTestWSServer(t *testing.T) (*jwt.TokenManager, string) {
+	t.Helper()
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	hub := ws.NewHub(tokenManager, []string{testAllowedOrigin})
 	server := NewServer(":0", hub, nil)
 	ts := httptest.NewServer(server.httpServer.Handler)
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 
-	// Преобразуем http:// в ws://
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+	return tokenManager, "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+}
+
+func TestWS_RejectsUnauthenticated(t *testing.T) {
+	tokenManager, wsURL := newTestWSServer(t)
+	userID := uuid.New()
+
+	refreshToken, _, err := tokenManager.GenerateRefreshToken(userID, "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate refresh token: %v", err)
+	}
+
+	cases := []struct {
+		name  string
+		query string
+	}{
+		{"no token", "?room_id=t1"},
+		{"garbage token", "?room_id=t1&token=garbage"},
+		{"refresh token instead of access", "?room_id=t1&token=" + refreshToken},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			conn, resp, err := websocket.DefaultDialer.Dial(wsURL+tc.query, nil)
+			if err == nil {
+				conn.Close()
+				t.Fatal("expected handshake to fail")
+			}
+			if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %v", resp)
+			}
+		})
+	}
+}
+
+func TestWS_OriginCheck(t *testing.T) {
+	tokenManager, wsURL := newTestWSServer(t)
+	accessToken, err := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate access token: %v", err)
+	}
+	url := wsURL + "?room_id=origin_table&token=" + accessToken
+
+	foreign := http.Header{"Origin": []string{"http://evil.example"}}
+	if conn, resp, err := websocket.DefaultDialer.Dial(url, foreign); err == nil {
+		conn.Close()
+		t.Fatal("expected foreign origin to be rejected")
+	} else if resp == nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for foreign origin, got %v", resp)
+	}
+
+	allowed := http.Header{"Origin": []string{testAllowedOrigin}}
+	conn, _, err := websocket.DefaultDialer.Dial(url, allowed)
+	if err != nil {
+		t.Fatalf("allowed origin failed to connect: %v", err)
+	}
+	conn.Close()
+}
+
+func TestE2E_DurakWebSocketGame(t *testing.T) {
+	// 1. Поднимаем тестовый сервер и выпускаем access-токены игрокам
+	tokenManager, wsURL := newTestWSServer(t)
+
+	aliceID := uuid.New()
+	aliceToken, err := tokenManager.GenerateAccessToken(aliceID, "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate Alice token: %v", err)
+	}
+	bobToken, err := tokenManager.GenerateAccessToken(uuid.New(), "Bob")
+	if err != nil {
+		t.Fatalf("failed to generate Bob token: %v", err)
+	}
 
 	// 2. Подключаем первого игрока (Алиса)
-	aliceURL := wsURL + "?room_id=test_table&player_id=p1&player_name=Alice"
+	aliceURL := wsURL + "?room_id=test_table&token=" + aliceToken
 	wsAlice, _, err := websocket.DefaultDialer.Dial(aliceURL, nil)
 	if err != nil {
 		t.Fatalf("Alice failed to connect: %v", err)
@@ -32,7 +109,7 @@ func TestE2E_DurakWebSocketGame(t *testing.T) {
 	defer wsAlice.Close()
 
 	// 3. Подключаем второго игрока (Боб) -> комната наполнилась (2 игрока) и стартует!
-	bobURL := wsURL + "?room_id=test_table&player_id=p2&player_name=Bob"
+	bobURL := wsURL + "?room_id=test_table&token=" + bobToken
 	wsBob, _, err := websocket.DefaultDialer.Dial(bobURL, nil)
 	if err != nil {
 		t.Fatalf("Bob failed to connect: %v", err)
@@ -65,7 +142,7 @@ func TestE2E_DurakWebSocketGame(t *testing.T) {
 	var attackerConn, defenderConn *websocket.Conn
 	var cardToPlay game.Card
 
-	if aliceState.Payload.AttackerID == "p1" {
+	if aliceState.Payload.AttackerID == aliceID.String() {
 		t.Logf("Алиса ходит первой!")
 		attackerConn = wsAlice
 		defenderConn = wsBob
