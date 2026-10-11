@@ -65,3 +65,7 @@ export async function freshAccessToken(): Promise<string | null> {
   }
   return auth.token
 }
+
+export function isNotImplemented(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 405 || err.status === 501)
+}

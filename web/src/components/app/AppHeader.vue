@@ -9,6 +9,10 @@ const auth = useAuthStore()
 
 const initial = computed(() => (auth.user?.username?.[0] ?? '?').toUpperCase())
 
+function openProfile() {
+  router.push({ path: '/lobby', query: { panel: 'profile' } })
+}
+
 function logout() {
   auth.logout()
   router.push('/')
@@ -35,8 +39,10 @@ function logout() {
     </div>
 
     <div class="me">
-      <span class="avatar" aria-hidden="true">{{ initial }}</span>
-      <span class="name">{{ auth.user?.username ?? 'Игрок' }}</span>
+      <button type="button" class="me-btn" title="Профиль" @click="openProfile">
+        <span class="avatar" aria-hidden="true">{{ initial }}</span>
+        <span class="name">{{ auth.user?.username ?? 'Игрок' }}</span>
+      </button>
       <button type="button" class="icon-btn" title="Выйти" aria-label="Выйти" @click="logout">
         <LogOut :size="18" />
       </button>
@@ -93,6 +99,24 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.me-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.me-btn:hover {
+  background: var(--color-paper-hover);
 }
 
 .avatar {

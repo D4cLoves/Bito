@@ -103,6 +103,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function setUser(next: UserResponse) {
+    user.value = next
+    localStorage.setItem('user', JSON.stringify(next))
+  }
+
   function logout() {
     token.value = null
     refreshToken.value = null
@@ -124,6 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
     requestCode,
     verifyAndRegister,
     refreshSession,
+    setUser,
     logout,
   }
 })

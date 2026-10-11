@@ -28,12 +28,15 @@
   --color-red: #a1473f;
   --color-red-strong: #8a3a33;
   --color-red-tint: #f5e4df;
+  --color-red-tint-strong: #efd3cc;
+  --color-red-soft: #e6a197;
 
   --color-gold: #c9a66b;
   --color-gold-ink: #7a5a22;
   --color-gold-tint: #f1e6cf;
 
   --color-green: #6f9a6a;
+  --color-green-soft: #a8c9a3;
 }
 
 @layer base {
