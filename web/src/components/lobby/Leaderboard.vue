@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Trophy } from 'lucide-vue-next'
+import { PhTrophy } from '@phosphor-icons/vue'
 import { getLeaderboard } from '../../api/users'
 import { isNotImplemented } from '../../api/http'
 import type { LeaderboardEntry } from '../../types/user'
@@ -28,7 +28,7 @@ onMounted(load)
 <template>
   <section class="board" aria-labelledby="board-title">
     <div class="head">
-      <Trophy :size="18" aria-hidden="true" />
+      <PhTrophy :size="20" weight="duotone" aria-hidden="true" />
       <h2 id="board-title">Топ игроков</h2>
     </div>
 

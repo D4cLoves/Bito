@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { LogOut } from 'lucide-vue-next'
+import { PhSignOut } from '@phosphor-icons/vue'
 import { useAuthStore } from '../../stores/auth'
+import { useProfileStore } from '../../stores/profile'
 
 const router = useRouter()
 const auth = useAuthStore()
+const profileStore = useProfileStore()
+
+const elo = computed(() => profileStore.profile?.stats.elo)
+
+onMounted(() => {
+  if (auth.isAuthenticated) profileStore.load()
+})
 
 const initial = computed(() => (auth.user?.username?.[0] ?? '?').toUpperCase())
 
-function openProfile() {
-  router.push({ path: '/lobby', query: { panel: 'profile' } })
-}
-
 function logout() {
   auth.logout()
+  profileStore.reset()
   router.push('/')
 }
 </script>
@@ -39,12 +44,13 @@ function logout() {
     </div>
 
     <div class="me">
-      <button type="button" class="me-btn" title="Профиль" @click="openProfile">
+      <RouterLink to="/profile" class="me-btn" title="Профиль">
         <span class="avatar" aria-hidden="true">{{ initial }}</span>
         <span class="name">{{ auth.user?.username ?? 'Игрок' }}</span>
-      </button>
+        <span v-if="elo !== undefined" class="elo">{{ elo }}</span>
+      </RouterLink>
       <button type="button" class="icon-btn" title="Выйти" aria-label="Выйти" @click="logout">
-        <LogOut :size="18" />
+        <PhSignOut :size="18" weight="bold" />
       </button>
     </div>
   </header>
@@ -111,8 +117,23 @@ function logout() {
   border-radius: 999px;
   background: transparent;
   font: inherit;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   transition: background-color 0.2s;
+}
+
+.me-btn.router-link-active {
+  background: var(--color-paper-hover);
+}
+
+.elo {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .me-btn:hover {

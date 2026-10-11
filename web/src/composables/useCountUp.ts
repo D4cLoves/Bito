@@ -5,9 +5,11 @@ const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)')
 export function useCountUp(target: Ref<number | null | undefined>, duration = 900) {
   const value = ref(0)
   let frame = 0
+  let fallback = 0
 
   function run(to: number) {
     cancelAnimationFrame(frame)
+    clearTimeout(fallback)
     const from = value.value
     if (reduceMotion() || from === to) {
       value.value = to
@@ -21,6 +23,10 @@ export function useCountUp(target: Ref<number | null | undefined>, duration = 90
       if (t < 1) frame = requestAnimationFrame(step)
     }
     frame = requestAnimationFrame(step)
+    fallback = window.setTimeout(() => {
+      cancelAnimationFrame(frame)
+      value.value = to
+    }, duration + 300)
   }
 
   watch(
@@ -31,7 +37,10 @@ export function useCountUp(target: Ref<number | null | undefined>, duration = 90
     { immediate: true },
   )
 
-  onUnmounted(() => cancelAnimationFrame(frame))
+  onUnmounted(() => {
+    cancelAnimationFrame(frame)
+    clearTimeout(fallback)
+  })
 
   return value
 }

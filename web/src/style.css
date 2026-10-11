@@ -60,3 +60,23 @@
     background: rgba(128, 122, 110, 0.7);
   }
 }
+
+@layer components {
+  .rise {
+    animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(var(--d, 0) * 80ms);
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise {
+      animation: none;
+    }
+  }
+}
