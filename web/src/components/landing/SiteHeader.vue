@@ -194,7 +194,6 @@ onUnmounted(() => {
     0 18px 40px -22px rgba(70, 62, 48, 0.35);
   backdrop-filter: blur(18px) saturate(1.1);
   -webkit-backdrop-filter: blur(18px) saturate(1.1);
-  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .brand {
@@ -203,14 +202,14 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 21px;
   letter-spacing: -0.01em;
-  color: #1b1916;
+  color: var(--color-ink);
   text-decoration: none;
 }
 
 .brand svg {
   width: 30px;
   height: 29px;
-  color: #26231e;
+  color: var(--color-ink);
 }
 
 .nav {
@@ -227,7 +226,7 @@ onUnmounted(() => {
   bottom: 4px;
   width: 0;
   border-radius: 999px;
-  background: #e5e0d5;
+  background: var(--color-paper-hover);
   opacity: 0;
 }
 
@@ -237,14 +236,14 @@ onUnmounted(() => {
   border-radius: 999px;
   font-size: 15px;
   letter-spacing: -0.01em;
-  color: #57534b;
+  color: var(--color-ink-muted);
   text-decoration: none;
   transition: color 0.25s;
 }
 
 .nav a:hover,
 .nav a.on {
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .cta {
@@ -252,8 +251,8 @@ onUnmounted(() => {
   padding: 0 22px;
   border: 0;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font: inherit;
   font-size: 15px;
   cursor: pointer;
@@ -263,7 +262,7 @@ onUnmounted(() => {
 }
 
 .cta:hover {
-  background: #1b1916;
+  background: var(--color-ink);
 }
 
 .cta:active {
@@ -299,7 +298,7 @@ onUnmounted(() => {
     margin-left: 6px;
     border: 0;
     border-radius: 999px;
-    background: #e5e0d5;
+    background: var(--color-paper-hover);
     cursor: pointer;
   }
 
@@ -308,7 +307,7 @@ onUnmounted(() => {
     width: 18px;
     height: 2px;
     border-radius: 2px;
-    background: #1b1916;
+    background: var(--color-ink);
     transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
@@ -344,19 +343,19 @@ onUnmounted(() => {
     border-radius: 16px;
     font-size: 17px;
     letter-spacing: -0.01em;
-    color: #1b1916;
+    color: var(--color-ink);
     text-decoration: none;
   }
 
   .menu a small {
     font-size: 12px;
-    color: #9a9384;
+    color: var(--color-ink-faint);
     font-variant-numeric: tabular-nums;
   }
 
   .menu a.on,
   .menu a:active {
-    background: #e5e0d5;
+    background: var(--color-paper-hover);
   }
 }
 </style>

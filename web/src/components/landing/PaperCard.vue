@@ -47,13 +47,13 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
 }
 
 .face--front {
-  background: linear-gradient(160deg, #fdfcf8, #f2efe7);
-  color: #2b2824;
-  font-family: Georgia, 'Times New Roman', serif;
+  background: linear-gradient(160deg, var(--color-paper-raised), #f2efe7);
+  color: var(--color-card-ink);
+  font-family: var(--font-card);
 }
 
 .face--front.red {
-  color: #a1473f;
+  color: var(--color-red);
 }
 
 .face--back {
@@ -73,7 +73,7 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
   background:
     repeating-linear-gradient(45deg, transparent 0 6px, rgba(160, 148, 124, 0.18) 6px 7px),
     repeating-linear-gradient(-45deg, transparent 0 6px, rgba(160, 148, 124, 0.18) 6px 7px),
-    #e7e1d4;
+    var(--color-card-back);
 }
 
 .back-mark {
@@ -84,7 +84,7 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
   border: 1px solid #b9ae98;
   border-radius: 50%;
   background: #efeadf;
-  font-family: Georgia, serif;
+  font-family: var(--font-card);
   font-size: 13px;
   color: #8a7f68;
 }

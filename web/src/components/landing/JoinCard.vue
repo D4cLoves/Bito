@@ -509,7 +509,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
     0 24px 50px -18px rgba(80, 74, 60, 0.18);
   backdrop-filter: blur(16px) saturate(1.05);
   -webkit-backdrop-filter: blur(16px) saturate(1.05);
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .join-body {
@@ -554,17 +554,17 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   margin-top: 2px;
   display: grid;
   place-items: center;
-  border: 1.5px solid #ddd7cd;
+  border: 1.5px solid var(--color-line);
   border-radius: 50%;
   background: rgba(238, 236, 230, 0.55);
-  color: #3a362f;
+  color: var(--color-ink-soft);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
 }
 
 .back:hover {
   background: rgba(250, 249, 245, 0.9);
-  border-color: #c9c2b5;
+  border-color: var(--color-line-stronger);
 }
 
 .back svg {
@@ -582,14 +582,14 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   font-size: 14.5px;
   line-height: 21px;
   letter-spacing: -0.006em;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 .note strong {
   display: block;
   overflow: hidden;
   font-weight: 500;
-  color: #1b1916;
+  color: var(--color-ink);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -600,23 +600,23 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   box-sizing: border-box;
   margin-bottom: 13px;
   padding: 0 15px;
-  border: 1.5px solid #ddd7cd;
+  border: 1.5px solid var(--color-line);
   border-radius: 10px;
   background: rgba(238, 236, 230, 0.55);
   font: inherit;
   font-size: 15.8px;
   letter-spacing: -0.006em;
-  color: #1b1916;
+  color: var(--color-ink);
   outline: none;
   transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 .field::placeholder {
-  color: #78756c;
+  color: var(--color-ink-subtle);
 }
 
 .field:focus {
-  border-color: #bdb6a8;
+  border-color: var(--color-line-heavy);
   background: rgba(250, 249, 245, 0.85);
   box-shadow: 0 0 0 4px rgba(215, 211, 200, 0.45);
 }
@@ -640,12 +640,12 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #78756c;
+  color: var(--color-ink-subtle);
   cursor: pointer;
 }
 
 .eye:hover {
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .eye svg {
@@ -669,7 +669,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
 .row--muted {
   margin-top: 0;
   font-size: 14px;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 .chip {
@@ -678,7 +678,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  background: #e4ded2;
+  background: var(--color-paper-hover);
   font-size: 16px;
   letter-spacing: -0.005em;
   font-variant-numeric: tabular-nums;
@@ -701,7 +701,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   background: none;
   font: inherit;
   font-size: 14px;
-  color: #5c5850;
+  color: var(--color-ink-muted);
   text-decoration: underline;
   text-decoration-color: rgba(92, 88, 80, 0.35);
   text-underline-offset: 3px;
@@ -710,7 +710,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
 }
 
 .link:hover {
-  color: #1b1916;
+  color: var(--color-ink);
   text-decoration-color: currentColor;
 }
 
@@ -731,18 +731,18 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   width: 30px;
   height: 4px;
   border-radius: 2px;
-  background: #e2ddd3;
+  background: var(--color-paper-hover);
   transition: background-color 0.35s;
 }
 
 .strength-bar.on {
-  background: #8f8a7d;
+  background: var(--color-ink-faint);
 }
 
 .strength-text {
   margin-left: 6px;
   font-size: 13px;
-  color: #78756c;
+  color: var(--color-ink-subtle);
 }
 
 .otp {
@@ -756,20 +756,20 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   min-width: 0;
   height: 54px;
   box-sizing: border-box;
-  border: 1.5px solid #ddd7cd;
+  border: 1.5px solid var(--color-line);
   border-radius: 10px;
   background: rgba(238, 236, 230, 0.55);
   font: inherit;
   font-size: 22px;
   text-align: center;
-  color: #1b1916;
+  color: var(--color-ink);
   outline: none;
-  caret-color: #8f8a7d;
+  caret-color: var(--color-ink-faint);
   transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 .otp-cell:focus {
-  border-color: #bdb6a8;
+  border-color: var(--color-line-heavy);
   background: rgba(250, 249, 245, 0.85);
   box-shadow: 0 0 0 4px rgba(215, 211, 200, 0.45);
 }
@@ -782,14 +782,14 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   margin: 10px 0 -8px;
   font-size: 13.5px;
   line-height: 18px;
-  color: #a2412f;
+  color: var(--color-red);
 }
 
 .pill-btn {
   border: 0;
   border-radius: 999px;
-  background: #d7d3c8;
-  color: #1b1916;
+  background: var(--color-line-strong);
+  color: var(--color-ink);
   font: inherit;
   font-size: 15.5px;
   letter-spacing: -0.006em;
@@ -798,7 +798,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
 }
 
 .pill-btn:hover:not(:disabled) {
-  background: #cdc8bb;
+  background: var(--color-line-stronger);
 }
 
 .pill-btn:active:not(:disabled) {
@@ -824,7 +824,7 @@ defineExpose({ switchTo, countChips, openJoin, openLogin })
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #1b1916;
+  background: var(--color-ink);
   animation: dot 0.9s ease-in-out infinite;
 }
 

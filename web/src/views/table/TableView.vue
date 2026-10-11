@@ -561,9 +561,8 @@ const modeLabel = computed(() => {
   flex-direction: column;
   background:
     radial-gradient(ellipse at 50% 30%, rgba(246, 235, 211, 0.7), rgba(246, 235, 211, 0) 60%),
-    #f5f4ef;
-  color: #1b1916;
-  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    var(--color-paper);
+  color: var(--color-ink);
   overflow-x: hidden;
 }
 
@@ -582,20 +581,20 @@ const modeLabel = computed(() => {
   padding: 0 14px 0 10px;
   border: 0;
   border-radius: 999px;
-  background: #e9e5db;
-  color: #1b1916;
+  background: var(--color-paper-sunken);
+  color: var(--color-ink);
   font: inherit;
   font-size: 14px;
   cursor: pointer;
 }
 
 .back:hover {
-  background: #e0dace;
+  background: var(--color-paper-hover);
 }
 
 .mode {
   font-size: 15px;
-  color: #57534b;
+  color: var(--color-ink-muted);
   white-space: nowrap;
 }
 
@@ -603,14 +602,14 @@ const modeLabel = computed(() => {
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
-  background: #f1e6cf;
-  color: #7a5a22;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
   white-space: nowrap;
 }
 
 .conn.closed {
-  background: #f5e4df;
-  color: #8f3a32;
+  background: var(--color-red-tint);
+  color: var(--color-red-strong);
 }
 
 .stage {
@@ -674,7 +673,7 @@ const modeLabel = computed(() => {
   margin: 12px auto 0;
   font-size: 16px;
   line-height: 1.5;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .waiting-seats {
@@ -691,19 +690,19 @@ const modeLabel = computed(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px #b9b1a1;
+  box-shadow: inset 0 0 0 1.5px var(--color-line-heavy);
   font-size: 0;
 }
 
 .seat.taken {
-  background: #36322c;
+  background: var(--color-ink-soft);
   box-shadow: none;
 }
 
 .seat-count {
   margin-left: 6px;
   font-size: 14px;
-  color: #6f695e;
+  color: var(--color-ink-subtle);
 }
 
 .opponents {
@@ -726,13 +725,13 @@ const modeLabel = computed(() => {
 
 .opp.attacker {
   box-shadow:
-    0 0 0 2px #36322c,
+    0 0 0 2px var(--color-ink-soft),
     0 16px 30px -22px rgba(54, 50, 44, 0.6);
 }
 
 .opp.defender {
   box-shadow:
-    0 0 0 2px #a1473f,
+    0 0 0 2px var(--color-red),
     0 16px 30px -22px rgba(161, 71, 63, 0.5);
 }
 
@@ -741,7 +740,7 @@ const modeLabel = computed(() => {
 }
 
 .opp.offline .opp-avatar {
-  background: #b9b1a1;
+  background: var(--color-line-heavy);
 }
 
 .opp-hand {
@@ -768,8 +767,8 @@ const modeLabel = computed(() => {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font-size: 12px;
 }
 
@@ -787,29 +786,29 @@ const modeLabel = computed(() => {
   gap: 8px;
   margin-top: 6px;
   font-size: 12px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
 }
 
 .badge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: #ede9e0;
-  color: #57534b;
+  background: var(--color-paper-sunken);
+  color: var(--color-ink-muted);
 }
 
 .badge.atk {
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
 }
 
 .badge.def {
-  background: #f5e4df;
-  color: #8f3a32;
+  background: var(--color-red-tint);
+  color: var(--color-red-strong);
 }
 
 .badge.warn {
-  background: #f1e6cf;
-  color: #7a5a22;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
 }
 
 .felt {
@@ -824,9 +823,9 @@ const modeLabel = computed(() => {
   border-radius: 40px;
   background:
     radial-gradient(ellipse at 50% 40%, rgba(255, 253, 247, 0.9), rgba(239, 235, 226, 0.4) 70%),
-    #efebe2;
+    var(--color-paper-sunken);
   box-shadow:
-    0 0 0 8px #d3d0c8 inset,
+    0 0 0 8px var(--color-line-strong) inset,
     0 30px 60px -40px rgba(70, 62, 48, 0.5);
 }
 
@@ -864,21 +863,21 @@ const modeLabel = computed(() => {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: #fdfcf8;
-  box-shadow: 0 0 0 2px #c9a66b;
-  font-family: Georgia, serif;
+  background: var(--color-paper-raised);
+  box-shadow: 0 0 0 2px var(--color-gold);
+  font-family: var(--font-card);
   font-size: 28px;
-  color: #2b2824;
+  color: var(--color-card-ink);
 }
 
 .trump-only.red {
-  color: #a1473f;
+  color: var(--color-red);
 }
 
 .discard-stack.empty {
   border-radius: 12px;
-  box-shadow: inset 0 0 0 1.5px dashed #c8c0ae;
-  outline: 1.5px dashed #cdc6b6;
+  box-shadow: inset 0 0 0 1.5px dashed var(--color-line-stronger);
+  outline: 1.5px dashed var(--color-line-stronger);
   outline-offset: -14px;
 }
 
@@ -892,7 +891,7 @@ const modeLabel = computed(() => {
 
 .pile-label {
   font-size: 13px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -941,7 +940,7 @@ const modeLabel = computed(() => {
 .felt-hint {
   margin: 0;
   font-size: 15px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
 }
 
 .me-zone {
@@ -976,7 +975,7 @@ const modeLabel = computed(() => {
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9a9384;
+  color: var(--color-ink-faint);
 }
 
 .status-text {
@@ -999,8 +998,8 @@ const modeLabel = computed(() => {
   padding: 0 24px;
   border: 0;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
@@ -1011,7 +1010,7 @@ const modeLabel = computed(() => {
 }
 
 .act:hover {
-  background: #1b1916;
+  background: var(--color-ink);
 }
 
 .act:active {
@@ -1019,11 +1018,11 @@ const modeLabel = computed(() => {
 }
 
 .act.warn {
-  background: #a1473f;
+  background: var(--color-red);
 }
 
 .act.warn:hover {
-  background: #8a3a33;
+  background: var(--color-red-strong);
 }
 
 @keyframes pop {
@@ -1040,13 +1039,13 @@ const modeLabel = computed(() => {
   height: 46px;
   border: 0;
   border-radius: 999px;
-  background: #e9e5db;
-  color: #1b1916;
+  background: var(--color-paper-sunken);
+  color: var(--color-ink);
   cursor: pointer;
 }
 
 .icon-btn:hover {
-  background: #e0dace;
+  background: var(--color-paper-hover);
 }
 
 .timer {
@@ -1054,7 +1053,7 @@ const modeLabel = computed(() => {
   height: 6px;
   margin-top: 12px;
   border-radius: 999px;
-  background: #e5e0d5;
+  background: var(--color-paper-hover);
   overflow: hidden;
 }
 
@@ -1062,12 +1061,12 @@ const modeLabel = computed(() => {
   position: absolute;
   inset: 0;
   transform-origin: left;
-  background: #36322c;
+  background: var(--color-ink-soft);
   transition: transform 0.25s linear;
 }
 
 .timer.urgent .timer-bar {
-  background: #a1473f;
+  background: var(--color-red);
 }
 
 .timer-text {
@@ -1075,12 +1074,12 @@ const modeLabel = computed(() => {
   right: 0;
   top: -22px;
   font-size: 12px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .timer.urgent .timer-text {
-  color: #a1473f;
+  color: var(--color-red);
 }
 
 .hand {
@@ -1118,15 +1117,15 @@ const modeLabel = computed(() => {
   padding: 0 20px;
   border: 0;
   border-radius: 999px;
-  background: #e9e5db;
-  color: #1b1916;
+  background: var(--color-paper-sunken);
+  color: var(--color-ink);
   font: inherit;
   font-size: 15px;
   cursor: pointer;
 }
 
 .ghost:hover {
-  background: #e0dace;
+  background: var(--color-paper-hover);
 }
 
 .primary {
@@ -1135,23 +1134,23 @@ const modeLabel = computed(() => {
   padding: 0 28px;
   border: 0;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
 }
 
 .primary:hover {
-  background: #1b1916;
+  background: var(--color-ink);
 }
 
 .primary.danger {
-  background: #a1473f;
+  background: var(--color-red);
 }
 
 .primary.danger:hover {
-  background: #8a3a33;
+  background: var(--color-red-strong);
 }
 
 .toast {
@@ -1163,8 +1162,8 @@ const modeLabel = computed(() => {
   max-width: calc(100% - 32px);
   padding: 12px 20px;
   border-radius: 999px;
-  background: #1b1916;
-  color: #f5f4ef;
+  background: var(--color-ink);
+  color: var(--color-paper);
   font-size: 15px;
   box-shadow: 0 18px 40px -16px rgba(27, 25, 22, 0.6);
 }
@@ -1186,7 +1185,7 @@ const modeLabel = computed(() => {
   padding: 30px 28px 26px;
   box-sizing: border-box;
   border-radius: 30px;
-  background: #faf9f5;
+  background: var(--color-paper-raised);
   text-align: center;
   box-shadow: 0 40px 80px -30px rgba(40, 36, 30, 0.6);
 }
@@ -1202,7 +1201,7 @@ const modeLabel = computed(() => {
   margin: 10px 0 0;
   font-size: 16px;
   line-height: 1.5;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .dialog-actions {
@@ -1238,7 +1237,7 @@ const modeLabel = computed(() => {
 }
 
 .result.lose h2 {
-  color: #a1473f;
+  color: var(--color-red);
 }
 
 .pair-enter-active {

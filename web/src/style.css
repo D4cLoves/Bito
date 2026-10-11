@@ -1,8 +1,39 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: 'Geist', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+@theme static {
+  --font-sans: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-card: Georgia, 'Times New Roman', serif;
+
+  --color-paper: #f5f4ef;
+  --color-paper-raised: #fbfaf6;
+  --color-paper-sunken: #ede9e0;
+  --color-paper-hover: #e3ded2;
+
+  --color-line: #e1dcd1;
+  --color-line-strong: #d7d3c8;
+  --color-line-stronger: #cdc8bb;
+  --color-line-heavy: #b9b1a1;
+
+  --color-ink: #1b1916;
+  --color-ink-soft: #36322c;
+  --color-ink-muted: #57534b;
+  --color-ink-subtle: #6b675e;
+  --color-ink-faint: #736d5f;
+  --color-ink-ghost: #a39e92;
+  --color-ink-disabled: #c4bfb3;
+
+  --color-card-ink: #2b2824;
+  --color-card-back: #e7e1d4;
+
+  --color-red: #a1473f;
+  --color-red-strong: #8a3a33;
+  --color-red-tint: #f5e4df;
+
+  --color-gold: #c9a66b;
+  --color-gold-ink: #7a5a22;
+  --color-gold-tint: #f1e6cf;
+
+  --color-green: #6f9a6a;
 }
 
 @layer base {
@@ -11,7 +42,6 @@
     @apply m-0 min-h-screen antialiased selection:bg-stone-300 selection:text-stone-900;
   }
 
-  /* Тонкий нейтральный скроллбар: читается и на светлом лендинге, и на тёмном лобби */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;

@@ -162,7 +162,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a857a;
+  color: var(--color-ink-faint);
 }
 
 .title {
@@ -171,14 +171,14 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   font-weight: 400;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: #36322c;
+  color: var(--color-ink-soft);
 }
 
 .lead {
   margin: 0;
   font-size: 18px;
   line-height: 27px;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .grid {
@@ -192,7 +192,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   border-radius: 22px;
   background: rgba(250, 249, 245, 0.6);
   box-shadow:
-    0 0 0 1.5px #e1dcd1,
+    0 0 0 1.5px var(--color-line),
     0 24px 50px -30px rgba(80, 72, 56, 0.25);
 }
 
@@ -201,7 +201,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   height: 150px;
   margin-bottom: 22px;
   border-radius: 14px;
-  background: radial-gradient(ellipse at 50% 40%, #fbfaf6, #ece8de);
+  background: radial-gradient(ellipse at 50% 40%, var(--color-paper-raised), var(--color-paper-sunken));
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -212,14 +212,14 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   font-size: 19px;
   font-weight: 500;
   letter-spacing: -0.015em;
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .tile-text {
   margin: 0;
   font-size: 15px;
   line-height: 22px;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 /* Общая рубашка мини-карт */
@@ -228,7 +228,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
 .hd-cover {
   background:
     repeating-linear-gradient(45deg, transparent 0 4px, rgba(160, 148, 124, 0.2) 4px 5px),
-    #e7e1d4;
+    var(--color-card-back);
 }
 
 .sh {
@@ -265,13 +265,13 @@ onUnmounted(() => running.forEach((a) => a.revert()))
 }
 
 .hd-front {
-  background: #fbfaf6;
+  background: var(--color-paper-raised);
   padding: 6px 7px;
   box-sizing: border-box;
-  font-family: Georgia, serif;
+  font-family: var(--font-card);
   font-size: 14px;
   line-height: 1;
-  color: #2b2824;
+  color: var(--color-card-ink);
   display: flex;
   flex-direction: column;
 }
@@ -300,9 +300,9 @@ onUnmounted(() => running.forEach((a) => a.revert()))
 .hd-face {
   display: grid;
   place-items: center;
-  background: #fbfaf6;
+  background: var(--color-paper-raised);
   font-size: 22px;
-  color: #2b2824;
+  color: var(--color-card-ink);
 }
 
 .hd-cover {
@@ -319,7 +319,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   margin-left: -11px;
   opacity: 0;
   fill: none;
-  stroke: #a1473f;
+  stroke: var(--color-red);
   stroke-width: 1.8;
   stroke-linecap: round;
 }
@@ -343,11 +343,11 @@ onUnmounted(() => running.forEach((a) => a.revert()))
 }
 
 .tm-track {
-  stroke: #e1dcd1;
+  stroke: var(--color-line);
 }
 
 .tm-ring {
-  stroke: #36322c;
+  stroke: var(--color-ink-soft);
   stroke-linecap: round;
   stroke-dasharray: 151;
 }
@@ -358,7 +358,7 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   display: grid;
   place-items: center;
   font-size: 24px;
-  color: #1b1916;
+  color: var(--color-ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -373,19 +373,19 @@ onUnmounted(() => running.forEach((a) => a.revert()))
   width: 64px;
   height: 54px;
   fill: none;
-  stroke: #36322c;
+  stroke: var(--color-ink-soft);
   stroke-width: 3;
   stroke-linecap: round;
 }
 
 .rc circle {
-  fill: #36322c;
+  fill: var(--color-ink-soft);
   stroke: none;
 }
 
 .rc-time {
   font-size: 14px;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
   font-variant-numeric: tabular-nums;
 }
 

@@ -72,14 +72,14 @@ function logout() {
   gap: 8px;
   font-size: 21px;
   letter-spacing: -0.01em;
-  color: #1b1916;
+  color: var(--color-ink);
   text-decoration: none;
 }
 
 .brand svg {
   width: 30px;
   height: 29px;
-  color: #26231e;
+  color: var(--color-ink);
 }
 
 .middle {
@@ -101,14 +101,14 @@ function logout() {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font-size: 14px;
 }
 
 .name {
   font-size: 15px;
-  color: #1b1916;
+  color: var(--color-ink);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -122,14 +122,14 @@ function logout() {
   height: 44px;
   border: 0;
   border-radius: 999px;
-  background: #e5e0d5;
-  color: #1b1916;
+  background: var(--color-paper-hover);
+  color: var(--color-ink);
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .icon-btn:hover {
-  background: #d9d3c6;
+  background: var(--color-line-strong);
 }
 
 @media (max-width: 640px) {

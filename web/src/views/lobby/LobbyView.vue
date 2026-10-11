@@ -290,9 +290,8 @@ onUnmounted(() => {
 <style scoped>
 .lobby {
   min-height: 100vh;
-  background: #f5f4ef;
-  color: #1b1916;
-  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
 }
 
 .wrap {
@@ -306,7 +305,7 @@ onUnmounted(() => {
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #9a9384;
+  color: var(--color-ink-faint);
 }
 
 h1 {
@@ -322,7 +321,7 @@ h1 {
   max-width: 520px;
   font-size: 17px;
   line-height: 1.5;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .grid {
@@ -360,7 +359,7 @@ h2 {
   display: block;
   margin-bottom: 10px;
   font-size: 13px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
 }
 
 .segmented {
@@ -368,7 +367,7 @@ h2 {
   grid-template-columns: 1fr 1fr;
   padding: 4px;
   border-radius: 999px;
-  background: #e9e5db;
+  background: var(--color-paper-sunken);
 }
 
 .segmented button,
@@ -377,7 +376,7 @@ h2 {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #57534b;
+  color: var(--color-ink-muted);
   font: inherit;
   font-size: 15px;
   cursor: pointer;
@@ -388,8 +387,8 @@ h2 {
 }
 
 .segmented button.on {
-  background: #fdfcf8;
-  color: #1b1916;
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
   box-shadow: 0 2px 8px -4px rgba(70, 62, 48, 0.4);
 }
 
@@ -397,7 +396,7 @@ h2 {
   margin: 10px 4px 0;
   font-size: 14px;
   line-height: 1.45;
-  color: #6f695e;
+  color: var(--color-ink-subtle);
 }
 
 .chips {
@@ -409,18 +408,18 @@ h2 {
   flex: 1;
   min-width: 44px;
   height: 44px;
-  background: #ede9e0;
+  background: var(--color-paper-sunken);
   font-variant-numeric: tabular-nums;
 }
 
 .chips button:hover:not(:disabled):not(.on) {
-  background: #e3ded2;
-  color: #1b1916;
+  background: var(--color-paper-hover);
+  color: var(--color-ink);
 }
 
 .chips button.on {
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
 }
 
 .chips button:disabled {
@@ -436,18 +435,18 @@ h2 {
   margin-top: 24px;
   padding: 14px 16px;
   border-radius: 18px;
-  background: #efebe2;
+  background: var(--color-paper-sunken);
 }
 
 .summary p {
   margin: 0;
   font-size: 14px;
   line-height: 1.45;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .summary b {
-  color: #1b1916;
+  color: var(--color-ink);
   font-weight: 600;
 }
 
@@ -467,7 +466,7 @@ h2 {
   border-radius: 5px;
   background:
     repeating-linear-gradient(45deg, transparent 0 4px, rgba(160, 148, 124, 0.25) 4px 5px),
-    #e7e1d4;
+    var(--color-card-back);
   box-shadow: 0 0 0 1px rgba(160, 150, 132, 0.5);
 }
 
@@ -477,8 +476,8 @@ h2 {
   margin-top: 20px;
   border: 0;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
@@ -488,7 +487,7 @@ h2 {
 }
 
 .primary:hover:not(:disabled) {
-  background: #1b1916;
+  background: var(--color-ink);
 }
 
 .primary:active:not(:disabled) {
@@ -504,8 +503,8 @@ h2 {
   margin: 16px 0 0;
   padding: 10px 14px;
   border-radius: 14px;
-  background: #f5e4df;
-  color: #8f3a32;
+  background: var(--color-red-tint);
+  color: var(--color-red-strong);
   font-size: 14px;
 }
 
@@ -523,8 +522,8 @@ h2 {
   padding: 0 8px;
   box-sizing: border-box;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -535,14 +534,14 @@ h2 {
   gap: 7px;
   margin-left: auto;
   font-size: 13px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
 }
 
 .live i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #6f9a6a;
+  background: var(--color-green);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -559,13 +558,13 @@ h2 {
   height: 40px;
   border: 0;
   border-radius: 999px;
-  background: #ede9e0;
-  color: #1b1916;
+  background: var(--color-paper-sunken);
+  color: var(--color-ink);
   cursor: pointer;
 }
 
 .icon-btn:hover {
-  background: #e3ded2;
+  background: var(--color-paper-hover);
 }
 
 .icon-btn.spin svg {
@@ -595,7 +594,7 @@ h2 {
   padding: 12px 12px 12px 16px;
   box-sizing: border-box;
   border-radius: 20px;
-  background: #fdfcf8;
+  background: var(--color-paper-raised);
   box-shadow: 0 0 0 1px rgba(214, 208, 196, 0.8);
   transition: box-shadow 0.2s;
 }
@@ -607,7 +606,7 @@ h2 {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #efebe2 0%, #f7f5ef 50%, #efebe2 100%);
+  background: linear-gradient(90deg, var(--color-paper-sunken) 0%, var(--color-paper-raised) 50%, var(--color-paper-sunken) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.2s linear infinite;
 }
@@ -666,14 +665,14 @@ h2 {
 .tag {
   padding: 3px 9px;
   border-radius: 999px;
-  background: #ede9e0;
+  background: var(--color-paper-sunken);
   font-size: 12px;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .tag.mine {
-  background: #f1e6cf;
-  color: #7a5a22;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
 }
 
 .row-meta {
@@ -682,7 +681,7 @@ h2 {
   gap: 8px;
   margin-top: 6px;
   font-size: 13px;
-  color: #8a8375;
+  color: var(--color-ink-faint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -695,11 +694,11 @@ h2 {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px #b9b1a1;
+  box-shadow: inset 0 0 0 1.5px var(--color-line-heavy);
 }
 
 .seats i.taken {
-  background: #36322c;
+  background: var(--color-ink-soft);
   box-shadow: none;
 }
 
@@ -709,8 +708,8 @@ h2 {
   padding: 0 22px;
   border: 0;
   border-radius: 999px;
-  background: #36322c;
-  color: #f5f4ef;
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
   font: inherit;
   font-size: 15px;
   cursor: pointer;
@@ -720,7 +719,7 @@ h2 {
 }
 
 .join:hover {
-  background: #1b1916;
+  background: var(--color-ink);
 }
 
 .join:active {
@@ -766,7 +765,7 @@ h2 {
   margin: 8px auto 0;
   font-size: 14px;
   line-height: 1.5;
-  color: #6f695e;
+  color: var(--color-ink-subtle);
 }
 
 .row-enter-active,

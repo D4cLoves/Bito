@@ -95,7 +95,7 @@ function onLeave(el: Element, done: () => void) {
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a857a;
+  color: var(--color-ink-faint);
 }
 
 .title {
@@ -104,18 +104,18 @@ function onLeave(el: Element, done: () => void) {
   font-weight: 400;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: #36322c;
+  color: var(--color-ink-soft);
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1.5px solid #e1dcd1;
+  border-top: 1.5px solid var(--color-line);
 }
 
 .item {
-  border-bottom: 1.5px solid #e1dcd1;
+  border-bottom: 1.5px solid var(--color-line);
 }
 
 .q {
@@ -131,7 +131,7 @@ function onLeave(el: Element, done: () => void) {
   font-size: 20px;
   letter-spacing: -0.015em;
   text-align: left;
-  color: #1b1916;
+  color: var(--color-ink);
   cursor: pointer;
 }
 
@@ -141,7 +141,7 @@ function onLeave(el: Element, done: () => void) {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1.5px #dcd7cc;
+  box-shadow: 0 0 0 1.5px var(--color-line);
   transition:
     transform 0.35s cubic-bezier(0.3, 0.7, 0.2, 1),
     background-color 0.25s;
@@ -156,7 +156,7 @@ function onLeave(el: Element, done: () => void) {
   width: 11px;
   height: 1.5px;
   margin: -0.75px 0 0 -5.5px;
-  background: #36322c;
+  background: var(--color-ink-soft);
 }
 
 .plus::after {
@@ -165,7 +165,7 @@ function onLeave(el: Element, done: () => void) {
 
 .item.open .plus {
   transform: rotate(45deg);
-  background: #e4ded2;
+  background: var(--color-paper-hover);
 }
 
 .a-wrap {
@@ -177,7 +177,7 @@ function onLeave(el: Element, done: () => void) {
   padding: 0 60px 26px 0;
   font-size: 16.5px;
   line-height: 25px;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 @media (max-width: 1000px) {

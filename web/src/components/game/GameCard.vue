@@ -112,7 +112,7 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as 'â™
 }
 
 .playable:focus-visible {
-  outline: 2px solid #36322c;
+  outline: 2px solid var(--color-ink-soft);
   outline-offset: 4px;
   border-radius: 10px;
 }
@@ -124,13 +124,13 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as 'â™
 
 .selected :deep(.face--front) {
   box-shadow:
-    0 0 0 2px #36322c,
+    0 0 0 2px var(--color-ink-soft),
     0 18px 30px -14px rgba(54, 50, 44, 0.55);
 }
 
 .trump :deep(.face--front) {
   box-shadow:
-    0 0 0 2px #c9a66b,
+    0 0 0 2px var(--color-gold),
     0 10px 20px -12px rgba(120, 90, 40, 0.5);
 }
 

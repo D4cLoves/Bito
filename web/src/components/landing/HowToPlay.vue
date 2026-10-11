@@ -315,7 +315,7 @@ onUnmounted(() => {
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a857a;
+  color: var(--color-ink-faint);
 }
 
 .step-head {
@@ -328,12 +328,12 @@ onUnmounted(() => {
 
 .step-num {
   font-size: 22px;
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .step-total {
   font-size: 15px;
-  color: #9a958a;
+  color: var(--color-ink-faint);
 }
 
 .caption {
@@ -346,7 +346,7 @@ onUnmounted(() => {
   font-weight: 400;
   line-height: 1.02;
   letter-spacing: -0.03em;
-  color: #36322c;
+  color: var(--color-ink-soft);
 }
 
 .caption-text {
@@ -355,7 +355,7 @@ onUnmounted(() => {
   font-size: 18px;
   line-height: 27px;
   letter-spacing: -0.01em;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .caption-enter-active,
@@ -393,18 +393,18 @@ onUnmounted(() => {
   background: none;
   font: inherit;
   font-size: 14px;
-  color: #a39e92;
+  color: var(--color-ink-ghost);
   cursor: pointer;
   transition: color 0.25s;
 }
 
 .rail-btn:hover,
 .rail-btn.done {
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 .rail-btn.active {
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .rail-dot {
@@ -426,8 +426,8 @@ onUnmounted(() => {
 .pill-btn {
   border: 0;
   border-radius: 999px;
-  background: #d7d3c8;
-  color: #1b1916;
+  background: var(--color-line-strong);
+  color: var(--color-ink);
   font: inherit;
   font-size: 15.5px;
   cursor: pointer;
@@ -437,7 +437,7 @@ onUnmounted(() => {
 }
 
 .pill-btn:hover {
-  background: #cdc8bb;
+  background: var(--color-line-stronger);
 }
 
 .pill-btn:active {
@@ -472,7 +472,7 @@ onUnmounted(() => {
     radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0) 70%),
     rgba(236, 233, 225, 0.55);
   box-shadow:
-    0 0 0 1.5px #dcd7cc,
+    0 0 0 1.5px var(--color-line),
     0 0 0 10px rgba(220, 215, 204, 0.35),
     0 40px 80px -40px rgba(80, 72, 56, 0.25);
 }
@@ -482,7 +482,7 @@ onUnmounted(() => {
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #a39e92;
+  color: var(--color-ink-ghost);
 }
 
 .zone--deck {
@@ -537,10 +537,10 @@ onUnmounted(() => {
   z-index: 60;
   transform-origin: center;
   translate: -50% 0;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-card);
   font-size: 34px;
   font-style: italic;
-  color: #36322c;
+  color: var(--color-ink-soft);
   white-space: nowrap;
 }
 

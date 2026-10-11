@@ -45,7 +45,7 @@ useReveal(rootEl)
   background:
     radial-gradient(ellipse at 50% 0%, rgba(246, 235, 211, 0.9), rgba(246, 235, 211, 0) 60%),
     rgba(250, 249, 245, 0.6);
-  box-shadow: 0 0 0 8px #d3d0c8 inset;
+  box-shadow: 0 0 0 8px var(--color-line-strong) inset;
 }
 
 .cta-title {
@@ -54,13 +54,13 @@ useReveal(rootEl)
   font-weight: 400;
   line-height: 1;
   letter-spacing: -0.035em;
-  color: #36322c;
+  color: var(--color-ink-soft);
 }
 
 .cta-text {
   margin: 0 0 32px;
   font-size: 19px;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .pill-btn {
@@ -68,8 +68,8 @@ useReveal(rootEl)
   padding: 0 34px;
   border: 0;
   border-radius: 999px;
-  background: #d7d3c8;
-  color: #1b1916;
+  background: var(--color-line-strong);
+  color: var(--color-ink);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
@@ -79,7 +79,7 @@ useReveal(rootEl)
 }
 
 .pill-btn:hover {
-  background: #cdc8bb;
+  background: var(--color-line-stronger);
 }
 
 .pill-btn:active {
@@ -92,7 +92,7 @@ useReveal(rootEl)
   gap: 32px;
   padding: 36px 8px 0;
   font-size: 14.5px;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 .brand {
@@ -100,14 +100,14 @@ useReveal(rootEl)
   align-items: center;
   gap: 8px;
   font-size: 20px;
-  color: #1b1916;
+  color: var(--color-ink);
   text-decoration: none;
 }
 
 .brand svg {
   width: 28px;
   height: 27px;
-  color: #26231e;
+  color: var(--color-ink);
 }
 
 .links {
@@ -123,7 +123,7 @@ useReveal(rootEl)
 }
 
 .links a:hover {
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 @media (max-width: 760px) {

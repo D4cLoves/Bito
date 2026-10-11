@@ -362,10 +362,10 @@ onUnmounted(() => {
 
 <style scoped>
 .hero {
-  --ink: #36322c;
-  --ink-strong: #1b1916;
-  --pill: #d7d3c8;
-  --pill-hover: #cdc8bb;
+  --ink: var(--color-ink-soft);
+  --ink-strong: var(--color-ink);
+  --pill: var(--color-line-strong);
+  --pill-hover: var(--color-line-stronger);
   position: relative;
   width: 100%;
   height: 100vh;
@@ -373,8 +373,7 @@ onUnmounted(() => {
   overflow: hidden;
   /* clip, а не hidden: не даём браузеру прокручивать сцену при фокусе полей */
   overflow: clip;
-  background: #f5f4ef;
-  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--color-paper);
   color: var(--ink-strong);
 }
 
@@ -408,7 +407,7 @@ onUnmounted(() => {
   top: 11px;
   width: 1302px;
   height: 719px;
-  border: 8px solid #d3d0c8;
+  border: 8px solid var(--color-line-strong);
   border-radius: 54px;
   pointer-events: none;
 }
@@ -428,7 +427,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #26231e;
+  color: var(--color-ink);
   text-decoration: none;
 }
 
@@ -514,7 +513,7 @@ onUnmounted(() => {
   font-size: 21.3px;
   line-height: 30px;
   letter-spacing: -0.012em;
-  color: #47433c;
+  color: var(--color-ink-muted);
 }
 
 .rating {
@@ -534,7 +533,7 @@ onUnmounted(() => {
 .star {
   width: 24px;
   height: 24px;
-  color: #1d1a15;
+  color: var(--color-ink);
 }
 
 .rating-score {
@@ -549,7 +548,7 @@ onUnmounted(() => {
   height: 5px;
   margin: 0 10px 0 11px;
   border-radius: 50%;
-  background: #1d1a15;
+  background: var(--color-ink);
 }
 
 .rating-text {

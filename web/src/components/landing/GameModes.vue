@@ -268,7 +268,7 @@ onUnmounted(() => flow?.revert())
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a857a;
+  color: var(--color-ink-faint);
 }
 
 .title {
@@ -277,7 +277,7 @@ onUnmounted(() => flow?.revert())
   font-weight: 400;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: #36322c;
+  color: var(--color-ink-soft);
 }
 
 .lead {
@@ -285,7 +285,7 @@ onUnmounted(() => flow?.revert())
   max-width: 380px;
   font-size: 18px;
   line-height: 27px;
-  color: #57534b;
+  color: var(--color-ink-muted);
 }
 
 .control {
@@ -298,14 +298,14 @@ onUnmounted(() => flow?.revert())
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a857a;
+  color: var(--color-ink-faint);
 }
 
 .segmented {
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border: 1.5px solid #dcd7cc;
+  border: 1.5px solid var(--color-line);
   border-radius: 999px;
   background: rgba(250, 249, 245, 0.6);
 }
@@ -318,7 +318,7 @@ onUnmounted(() => flow?.revert())
   background: transparent;
   font: inherit;
   font-size: 15px;
-  color: #57534b;
+  color: var(--color-ink-muted);
   cursor: pointer;
   transition:
     background-color 0.25s,
@@ -326,16 +326,16 @@ onUnmounted(() => flow?.revert())
 }
 
 .seg:hover:not(:disabled) {
-  color: #1b1916;
+  color: var(--color-ink);
 }
 
 .seg.on {
-  background: #d7d3c8;
-  color: #1b1916;
+  background: var(--color-line-strong);
+  color: var(--color-ink);
 }
 
 .seg:disabled {
-  color: #c4bfb3;
+  color: var(--color-ink-disabled);
   cursor: not-allowed;
 }
 
@@ -350,11 +350,11 @@ onUnmounted(() => flow?.revert())
   max-width: 400px;
   font-size: 14.5px;
   line-height: 21px;
-  color: #6b675e;
+  color: var(--color-ink-subtle);
 }
 
 .control-note.warn {
-  color: #a2412f;
+  color: var(--color-red);
 }
 
 .swap-enter-active,
@@ -377,8 +377,8 @@ onUnmounted(() => flow?.revert())
 .pill-btn {
   border: 0;
   border-radius: 999px;
-  background: #d7d3c8;
-  color: #1b1916;
+  background: var(--color-line-strong);
+  color: var(--color-ink);
   font: inherit;
   font-size: 15.5px;
   cursor: pointer;
@@ -388,7 +388,7 @@ onUnmounted(() => flow?.revert())
 }
 
 .pill-btn:hover {
-  background: #cdc8bb;
+  background: var(--color-line-stronger);
 }
 
 .pill-btn:active {
@@ -417,7 +417,7 @@ onUnmounted(() => flow?.revert())
 
 .oval-rim {
   fill: rgba(236, 233, 225, 0.6);
-  stroke: #dcd7cc;
+  stroke: var(--color-line);
   stroke-width: 1.5;
 }
 
@@ -429,14 +429,14 @@ onUnmounted(() => flow?.revert())
 
 .flow {
   fill: none;
-  stroke: #8f8a7d;
+  stroke: var(--color-ink-faint);
   stroke-width: 1.6;
   stroke-dasharray: 5 7;
   stroke-linecap: round;
 }
 
 .flow--transfer {
-  stroke: #a1473f;
+  stroke: var(--color-red);
 }
 
 .deck {
@@ -460,11 +460,11 @@ onUnmounted(() => flow?.revert())
 .deck-card {
   background:
     repeating-linear-gradient(45deg, transparent 0 4px, rgba(160, 148, 124, 0.2) 4px 5px),
-    #e7e1d4;
+    var(--color-card-back);
 }
 
 .trump {
-  background: #fbfaf6;
+  background: var(--color-paper-raised);
   transform: translateX(22px) rotate(90deg);
 }
 
@@ -475,7 +475,7 @@ onUnmounted(() => flow?.revert())
   top: 50%;
   transform: translate(-50%, -50%) rotate(-90deg);
   font-size: 18px;
-  color: #a1473f;
+  color: var(--color-red);
 }
 
 /* Остаток колоды — прямо на верхней карте стопки */
@@ -488,7 +488,7 @@ onUnmounted(() => flow?.revert())
   place-items: center;
   font-size: 15px;
   font-weight: 500;
-  color: #4a453d;
+  color: var(--color-ink-muted);
   font-variant-numeric: tabular-nums;
   transition: transform 0.4s;
 }
@@ -532,32 +532,32 @@ onUnmounted(() => flow?.revert())
   transform-origin: 50% 100%;
   background:
     repeating-linear-gradient(45deg, transparent 0 3px, rgba(160, 148, 124, 0.22) 3px 4px),
-    #e7e1d4;
+    var(--color-card-back);
   box-shadow: 0 0 0 1px rgba(160, 150, 132, 0.5);
 }
 
 .seat.you .mini-hand i {
-  background: #fbfaf6;
+  background: var(--color-paper-raised);
 }
 
 .seat-name {
   padding: 3px 10px;
   border-radius: 999px;
   background: rgba(250, 249, 245, 0.9);
-  box-shadow: 0 0 0 1px #e1dcd1;
+  box-shadow: 0 0 0 1px var(--color-line);
   font-size: 12.5px;
-  color: #57534b;
+  color: var(--color-ink-muted);
   white-space: nowrap;
 }
 
 .seat.you .seat-name {
-  background: #36322c;
+  background: var(--color-ink-soft);
   box-shadow: none;
-  color: #f5f4ef;
+  color: var(--color-paper);
 }
 
 .seat.defending .seat-name {
-  color: #a1473f;
+  color: var(--color-red);
   box-shadow: 0 0 0 1px rgba(161, 71, 63, 0.35);
 }
 
@@ -568,7 +568,7 @@ onUnmounted(() => flow?.revert())
   transform: translateX(-50%);
   margin: 0;
   font-size: 14px;
-  color: #8a857a;
+  color: var(--color-ink-faint);
   white-space: nowrap;
 }
 

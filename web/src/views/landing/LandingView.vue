@@ -25,8 +25,7 @@ import SiteFooter from '../../components/landing/SiteFooter.vue'
 <style scoped>
 .landing {
   min-height: 100vh;
-  background: #f5f4ef;
-  color: #1b1916;
-  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
 }
 </style>
