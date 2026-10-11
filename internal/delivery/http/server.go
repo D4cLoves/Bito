@@ -19,15 +19,17 @@ type Server struct {
 	router       *chi.Mux
 	authHandler  *AuthHandler
 	tableHandler *TableHandler
+	userHandler  *UserHandler
 	tokens       TokenValidator
 }
 
-func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler, tableHandler *TableHandler, tokens TokenValidator) *Server {
+func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler, tableHandler *TableHandler, userHandler *UserHandler, tokens TokenValidator) *Server {
 	s := &Server{
 		hub:          hub,
 		router:       chi.NewRouter(),
 		authHandler:  authHandler,
 		tableHandler: tableHandler,
+		userHandler:  userHandler,
 		tokens:       tokens,
 	}
 
@@ -86,6 +88,16 @@ func (s *Server) setupRoutes() {
 			r.Use(AuthMiddleware(s.tokens))
 			r.Post("/", s.tableHandler.Create)
 			r.Get("/", s.tableHandler.List)
+		})
+	}
+
+	if s.userHandler != nil {
+		s.router.Route("/api/v1/users/me", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Get("/", s.userHandler.Profile)
+			r.Patch("/", s.userHandler.ChangeUsername)
+			r.Delete("/", s.userHandler.DeleteAccount)
+			r.Post("/password", s.userHandler.ChangePassword)
 		})
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"bito/internal/model"
 	"bito/internal/pkg/jwt"
@@ -13,8 +12,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-const maxBodyBytes = 1 << 20
 
 type RegisterRequest struct {
 	Email    string `json:"email"`
@@ -211,29 +208,12 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// decodeJSON limits the body size and rejects unknown fields; on failure it writes 400 and returns false.
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return false
-	}
-	return true
-}
-
 func (ah *AuthHandler) writeSession(w http.ResponseWriter, status int, s *service.Session) {
 	ah.setTokenCookies(w, s.Tokens)
 	respondJSON(w, status, AuthResponse{
 		AccessToken:  s.Tokens.AccessToken,
 		RefreshToken: s.Tokens.RefreshToken,
-		User: UserResponse{
-			ID:        s.User.ID,
-			Email:     s.User.Email,
-			Username:  s.User.Name,
-			CreatedAt: s.User.CreatedAt.Format(time.RFC3339),
-		},
+		User:         toUserResponse(s.User),
 	})
 }
 
