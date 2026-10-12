@@ -1,0 +1,139 @@
+[data-theme='paper'] {
+  color-scheme: light;
+
+  --color-paper: #f5f4ef;
+  --color-paper-raised: #fbfaf6;
+  --color-paper-sunken: #ede9e0;
+  --color-paper-hover: #e3ded2;
+
+  --color-line: #e1dcd1;
+  --color-line-strong: #d7d3c8;
+  --color-line-stronger: #cdc8bb;
+  --color-line-heavy: #b9b1a1;
+
+  --color-ink: #1b1916;
+  --color-ink-soft: #36322c;
+  --color-ink-muted: #57534b;
+  --color-ink-subtle: #6b675e;
+  --color-ink-faint: #736d5f;
+  --color-ink-ghost: #a39e92;
+  --color-ink-disabled: #c4bfb3;
+
+  --color-red: #a1473f;
+  --color-red-strong: #8a3a33;
+  --color-red-tint: #f5e4df;
+  --color-red-tint-strong: #efd3cc;
+  --color-red-soft: #e6a197;
+
+  --color-gold: #c9a66b;
+  --color-gold-ink: #7a5a22;
+  --color-gold-tint: #f1e6cf;
+
+  --color-green: #6f9a6a;
+  --color-green-soft: #a8c9a3;
+
+  --color-glass: rgba(251, 250, 246, 0.82);
+  --color-scrim: rgba(40, 36, 30, 0.38);
+  --color-glow: rgba(246, 232, 200, 0.85);
+  --shadow-panel: 0 0 0 1px rgba(214, 208, 196, 0.9), 0 30px 60px -36px rgba(70, 62, 48, 0.45);
+}
+
+[data-theme='hall'] {
+  color-scheme: dark;
+
+  --color-paper: #131210;
+  --color-paper-raised: #1c1a17;
+  --color-paper-sunken: #0d0c0b;
+  --color-paper-hover: #2a2723;
+
+  --color-line: #26241f;
+  --color-line-strong: #322f29;
+  --color-line-stronger: #3e3a33;
+  --color-line-heavy: #5a544a;
+
+  --color-ink: #f3eee4;
+  --color-ink-soft: #e4dccc;
+  --color-ink-muted: #bcb4a5;
+  --color-ink-subtle: #a59d8e;
+  --color-ink-faint: #8f887a;
+  --color-ink-ghost: #625c52;
+  --color-ink-disabled: #46423b;
+
+  --color-red: #d0665a;
+  --color-red-strong: #ea978c;
+  --color-red-tint: #2f1a17;
+  --color-red-tint-strong: #3e221e;
+  --color-red-soft: #e6a197;
+
+  --color-gold: #d6b16c;
+  --color-gold-ink: #e9c886;
+  --color-gold-tint: #2d2518;
+
+  --color-green: #7fb07a;
+  --color-green-soft: #a8c9a3;
+
+  --color-glass: rgba(28, 26, 23, 0.86);
+  --color-scrim: rgba(5, 4, 3, 0.6);
+  --color-glow: rgba(233, 196, 120, 0.16);
+  --shadow-panel: 0 0 0 1px rgba(255, 244, 222, 0.06), 0 30px 70px -30px rgba(0, 0, 0, 0.8);
+}
+
+[data-theme='forest'] {
+  color-scheme: dark;
+
+  --color-paper: #0e1712;
+  --color-paper-raised: #15211a;
+  --color-paper-sunken: #09100c;
+  --color-paper-hover: #1f2e25;
+
+  --color-line: #1c2a21;
+  --color-line-strong: #26372c;
+  --color-line-stronger: #304436;
+  --color-line-heavy: #4a6352;
+
+  --color-ink: #ecf1e6;
+  --color-ink-soft: #d9e3cf;
+  --color-ink-muted: #adbba6;
+  --color-ink-subtle: #96a68f;
+  --color-ink-faint: #81927b;
+  --color-ink-ghost: #56685a;
+  --color-ink-disabled: #3a4a3e;
+
+  --color-red: #d2705f;
+  --color-red-strong: #eba191;
+  --color-red-tint: #2c1b16;
+  --color-red-tint-strong: #3a231d;
+  --color-red-soft: #e6a197;
+
+  --color-gold: #a9cf7f;
+  --color-gold-ink: #bfe091;
+  --color-gold-tint: #1d2c19;
+
+  --color-green: #8fbf6a;
+  --color-green-soft: #b5d79a;
+
+  --color-glass: rgba(21, 33, 26, 0.86);
+  --color-scrim: rgba(3, 6, 4, 0.6);
+  --color-glow: rgba(169, 207, 127, 0.14);
+  --shadow-panel: 0 0 0 1px rgba(226, 255, 222, 0.06), 0 30px 70px -30px rgba(0, 0, 0, 0.8);
+}
+
+[data-felt='green'] {
+  --color-felt: #1f5038;
+  --color-felt-deep: #12301f;
+}
+
+[data-felt='wine'] {
+  --color-felt: #5a2229;
+  --color-felt-deep: #331217;
+}
+
+[data-felt='navy'] {
+  --color-felt: #1f3656;
+  --color-felt-deep: #111f33;
+}
+
+[data-felt='graphite'] {
+  --color-felt: #35363a;
+  --color-felt-deep: #1c1d20;
+}

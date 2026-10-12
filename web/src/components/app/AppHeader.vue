@@ -9,7 +9,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const profileStore = useProfileStore()
 
-const elo = computed(() => profileStore.profile?.stats.elo)
+const balance = computed(() => profileStore.profile?.wallet.balance)
 
 onMounted(() => {
   if (auth.isAuthenticated) profileStore.load()
@@ -47,7 +47,7 @@ function logout() {
       <RouterLink to="/profile" class="me-btn" title="Профиль">
         <span class="avatar" aria-hidden="true">{{ initial }}</span>
         <span class="name">{{ auth.user?.username ?? 'Игрок' }}</span>
-        <span v-if="elo !== undefined" class="elo">{{ elo }}</span>
+        <span v-if="balance !== undefined" class="elo">{{ balance.toLocaleString('ru-RU') }}</span>
       </RouterLink>
       <button type="button" class="icon-btn" title="Выйти" aria-label="Выйти" @click="logout">
         <PhSignOut :size="18" weight="bold" />

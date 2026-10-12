@@ -43,7 +43,7 @@ onMounted(load)
         <span class="p p3"></span>
       </div>
       <p class="note-title">Рейтинг скоро откроется</p>
-      <p class="note-text">Здесь появятся лучшие игроки по ELO.</p>
+      <p class="note-text">Здесь появятся лучшие игроки сервера.</p>
     </div>
 
     <div v-else-if="state === 'error'" class="note">
@@ -57,7 +57,7 @@ onMounted(load)
       <li v-for="(e, i) in entries" :key="e.id" class="entry" :class="{ me: e.id === myId }" :style="{ '--i': i }">
         <span class="place" :class="`top${i + 1}`">{{ i + 1 }}</span>
         <span class="who">{{ e.username }}</span>
-        <span class="elo">{{ e.elo }}</span>
+        <span class="elo">{{ e.wins }}</span>
       </li>
     </ol>
   </section>
@@ -68,9 +68,7 @@ onMounted(load)
   padding: 24px;
   border-radius: 28px;
   background: var(--color-paper-raised);
-  box-shadow:
-    0 0 0 1px rgba(214, 208, 196, 0.9),
-    0 24px 48px -32px rgba(70, 62, 48, 0.35);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .head {

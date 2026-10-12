@@ -83,7 +83,7 @@ onMounted(() => window.setTimeout(() => (ringReady.value = true), 250))
   padding: 18px;
   border-radius: 22px;
   background: var(--color-paper-raised);
-  box-shadow: 0 0 0 1px rgba(214, 208, 196, 0.9);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
 .rate,

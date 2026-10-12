@@ -76,6 +76,7 @@ export interface TableInfo {
   players: number
   createdBy: string
   createdAt: string
+  stake?: number
 }
 
 export interface CreateTableRequest {

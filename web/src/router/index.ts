@@ -27,8 +27,7 @@ const router = createRouter({
     {
       path: '/profile',
       name: 'profile',
-      component: () => import('../views/profile/ProfileView.vue'),
-      meta: { requiresAuth: true },
+      redirect: (to) => ({ name: 'lobby', query: { panel: to.query.tab ? 'settings' : 'profile', section: to.query.tab } }),
     },
     {
       path: '/table/:id',

@@ -1,9 +1,9 @@
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
-export function rankTitle(elo: number): string {
-  if (elo >= 1600) return 'Мастер стола'
-  if (elo >= 1300) return 'Опытный игрок'
-  if (elo >= 1100) return 'Игрок'
+export function rankTitle(games: number): string {
+  if (games >= 200) return 'Мастер стола'
+  if (games >= 50) return 'Завсегдатай'
+  if (games >= 10) return 'Игрок'
   return 'Новичок'
 }
 

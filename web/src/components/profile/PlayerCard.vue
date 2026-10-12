@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion-v'
-import { useCountUp } from '../../composables/useCountUp'
 import { memberSince, rankTitle } from '../../composables/usePlayerRank'
 import type { Profile } from '../../types/user'
 
@@ -30,14 +29,13 @@ function onLeave() {
   py.set(0)
 }
 
-const elo = useCountUp(computed(() => props.profile?.stats.elo), 1200)
 const initial = computed(() => (props.profile?.username?.[0] ?? '?').toUpperCase())
-const title = computed(() => rankTitle(props.profile?.stats.elo ?? 0))
+const title = computed(() => rankTitle(props.profile?.stats.totalGames ?? 0))
 const since = computed(() => memberSince(props.profile?.createdAt))
 </script>
 
 <template>
-  <div ref="el" class="stage rise" @pointermove="onMove" @pointerleave="onLeave">
+  <div ref="el" class="stage rise" data-theme="paper" @pointermove="onMove" @pointerleave="onLeave">
     <motion.div
       class="card"
       :style="{ rotateX, rotateY }"
@@ -48,8 +46,8 @@ const since = computed(() => memberSince(props.profile?.createdAt))
         <span class="corner br"><b>{{ initial }}</b><i>♠</i></span>
 
         <div class="face">
-          <span class="label">Рейтинг</span>
-          <span class="elo">{{ elo }}</span>
+          <span class="label">Игрок</span>
+          <span class="face-letter">{{ initial }}</span>
           <span class="rank">{{ title }}</span>
           <span class="rule" aria-hidden="true"></span>
           <span class="name">{{ profile.username }}</span>
@@ -158,10 +156,11 @@ const since = computed(() => memberSince(props.profile?.createdAt))
   color: var(--color-ink-faint);
 }
 
-.elo {
+.face-letter {
   margin-top: 4px;
   font-family: var(--font-card);
-  font-size: 84px;
+  font-size: 96px;
+  font-style: italic;
   line-height: 1;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
