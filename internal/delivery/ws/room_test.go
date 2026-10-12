@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,5 +309,48 @@ func TestClient_SendOnClosedDoesNotPanic(t *testing.T) {
 	ok := c.Send([]byte("hello"))
 	if ok {
 		t.Errorf("expected Send to return false on closed client")
+	}
+}
+
+func TestRoom_ChatValidation(t *testing.T) {
+	room := NewRoom("room-chat-limits", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	go room.Run()
+	defer room.Close()
+
+	c1 := createTestClient("p1", "Alice", room)
+	room.RegisterClient(c1)
+	time.Sleep(20 * time.Millisecond)
+
+	say := func(text string) {
+		data, _ := NewMessage(TypeChat, ChatPayload{Message: text})
+		room.incoming <- IncomingMessage{Client: c1, Data: data}
+		time.Sleep(30 * time.Millisecond)
+	}
+
+	say("   ")
+	if len(c1.send) != 0 {
+		t.Fatalf("expected blank message to be ignored, got %d messages", len(c1.send))
+	}
+
+	say("  " + strings.Repeat("я", chatMaxRunes+50) + "  ")
+	var long Message[ChatPayload]
+	_ = json.Unmarshal(<-c1.send, &long)
+	if got := len([]rune(long.Payload.Message)); got != chatMaxRunes {
+		t.Errorf("expected message cut to %d runes, got %d", chatMaxRunes, got)
+	}
+
+	say("ещё одно")
+	var flood Message[ErrorPayload]
+	_ = json.Unmarshal(<-c1.send, &flood)
+	if flood.Type != TypeError {
+		t.Errorf("expected error for message sent too fast, got %s", flood.Type)
+	}
+
+	time.Sleep(chatCooldown)
+	say("теперь можно")
+	var ok Message[ChatPayload]
+	_ = json.Unmarshal(<-c1.send, &ok)
+	if ok.Type != TypeChat || ok.Payload.Message != "теперь можно" {
+		t.Errorf("expected message after cooldown, got %+v", ok)
 	}
 }

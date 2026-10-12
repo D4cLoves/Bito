@@ -14,7 +14,7 @@ export interface FriendRequest {
   username: string
 }
 
-export interface LobbyMessage {
+export interface ChatEntry {
   id: string
   userId: string
   username: string

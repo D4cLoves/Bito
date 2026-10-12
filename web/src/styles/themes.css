@@ -118,6 +118,34 @@
   --shadow-panel: 0 0 0 1px rgba(226, 255, 222, 0.06), 0 30px 70px -30px rgba(0, 0, 0, 0.8);
 }
 
+[data-felt] {
+  --color-on-felt: #f3eee4;
+  --color-on-felt-muted: rgba(243, 238, 228, 0.68);
+  --color-on-felt-faint: rgba(243, 238, 228, 0.44);
+  --color-on-felt-invert: #1b1916;
+  --color-felt-well: rgba(0, 0, 0, 0.28);
+  --color-felt-line: rgba(255, 255, 255, 0.12);
+  --color-felt-plus: #b5e0a0;
+  --color-felt-minus: #f0a99f;
+  --color-felt-target: rgba(246, 214, 140, 0.9);
+  --color-felt-pill-red: #a1473f;
+}
+
+[data-felt='linen'] {
+  --color-felt: #f1ece0;
+  --color-felt-deep: #ddd5c4;
+  --color-on-felt: #2b2824;
+  --color-on-felt-muted: rgba(43, 40, 36, 0.7);
+  --color-on-felt-faint: rgba(43, 40, 36, 0.48);
+  --color-on-felt-invert: #f5f4ef;
+  --color-felt-well: rgba(120, 104, 76, 0.12);
+  --color-felt-line: rgba(120, 104, 76, 0.28);
+  --color-felt-plus: #4f7d49;
+  --color-felt-minus: #a1473f;
+  --color-felt-target: rgba(176, 132, 52, 0.85);
+  --color-felt-pill-red: #e6a197;
+}
+
 [data-felt='green'] {
   --color-felt: #1f5038;
   --color-felt-deep: #12301f;

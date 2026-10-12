@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { PhPaperPlaneRight } from '@phosphor-icons/vue'
-import type { LobbyMessage } from '../../types/social'
+import AnimatedEmoji from '../game/AnimatedEmoji.vue'
+import { emojiOf } from '../../constants/emoji'
+import type { ChatEntry } from '../../types/social'
 
 const MAX_LENGTH = 200
 
-const props = defineProps<{ messages: LobbyMessage[]; myId?: string }>()
+const props = withDefaults(
+  defineProps<{ messages: ChatEntry[]; myId?: string; title?: string; placeholder?: string; disabled?: boolean }>(),
+  { title: 'Общий чат', placeholder: 'Написать всем…', disabled: false },
+)
 const emit = defineEmits<{ (e: 'send', text: string): void }>()
 
 const draft = ref('')
@@ -17,7 +22,7 @@ function time(iso: string) {
 
 function send() {
   const text = draft.value.trim()
-  if (!text) return
+  if (!text || props.disabled) return
   emit('send', text.slice(0, MAX_LENGTH))
   draft.value = ''
 }
@@ -32,12 +37,14 @@ watch(() => props.messages.length, scrollDown)
 </script>
 
 <template>
-  <section class="chat" aria-labelledby="chat-title">
-    <div class="head">
-      <h2 id="chat-title">Общий чат</h2>
+  <section class="chat" :aria-label="title || placeholder">
+    <div v-if="title" class="head">
+      <h2>{{ title }}</h2>
+      <slot name="head" />
     </div>
 
     <ol ref="listEl" class="messages" aria-live="polite">
+      <li v-if="!messages.length" class="empty">Сообщений пока нет</li>
       <li v-for="m in messages" :key="m.id" class="msg" :class="{ system: m.system, mine: m.userId === myId }">
         <template v-if="m.system">{{ m.text }}</template>
         <template v-else>
@@ -45,14 +52,24 @@ watch(() => props.messages.length, scrollDown)
             <b>{{ m.username }}</b>
             <time :datetime="m.at">{{ time(m.at) }}</time>
           </span>
-          <span class="text">{{ m.text }}</span>
+          <AnimatedEmoji v-if="emojiOf(m.text)" class="big-emoji" :emoji="emojiOf(m.text)!" :size="48" />
+          <span v-else class="text">{{ m.text }}</span>
         </template>
       </li>
     </ol>
 
+    <slot name="tools" />
+
     <form class="compose" @submit.prevent="send">
-      <input v-model="draft" type="text" :maxlength="MAX_LENGTH" placeholder="Написать всем…" aria-label="Сообщение в общий чат" />
-      <button type="submit" :disabled="!draft.trim()" aria-label="Отправить">
+      <input
+        v-model="draft"
+        type="text"
+        :maxlength="MAX_LENGTH"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :aria-label="title"
+      />
+      <button type="submit" :disabled="!draft.trim() || disabled" aria-label="Отправить">
         <PhPaperPlaneRight :size="18" weight="fill" />
       </button>
     </form>
@@ -67,6 +84,9 @@ watch(() => props.messages.length, scrollDown)
 }
 
 .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 4px 10px;
 }
 
@@ -88,9 +108,16 @@ h2 {
   list-style: none;
 }
 
+.empty {
+  margin: auto;
+  font-size: 13px;
+  color: var(--color-ink-ghost);
+}
+
 .msg {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   max-width: 92%;
 }
@@ -136,8 +163,13 @@ h2 {
   color: var(--color-paper);
 }
 
+.big-emoji {
+  margin-top: 2px;
+}
+
 .system {
   align-self: center;
+  align-items: center;
   max-width: 100%;
   padding: 6px 12px;
   border-radius: 999px;

@@ -18,8 +18,10 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
       <span class="pip">{{ suit }}</span>
       <span class="index index--bottom">{{ rank }}<i>{{ suit }}</i></span>
     </div>
-    <div class="face face--back">
-      <span class="back-inner"><span class="back-mark">B</span></span>
+    <div class="face face--back" :class="{ custom: $slots.back }">
+      <slot name="back">
+        <span class="back-inner"><span class="back-mark">B</span></span>
+      </slot>
     </div>
   </div>
 </template>
@@ -60,6 +62,12 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
   transform: rotateY(180deg);
   padding: 6px;
   background: #ebe6db;
+}
+
+.face--back.custom {
+  padding: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .back-inner {

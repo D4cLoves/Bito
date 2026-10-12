@@ -1,10 +1,12 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { freshAccessToken } from '../api/http'
 import type { Card, ChatMessage, GameOver, GameState } from '../types/game'
+import type { ChatEntry } from '../types/social'
 
 export type SocketStatus = 'connecting' | 'open' | 'reconnecting' | 'closed'
 
 const MAX_RETRIES = 8
+const CHAT_HISTORY = 100
 
 interface ServerMessage {
   type: string
@@ -16,7 +18,7 @@ export function useGameSocket(roomId: string) {
   const state = shallowRef<GameState | null>(null)
   const gameOver = shallowRef<GameOver | null>(null)
   const offline = ref<Set<string>>(new Set())
-  const chat = ref<ChatMessage[]>([])
+  const chat = ref<ChatEntry[]>([])
   const lastError = ref<{ text: string; at: number } | null>(null)
   const stateReceivedAt = ref(0)
 
@@ -24,6 +26,19 @@ export function useGameSocket(roomId: string) {
   let retries = 0
   let retryTimer: number | null = null
   let stopped = false
+  let chatSeq = 0
+
+  function pushChat(entry: Omit<ChatEntry, 'id' | 'at'>) {
+    chat.value = [...chat.value.slice(-(CHAT_HISTORY - 1)), { ...entry, id: `c${++chatSeq}`, at: new Date().toISOString() }]
+  }
+
+  function system(text: string) {
+    pushChat({ userId: 'system', username: '', text, system: true })
+  }
+
+  function nameOf(id: string) {
+    return state.value?.players.find((p) => p.id === id)?.name ?? 'Соперник'
+  }
 
   async function connect() {
     const token = await freshAccessToken()
@@ -75,10 +90,12 @@ export function useGameSocket(roomId: string) {
   function handle(msg: ServerMessage) {
     switch (msg.type) {
       case 'game_state':
+        if (!state.value) system('Партия началась. Удачи!')
         state.value = msg.payload as GameState
         stateReceivedAt.value = Date.now()
         break
       case 'game_over':
+        if (!gameOver.value) system('Партия окончена')
         gameOver.value = msg.payload as GameOver
         break
       case 'error': {
@@ -89,6 +106,7 @@ export function useGameSocket(roomId: string) {
       case 'player_disconnected': {
         const id = (msg.payload as { playerId: string }).playerId
         offline.value = new Set(offline.value).add(id)
+        system(`${nameOf(id)} потерял связь`)
         break
       }
       case 'player_reconnected': {
@@ -96,11 +114,14 @@ export function useGameSocket(roomId: string) {
         const next = new Set(offline.value)
         next.delete(id)
         offline.value = next
+        system(`${nameOf(id)} вернулся`)
         break
       }
-      case 'chat':
-        chat.value = [...chat.value.slice(-49), msg.payload as ChatMessage]
+      case 'chat': {
+        const m = msg.payload as ChatMessage
+        pushChat({ userId: m.senderId, username: m.senderName, text: m.message })
         break
+      }
     }
   }
 

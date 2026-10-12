@@ -1,60 +1,75 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Copy, Flag, Volume2, VolumeX } from 'lucide-vue-next'
-import AppHeader from '../../components/app/AppHeader.vue'
+import { AnimatePresence } from 'motion-v'
+import { useMediaQuery } from '@vueuse/core'
+import ToastStack from '../../components/app/ToastStack.vue'
+import OverlayPanel from '../../components/client/OverlayPanel.vue'
+import ChatBox from '../../components/client/ChatBox.vue'
 import GameCard from '../../components/game/GameCard.vue'
+import GameTopBar from '../../components/game/GameTopBar.vue'
+import TableSeat from '../../components/game/TableSeat.vue'
+import BattleArea from '../../components/game/BattleArea.vue'
+import QuickChat from '../../components/game/QuickChat.vue'
 import { listTables } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
+import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
 import { useGameSound } from '../../composables/useGameSound'
-import { plural } from '../../composables/useLanding'
-import {
-  canBeat,
-  cardKey,
-  getSuitSymbol,
-  sameCard,
-  type Card,
-  type CardPair,
-  type PlayerView,
-  type TableInfo,
-} from '../../types/game'
+import { useToast } from '../../composables/useToast'
+import { MIN_STAKE } from '../../constants/economy'
+import { canBeat, cardKey, sameCard, type Card, type CardPair, type PlayerView, type TableInfo } from '../../types/game'
+import type { ChatEntry } from '../../types/social'
 
 const TURN_MS = 20_000
+const BUBBLE_MS = 4500
+const SEAT_ANGLES: Record<number, number[]> = {
+  1: [270],
+  2: [222, 318],
+  3: [196, 270, 344],
+  4: [190, 238, 302, 350],
+  5: [182, 224, 270, 316, 358],
+}
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const settings = useSettingsStore()
 const sound = useGameSound()
+const toast = useToast()
+const wide = useMediaQuery('(min-width: 1100px)')
 
 const roomId = String(route.params.id)
 const socket = useGameSocket(roomId)
-const { state, gameOver, status, offline, lastError } = socket
+const { state, gameOver, status, offline, lastError, chat } = socket
 
 const me = computed(() => auth.user?.id ?? '')
 const selected = ref<Card | null>(null)
-const toast = ref<string | null>(null)
-const muted = ref(localStorage.getItem('bito_sound_muted') === 'true')
 const confirmSurrender = ref(false)
 const copied = ref(false)
 const waitingInfo = ref<TableInfo | null>(null)
 const tick = ref(Date.now())
+const chatOpen = ref(wide.value)
+const unread = ref(0)
+const bubbles = ref<Record<string, ChatEntry>>({})
 
-let toastTimer: number | null = null
 let tickTimer: number | null = null
 let waitTimer: number | null = null
+const bubbleTimers = new Map<string, number>()
 
 const pairs = computed<CardPair[]>(() => state.value?.table ?? [])
 const hand = computed<Card[]>(() => sortHand(state.value?.myHand ?? []))
 const trumpSuit = computed(() => state.value?.trumpSuit ?? -1)
 const phase = computed(() => state.value?.phase)
-const isPerevodnoy = computed(() => state.value?.mode === 'perevodnoy')
+const mode = computed(() => state.value?.mode ?? waitingInfo.value?.mode)
+const isPerevodnoy = computed(() => mode.value === 'perevodnoy')
 
 const players = computed<PlayerView[]>(() => state.value?.players ?? [])
 const meView = computed(() => players.value.find((p) => p.id === me.value))
 const iAmActive = computed(() => meView.value?.isActive ?? false)
 const isDefender = computed(() => state.value?.defenderId === me.value)
 const isAttacker = computed(() => state.value?.attackerId === me.value)
+const myName = computed(() => meView.value?.name ?? auth.user?.username ?? 'Вы')
 
 const opponents = computed(() => {
   const list = players.value
@@ -132,11 +147,23 @@ const statusText = computed(() => {
   return s.youPassed ? 'Ждём остальных' : 'Всё побито. Подкиньте или скажите «Бито»'
 })
 
+const roleText = computed(() => {
+  if (!canAct.value) return ''
+  return isDefender.value ? 'Вы отбиваетесь' : isAttacker.value ? 'Вы атакуете' : 'Вы подкидываете'
+})
+
 const myTurn = computed(() => {
   if (!canAct.value) return false
   if (isDefender.value) return phase.value === 'battle' && unbeaten.value.length > 0
   if (!pairs.value.length) return isAttacker.value
   return !state.value?.youPassed && (phase.value === 'giving_more' || unbeaten.value.length === 0)
+})
+
+const actorId = computed(() => {
+  const s = state.value
+  if (!s || s.phase === 'finished' || gameOver.value) return null
+  if (s.phase === 'battle' && unbeaten.value.length) return s.defenderId
+  return s.attackerId
 })
 
 const turnLeft = computed(() => {
@@ -147,7 +174,31 @@ const turnLeft = computed(() => {
 const turnSeconds = computed(() => Math.ceil(turnLeft.value / 1000))
 const turnFraction = computed(() => Math.min(1, turnLeft.value / TURN_MS))
 
-const deckBacks = computed(() => Math.min(5, Math.ceil((state.value?.cardsLeft ?? 0) / 6)))
+const roleOf = (id: string) => (id === state.value?.defenderId ? 'defender' : id === state.value?.attackerId ? 'attacker' : null)
+
+interface SeatView {
+  key: string
+  player: PlayerView | null
+  waitingName: string | null
+  x: number
+  y: number
+}
+
+const seats = computed<SeatView[]>(() => {
+  if (state.value) {
+    const angles = SEAT_ANGLES[opponents.value.length] ?? SEAT_ANGLES[5]
+    return opponents.value.map((p, i) => ({ key: p.id, player: p, waitingName: p.name, ...polar(angles[i]) }))
+  }
+  const total = waitingInfo.value?.maxPlayers ?? 2
+  const taken = waitingInfo.value?.players ?? 1
+  const angles = SEAT_ANGLES[total - 1] ?? SEAT_ANGLES[5]
+  return angles.map((a, i) => ({ key: `wait-${i}`, player: null, waitingName: i < taken - 1 ? 'Игрок' : null, ...polar(a) }))
+})
+
+function polar(deg: number) {
+  const rad = (deg * Math.PI) / 180
+  return { x: 50 + 50 * Math.cos(rad), y: 50 + 50 * Math.sin(rad) }
+}
 
 const result = computed(() => {
   const g = gameOver.value
@@ -160,6 +211,15 @@ const result = computed(() => {
     text: g.loserId ? `В дураках — ${nameOf(g.loserId)}.` : 'Партия окончена.',
     tone: 'win' as const,
   }
+})
+
+const modeLabel = computed(() => (mode.value === 'perevodnoy' ? 'Переводной' : mode.value === 'podkidnoy' ? 'Подкидной' : 'Стол'))
+const deckSize = computed(() => waitingInfo.value?.deck ?? null)
+const stake = computed(() => waitingInfo.value?.stake ?? MIN_STAKE)
+
+const battleHint = computed(() => {
+  if (!state.value) return ''
+  return isAttacker.value && canAct.value ? 'Положите карту, чтобы начать ход' : `Ход за ${nameOf(state.value.attackerId)}`
 })
 
 function sortHand(cards: Card[]): Card[] {
@@ -234,8 +294,17 @@ function doSurrender() {
   socket.surrender()
 }
 
-function toggleMute() {
-  muted.value = sound.toggleMuted()
+function toggleSound() {
+  settings.soundOn = !settings.soundOn
+  if (settings.soundOn) sound.playClick()
+}
+
+function toggleChat() {
+  chatOpen.value = !chatOpen.value
+}
+
+function say(text: string) {
+  socket.say(text)
 }
 
 async function copyLink() {
@@ -244,14 +313,8 @@ async function copyLink() {
     copied.value = true
     setTimeout(() => (copied.value = false), 1600)
   } catch {
-    showToast('Не удалось скопировать ссылку')
+    toast.show('Не удалось скопировать ссылку', 'error')
   }
-}
-
-function showToast(text: string) {
-  toast.value = text
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => (toast.value = null), 2600)
 }
 
 const ERRORS: Record<string, string> = {
@@ -270,12 +333,13 @@ const ERRORS: Record<string, string> = {
   'партия уже идет, стол заполнен': 'За этим столом уже играют',
   'стол уже заполнен': 'Стол заполнен',
   'партия уже завершена': 'Партия уже завершена',
+  'слишком часто, подождите секунду': 'Не так быстро — подождите секунду',
 }
 
 watch(lastError, (e) => {
   if (!e) return
   sound.playError()
-  showToast(ERRORS[e.text] ?? e.text)
+  toast.show(ERRORS[e.text] ?? e.text, 'error')
 })
 
 watch(
@@ -299,13 +363,49 @@ watch(gameOver, (g) => {
   else sound.playChipsWin()
 })
 
+watch(
+  () => chat.value.length,
+  (len, prevLen) => {
+    for (const entry of chat.value.slice(prevLen ?? 0, len)) {
+      if (entry.system) continue
+      showBubble(entry)
+      if (entry.userId !== me.value) {
+        if (!chatOpen.value) unread.value++
+        sound.playClick()
+      }
+    }
+  },
+)
+
+watch(chatOpen, (open) => {
+  if (open) unread.value = 0
+})
+
+watch(wide, (isWide) => {
+  if (!isWide) chatOpen.value = false
+})
+
+function showBubble(entry: ChatEntry) {
+  bubbles.value = { ...bubbles.value, [entry.userId]: entry }
+  const prev = bubbleTimers.get(entry.userId)
+  if (prev) clearTimeout(prev)
+  bubbleTimers.set(
+    entry.userId,
+    window.setTimeout(() => {
+      const next = { ...bubbles.value }
+      if (next[entry.userId]?.id === entry.id) delete next[entry.userId]
+      bubbles.value = next
+    }, BUBBLE_MS),
+  )
+}
+
 async function pollWaiting() {
-  if (state.value) return
+  if (state.value && waitingInfo.value) return
   try {
     const list = await listTables()
     waitingInfo.value = list.find((t) => t.id === roomId) ?? waitingInfo.value
   } catch {
-    // the socket status already tells the user if the server is down
+    return
   }
 }
 
@@ -318,228 +418,162 @@ onMounted(() => {
 onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
   if (waitTimer) clearInterval(waitTimer)
-  if (toastTimer) clearTimeout(toastTimer)
-})
-
-const modeLabel = computed(() => {
-  const m = state.value?.mode ?? waitingInfo.value?.mode
-  return m === 'perevodnoy' ? 'Переводной' : m === 'podkidnoy' ? 'Подкидной' : 'Стол'
+  bubbleTimers.forEach((t) => clearTimeout(t))
 })
 </script>
 
 <template>
-  <div class="table-page">
-    <AppHeader>
-      <div class="room-meta">
-        <button type="button" class="back" @click="router.push('/lobby')"><ArrowLeft :size="16" /> Лобби</button>
-        <span class="mode">{{ modeLabel }}</span>
-        <span v-if="status !== 'open'" class="conn" :class="status">
-          {{ status === 'connecting' ? 'Подключаемся…' : status === 'reconnecting' ? 'Переподключаемся…' : 'Нет связи' }}
-        </span>
-      </div>
-    </AppHeader>
+  <div class="game" :class="{ 'chat-docked': wide && chatOpen }" :data-theme="settings.theme" :data-felt="settings.felt">
+    <div class="glow" aria-hidden="true"></div>
 
-    <main class="stage">
-      <section v-if="!state" class="waiting">
-        <div class="waiting-cards" aria-hidden="true">
-          <GameCard v-for="i in 3" :key="i" face-down size="md" :class="`wc wc${i}`" />
-        </div>
-        <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
-        <p v-if="status === 'closed'" class="waiting-text">
-          Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.
-        </p>
-        <template v-else>
-          <p class="waiting-text">Партия начнётся сама, как только все сядут за стол.</p>
-          <div v-if="waitingInfo" class="waiting-seats">
-            <span v-for="s in waitingInfo.maxPlayers" :key="s" class="seat" :class="{ taken: s <= waitingInfo.players }">
-              {{ s <= waitingInfo.players ? '●' : '' }}
-            </span>
-            <span class="seat-count">
-              {{ waitingInfo.players }} из {{ waitingInfo.maxPlayers }} · {{ waitingInfo.deck }} карт
-            </span>
+    <div class="main">
+      <GameTopBar
+        :mode-label="modeLabel"
+        :is-transfer="isPerevodnoy"
+        :deck="deckSize"
+        :stake="stake"
+        :status="status"
+        :sound-on="settings.soundOn"
+        :chat-open="chatOpen"
+        :unread="unread"
+        :can-surrender="canAct"
+        :waiting="!state"
+        :copied="copied"
+        @back="router.push('/lobby')"
+        @sound="toggleSound"
+        @chat="toggleChat"
+        @surrender="confirmSurrender = true"
+        @copy="copyLink"
+      />
+
+      <section class="arena" aria-label="Стол">
+        <div class="oval">
+          <span class="rim" aria-hidden="true"></span>
+
+          <div class="seats">
+            <TableSeat
+              v-for="s in seats"
+              :key="s.key"
+              class="seat-pos"
+              :style="{ '--x': `${s.x}%`, '--y': `${s.y}%` }"
+              :name="s.player?.name ?? s.waitingName"
+              :hand-count="s.player?.handCount ?? 0"
+              :role="s.player ? roleOf(s.player.id) : null"
+              :out="!!s.player && !s.player.isActive"
+              :offline="!!s.player && offline.has(s.player.id)"
+              :turn-fraction="s.player && actorId === s.player.id && turnLeft > 0 ? turnFraction : null"
+              :bubble="s.player ? bubbles[s.player.id] ?? null : null"
+            />
           </div>
-          <button type="button" class="ghost" @click="copyLink">
-            <Copy :size="16" /> {{ copied ? 'Ссылка скопирована' : 'Скопировать ссылку на стол' }}
-          </button>
-        </template>
-        <button v-if="status === 'closed'" type="button" class="primary" @click="router.push('/lobby')">В лобби</button>
+
+          <div class="felt-content">
+            <BattleArea
+              v-if="state"
+              :pairs="pairs"
+              :trump-card="state.trumpCard"
+              :trump-suit="state.trumpSuit"
+              :cards-left="state.cardsLeft"
+              :discard-size="state.discardSize"
+              :targets="defendTargets"
+              :hint="battleHint"
+              @pair="onPairClick"
+            />
+
+            <div v-else class="waiting">
+              <div class="waiting-cards" aria-hidden="true">
+                <GameCard v-for="i in 3" :key="i" face-down size="sm" :class="`wc wc${i}`" />
+              </div>
+              <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
+              <p v-if="status === 'closed'">Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.</p>
+              <p v-else-if="waitingInfo">
+                За столом {{ waitingInfo.players }} из {{ waitingInfo.maxPlayers }}. Партия начнётся сама, когда все сядут.
+              </p>
+              <p v-else>Партия начнётся сама, когда все сядут.</p>
+              <button v-if="status === 'closed'" type="button" class="felt-btn" @click="router.push('/lobby')">В лобби</button>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <template v-else>
-        <section class="opponents" aria-label="Соперники">
-          <article
-            v-for="p in opponents"
-            :key="p.id"
-            class="opp"
-            :class="{
-              attacker: p.id === state.attackerId,
-              defender: p.id === state.defenderId,
-              out: !p.isActive,
-              offline: offline.has(p.id),
-            }"
-          >
-            <div class="opp-hand" aria-hidden="true">
-              <GameCard
-                v-for="i in Math.min(p.handCount, 8)"
-                :key="i"
-                face-down
-                size="xs"
-                :style="{ transform: `rotate(${(i - (Math.min(p.handCount, 8) + 1) / 2) * 7}deg)` }"
-              />
-            </div>
-            <div class="opp-info">
-              <span class="opp-avatar">{{ p.name[0]?.toUpperCase() }}</span>
-              <span class="opp-name">{{ p.name }}</span>
-            </div>
-            <div class="opp-sub">
-              <span v-if="!p.isActive" class="badge">вышел</span>
-              <span v-else-if="offline.has(p.id)" class="badge warn">нет связи</span>
-              <span v-else-if="p.id === state.defenderId" class="badge def">отбивается</span>
-              <span v-else-if="p.id === state.attackerId" class="badge atk">ходит</span>
-              <span class="opp-count">{{ p.handCount }} {{ plural(p.handCount, ['карта', 'карты', 'карт']) }}</span>
-            </div>
-          </article>
-        </section>
+      <section class="dock" :class="{ 'my-turn': myTurn }">
+        <div class="action-row">
+          <TableSeat
+            class="me-seat"
+            me
+            bubble-side="up"
+            :name="myName"
+            :role="state && canAct ? roleOf(me) : null"
+            :turn-fraction="myTurn && turnLeft > 0 ? turnFraction : null"
+            :bubble="bubbles[me] ?? null"
+          />
 
-        <section class="felt" aria-label="Стол">
-          <div class="pile deck-pile">
-            <div class="deck-stack">
-              <GameCard
-                v-if="state.cardsLeft > 0"
-                :card="state.trumpCard"
-                size="sm"
-                trump
-                class="trump-card"
-              />
-              <GameCard
-                v-for="i in Math.max(0, deckBacks - 1)"
-                :key="i"
-                face-down
-                size="sm"
-                class="deck-back"
-                :style="{ transform: `translate(${i * 1.5}px, ${-i * 1.5}px)` }"
-              />
-              <div v-if="state.cardsLeft === 0" class="trump-only" :class="{ red: state.trumpSuit === 2 || state.trumpSuit === 3 }">
-                {{ getSuitSymbol(state.trumpSuit) }}
-              </div>
-            </div>
-            <span class="pile-label">
-              {{ state.cardsLeft ? `${state.cardsLeft} в колоде` : 'колода пуста' }}
-            </span>
-          </div>
-
-          <div class="battle">
-            <TransitionGroup name="pair" tag="div" class="pairs">
-              <div
-                v-for="pair in pairs"
-                :key="cardKey(pair.attack)"
-                class="pair"
-                :class="{ target: defendTargets.has(cardKey(pair.attack)) }"
-                @click="onPairClick(pair)"
-              >
-                <GameCard :card="pair.attack" size="md" :trump="pair.attack.suit === state.trumpSuit" />
-                <Transition name="defend">
-                  <GameCard
-                    v-if="pair.defend"
-                    :card="pair.defend"
-                    size="md"
-                    class="defend-card"
-                    :trump="pair.defend.suit === state.trumpSuit"
-                  />
-                </Transition>
-              </div>
-            </TransitionGroup>
-            <p v-if="!pairs.length" class="felt-hint">
-              {{ isAttacker && canAct ? 'Положите карту, чтобы начать ход' : `Ход за ${nameOf(state.attackerId)}` }}
-            </p>
-          </div>
-
-          <div class="pile discard-pile">
-            <div class="discard-stack" :class="{ empty: !state.discardSize }">
-              <GameCard v-if="state.discardSize" face-down size="sm" style="transform: rotate(14deg)" />
-              <GameCard v-if="state.discardSize > 6" face-down size="sm" class="discard-2" />
-            </div>
-            <span class="pile-label">бито: {{ state.discardSize }}</span>
-          </div>
-        </section>
-
-        <section class="me-zone" :class="{ 'my-turn': myTurn }">
-          <div class="status-row">
-            <div class="status">
-              <span class="role" v-if="canAct">
-                {{ isDefender ? 'Вы отбиваетесь' : isAttacker ? 'Вы атакуете' : 'Вы подкидываете' }}
-              </span>
-              <span class="status-text">{{ statusText }}</span>
-            </div>
-
-            <div class="actions">
-              <button v-if="showTransfer" type="button" class="act" @click="doTransfer">Перевести</button>
-              <button v-if="showTake" type="button" class="act warn" @click="doTake">Беру</button>
-              <button v-if="showBeaten" type="button" class="act" @click="doPass">Бито</button>
-              <button v-if="showEnough" type="button" class="act" @click="doPass">Хватит</button>
-              <button type="button" class="icon-btn" :title="muted ? 'Включить звук' : 'Выключить звук'" @click="toggleMute">
-                <VolumeX v-if="muted" :size="17" />
-                <Volume2 v-else :size="17" />
-              </button>
-              <button
-                v-if="canAct"
-                type="button"
-                class="icon-btn"
-                title="Сдаться"
-                aria-label="Сдаться"
-                @click="confirmSurrender = true"
-              >
-                <Flag :size="17" />
-              </button>
+          <div class="status">
+            <span v-if="roleText" class="role">{{ roleText }}</span>
+            <span class="status-text">{{ state ? statusText : 'Садитесь поудобнее — ждём остальных' }}</span>
+            <div v-if="myTurn && turnLeft > 0" class="timer" :class="{ urgent: turnSeconds <= 5 }">
+              <div class="timer-bar" :style="{ transform: `scaleX(${turnFraction})` }"></div>
+              <span class="timer-text">{{ turnSeconds }} с</span>
             </div>
           </div>
 
-          <div class="timer" :class="{ urgent: turnSeconds <= 5 }" v-if="turnLeft > 0 && canAct">
-            <div class="timer-bar" :style="{ transform: `scaleX(${turnFraction})` }"></div>
-            <span class="timer-text">{{ turnSeconds }} с</span>
+          <div class="actions">
+            <button v-if="showTransfer" type="button" class="act" @click="doTransfer">Перевести</button>
+            <button v-if="showTake" type="button" class="act warn" @click="doTake">Беру</button>
+            <button v-if="showBeaten" type="button" class="act" @click="doPass">Бито</button>
+            <button v-if="showEnough" type="button" class="act" @click="doPass">Хватит</button>
           </div>
+        </div>
 
-          <div class="hand" :class="{ crowded: hand.length > 10 }">
-            <TransitionGroup name="hand">
-              <div v-for="(card, i) in hand" :key="cardKey(card)" class="hand-slot" :style="{ zIndex: i }">
-                <div class="fan" :style="fanStyle(i, hand.length)">
+        <div class="hand" :class="{ crowded: hand.length > 10 }">
+          <TransitionGroup name="hand">
+            <div v-for="(card, i) in hand" :key="cardKey(card)" class="hand-slot" :style="{ zIndex: i }">
+              <div class="fan" :style="fanStyle(i, hand.length)">
                 <GameCard
                   :card="card"
                   size="lg"
-                  :trump="card.suit === state.trumpSuit"
+                  :trump="card.suit === state?.trumpSuit"
                   :playable="isPlayable(card)"
                   :dimmed="myTurn && !isPlayable(card)"
                   :selected="!!selected && sameCard(selected, card)"
                   @click="onHandClick(card)"
                 />
-                </div>
               </div>
-            </TransitionGroup>
-            <p v-if="!hand.length && iAmActive" class="felt-hint">У вас нет карт</p>
-          </div>
-        </section>
-      </template>
-    </main>
+            </div>
+          </TransitionGroup>
+          <p v-if="state && !hand.length && iAmActive" class="hand-empty">У вас нет карт</p>
+        </div>
+      </section>
+    </div>
 
-    <Transition name="toast">
-      <div v-if="toast" class="toast" role="status">{{ toast }}</div>
-    </Transition>
+    <aside v-if="wide && chatOpen" class="chat-col">
+      <ChatBox class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+        <template #tools><QuickChat @send="say" /></template>
+      </ChatBox>
+    </aside>
+
+    <AnimatePresence>
+      <OverlayPanel v-if="!wide && chatOpen" key="chat" side="right" :width="380" title="Чат стола" @close="chatOpen = false">
+        <ChatBox class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+          <template #tools><QuickChat @send="say" /></template>
+        </ChatBox>
+      </OverlayPanel>
+    </AnimatePresence>
 
     <Transition name="fade">
-      <div v-if="confirmSurrender" class="overlay" @click.self="confirmSurrender = false">
+      <div v-if="confirmSurrender" class="modal" @click.self="confirmSurrender = false">
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="surrender-title">
           <h2 id="surrender-title">Сдаться?</h2>
-          <p>Вы выйдете из партии, а ваши карты уйдут в отбой.</p>
+          <p>Вы выйдете из партии и будете считаться проигравшим.</p>
           <div class="dialog-actions">
-            <button type="button" class="ghost" @click="confirmSurrender = false">Играть дальше</button>
-            <button type="button" class="primary danger" @click="doSurrender">Сдаться</button>
+            <button type="button" class="btn ghost" @click="confirmSurrender = false">Играть дальше</button>
+            <button type="button" class="btn danger" @click="doSurrender">Сдаться</button>
           </div>
         </div>
       </div>
     </Transition>
 
     <Transition name="fade">
-      <div v-if="result" class="overlay">
+      <div v-if="result" class="modal">
         <div class="dialog result" :class="result.tone" role="dialog" aria-modal="true" aria-labelledby="result-title">
           <div class="result-cards" aria-hidden="true">
             <GameCard :card="{ suit: 3, rank: 14 }" size="md" class="rc-a" />
@@ -547,478 +581,299 @@ const modeLabel = computed(() => {
           </div>
           <h2 id="result-title">{{ result.title }}</h2>
           <p>{{ result.text }}</p>
-          <button type="button" class="primary" @click="router.push('/lobby')">В лобби</button>
+          <div class="dialog-actions center">
+            <button type="button" class="btn ghost" @click="chatOpen = true">Написать в чат</button>
+            <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
+          </div>
         </div>
       </div>
     </Transition>
+
+    <ToastStack />
   </div>
 </template>
 
 <style scoped>
-.table-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(ellipse at 50% 30%, rgba(246, 235, 211, 0.7), rgba(246, 235, 211, 0) 60%),
-    var(--color-paper);
+.game {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-paper);
   color: var(--color-ink);
-  overflow-x: hidden;
 }
 
-.room-meta {
+.game.chat-docked {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.glow {
+  position: absolute;
+  top: -35vh;
+  left: 15%;
+  width: 70vw;
+  height: 90vh;
+  background: radial-gradient(ellipse at 50% 40%, var(--color-glow), transparent 65%);
+  pointer-events: none;
+}
+
+.main {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
-.back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--color-paper-sunken);
-  color: var(--color-ink);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.back:hover {
-  background: var(--color-paper-hover);
-}
-
-.mode {
-  font-size: 15px;
-  color: var(--color-ink-muted);
-  white-space: nowrap;
-}
-
-.conn {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: var(--color-gold-tint);
-  color: var(--color-gold-ink);
-  white-space: nowrap;
-}
-
-.conn.closed {
-  background: var(--color-red-tint);
-  color: var(--color-red-strong);
-}
-
-.stage {
+.arena {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  padding: 18px 16px 0;
-  box-sizing: border-box;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 76px 96px 30px;
+  container-type: size;
+}
+
+.oval {
+  position: relative;
+  width: min(100cqw, 210cqh);
+  aspect-ratio: 2.1;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 35%, rgba(255, 255, 255, 0.12), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, var(--color-felt), var(--color-felt-deep));
+  box-shadow:
+    0 0 0 10px var(--color-paper-raised),
+    0 0 0 11px var(--color-line-strong),
+    inset 0 0 60px color-mix(in srgb, var(--color-felt-deep) 70%, transparent),
+    0 50px 80px -40px rgba(0, 0, 0, 0.55);
+}
+
+.oval::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 4px 4px;
+  pointer-events: none;
+}
+
+.rim {
+  position: absolute;
+  inset: 22px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--color-felt-line);
+  pointer-events: none;
+}
+
+.seats {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.seat-pos {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  translate: -50% -62%;
+  pointer-events: auto;
+}
+
+.felt-content {
+  position: absolute;
+  inset: 18% 9% 12%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
 }
 
 .waiting {
-  margin: auto;
-  padding: 40px 16px 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 420px;
   text-align: center;
+  color: var(--color-on-felt);
 }
 
 .waiting-cards {
   position: relative;
-  width: 200px;
-  height: 150px;
-  margin: 0 auto 26px;
+  width: 120px;
+  height: 90px;
+  margin-bottom: 10px;
 }
 
 .wc {
   position: absolute;
-  left: 54px;
+  left: 50%;
   top: 0;
-  animation: float 3.6s ease-in-out infinite;
+  margin-left: -29px;
+  animation: shuffle 2.4s ease-in-out infinite;
 }
 
 .wc1 {
-  transform: rotate(-16deg) translateX(-38px);
-  animation-delay: -1.2s;
+  rotate: -14deg;
+  translate: -24px 6px;
 }
 
 .wc2 {
-  animation-delay: -0.6s;
+  animation-delay: 0.3s;
 }
 
 .wc3 {
-  transform: rotate(16deg) translateX(38px);
+  rotate: 14deg;
+  translate: 24px 6px;
+  animation-delay: 0.6s;
 }
 
-@keyframes float {
+@keyframes shuffle {
   50% {
-    margin-top: -8px;
+    transform: translateY(-8px);
   }
 }
 
 .waiting h1 {
   margin: 0;
-  font-size: clamp(30px, 4vw, 44px);
-  font-weight: 500;
-  letter-spacing: -0.03em;
-}
-
-.waiting-text {
-  max-width: 420px;
-  margin: 12px auto 0;
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--color-ink-muted);
-}
-
-.waiting-seats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 26px 0 22px;
-}
-
-.seat {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--color-line-heavy);
-  font-size: 0;
-}
-
-.seat.taken {
-  background: var(--color-ink-soft);
-  box-shadow: none;
-}
-
-.seat-count {
-  margin-left: 6px;
-  font-size: 14px;
-  color: var(--color-ink-subtle);
-}
-
-.opponents {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.opp {
-  min-width: 150px;
-  padding: 12px 16px 12px;
-  border-radius: 22px;
-  background: rgba(250, 249, 245, 0.9);
-  box-shadow: 0 0 0 1px rgba(214, 208, 196, 0.9);
-  transition:
-    box-shadow 0.3s,
-    opacity 0.3s;
-}
-
-.opp.attacker {
-  box-shadow:
-    0 0 0 2px var(--color-ink-soft),
-    0 16px 30px -22px rgba(54, 50, 44, 0.6);
-}
-
-.opp.defender {
-  box-shadow:
-    0 0 0 2px var(--color-red),
-    0 16px 30px -22px rgba(161, 71, 63, 0.5);
-}
-
-.opp.out {
-  opacity: 0.5;
-}
-
-.opp.offline .opp-avatar {
-  background: var(--color-line-heavy);
-}
-
-.opp-hand {
-  display: flex;
-  justify-content: center;
-  height: 52px;
-  margin-bottom: 6px;
-}
-
-.opp-hand > * {
-  margin: 0 -9px;
-  transform-origin: 50% 120%;
-}
-
-.opp-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.opp-avatar {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--color-ink-soft);
-  color: var(--color-paper);
-  font-size: 12px;
-}
-
-.opp-name {
-  font-size: 15px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 120px;
-}
-
-.opp-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-ink-faint);
-}
-
-.badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--color-paper-sunken);
-  color: var(--color-ink-muted);
-}
-
-.badge.atk {
-  background: var(--color-ink-soft);
-  color: var(--color-paper);
-}
-
-.badge.def {
-  background: var(--color-red-tint);
-  color: var(--color-red-strong);
-}
-
-.badge.warn {
-  background: var(--color-gold-tint);
-  color: var(--color-gold-ink);
-}
-
-.felt {
-  position: relative;
-  display: grid;
-  grid-template-columns: 110px 1fr 110px;
-  align-items: center;
-  gap: 12px;
-  min-height: 300px;
-  margin: 20px 0;
-  padding: 24px;
-  border-radius: 40px;
-  background:
-    radial-gradient(ellipse at 50% 40%, rgba(255, 253, 247, 0.9), rgba(239, 235, 226, 0.4) 70%),
-    var(--color-paper-sunken);
-  box-shadow:
-    0 0 0 8px var(--color-line-strong) inset,
-    0 30px 60px -40px rgba(70, 62, 48, 0.5);
-}
-
-.pile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.deck-stack,
-.discard-stack {
-  position: relative;
-  width: 110px;
-  height: 90px;
-  display: grid;
-  place-items: center;
-}
-
-.deck-stack > * {
-  position: absolute;
-}
-
-.trump-card {
-  transform: translateX(22px) rotate(90deg);
-}
-
-.deck-back {
-  left: -8px;
-}
-
-.trump-only {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--color-paper-raised);
-  box-shadow: 0 0 0 2px var(--color-gold);
   font-family: var(--font-card);
-  font-size: 28px;
-  color: var(--color-card-ink);
+  font-size: clamp(28px, 3.4vw, 42px);
+  font-style: italic;
+  font-weight: 400;
 }
 
-.trump-only.red {
-  color: var(--color-red);
-}
-
-.discard-stack.empty {
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1.5px dashed var(--color-line-stronger);
-  outline: 1.5px dashed var(--color-line-stronger);
-  outline-offset: -14px;
-}
-
-.discard-stack > * {
-  position: absolute;
-}
-
-.discard-2 {
-  transform: rotate(-8deg) translate(4px, 4px);
-}
-
-.pile-label {
-  font-size: 13px;
-  color: var(--color-ink-faint);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.battle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 220px;
-}
-
-.pairs {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 18px 26px;
-}
-
-.pair {
-  position: relative;
-  width: 112px;
-  height: 160px;
-  border-radius: 14px;
-  transition: box-shadow 0.2s;
-}
-
-.pair.target {
-  cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(54, 50, 44, 0.3);
-  animation: target 1.2s ease-in-out infinite;
-}
-
-@keyframes target {
-  50% {
-    box-shadow: 0 0 0 6px rgba(54, 50, 44, 0.12);
-  }
-}
-
-.defend-card {
-  position: absolute;
-  left: 22px;
-  top: 22px;
-  transform: rotate(9deg);
-}
-
-.felt-hint {
-  margin: 0;
+.waiting p {
+  margin: 8px 0 0;
   font-size: 15px;
-  color: var(--color-ink-faint);
+  line-height: 1.45;
+  color: var(--color-on-felt-muted);
 }
 
-.me-zone {
-  position: sticky;
-  bottom: 0;
-  margin: 0 -16px;
-  padding: 14px 16px 0;
-  border-radius: 32px 32px 0 0;
-  background: rgba(247, 246, 241, 0.86);
-  box-shadow: 0 -1px 0 rgba(214, 208, 196, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+.felt-btn {
+  height: 44px;
+  margin-top: 16px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-on-felt);
+  color: var(--color-on-felt-invert);
+  font: inherit;
+  cursor: pointer;
 }
 
-.status-row {
-  display: flex;
+.dock {
+  position: relative;
+  z-index: 4;
+  padding: 0 24px 10px;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 18px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.me-seat {
+  justify-self: center;
 }
 
 .status {
-  flex: 1;
-  min-width: 220px;
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .role {
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-ink-faint);
+  color: var(--color-gold-ink);
 }
 
 .status-text {
   font-size: 18px;
-  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
-.my-turn .status-text {
-  font-weight: 500;
+.timer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  margin-top: 4px;
+}
+
+.timer::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-paper-sunken);
+}
+
+.timer-bar {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  margin-right: 48px;
+  border-radius: 3px;
+  background: var(--color-gold);
+  transform-origin: left;
+  transition: transform 0.25s linear;
+}
+
+.timer-text {
+  position: absolute;
+  right: 0;
+  font-size: 13px;
+  color: var(--color-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer.urgent .timer-bar {
+  background: var(--color-red);
+}
+
+.timer.urgent .timer-text {
+  color: var(--color-red);
 }
 
 .actions {
   display: flex;
-  align-items: center;
   gap: 8px;
 }
 
 .act {
-  height: 46px;
-  padding: 0 24px;
+  height: 52px;
+  padding: 0 28px;
   border: 0;
   border-radius: 999px;
   background: var(--color-ink-soft);
   color: var(--color-paper);
   font: inherit;
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color 0.2s,
-    transform 0.2s;
-  animation: pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 14px 26px -16px rgba(0, 0, 0, 0.7);
+  animation: pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .act:hover {
   background: var(--color-ink);
 }
 
-.act:active {
-  transform: scale(0.97);
-}
-
 .act.warn {
   background: var(--color-red);
+  color: #fff;
 }
 
 .act.warn:hover {
@@ -1027,67 +882,17 @@ const modeLabel = computed(() => {
 
 @keyframes pop {
   from {
-    transform: scale(0.85);
+    transform: scale(0.8);
     opacity: 0;
   }
-}
-
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--color-paper-sunken);
-  color: var(--color-ink);
-  cursor: pointer;
-}
-
-.icon-btn:hover {
-  background: var(--color-paper-hover);
-}
-
-.timer {
-  position: relative;
-  height: 6px;
-  margin-top: 12px;
-  border-radius: 999px;
-  background: var(--color-paper-hover);
-  overflow: hidden;
-}
-
-.timer-bar {
-  position: absolute;
-  inset: 0;
-  transform-origin: left;
-  background: var(--color-ink-soft);
-  transition: transform 0.25s linear;
-}
-
-.timer.urgent .timer-bar {
-  background: var(--color-red);
-}
-
-.timer-text {
-  position: absolute;
-  right: 0;
-  top: -22px;
-  font-size: 12px;
-  color: var(--color-ink-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.timer.urgent .timer-text {
-  color: var(--color-red);
 }
 
 .hand {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  min-height: 190px;
-  padding: 34px 8px 18px;
+  min-height: 184px;
+  padding: 30px 8px 14px;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -1109,169 +914,9 @@ const modeLabel = computed(() => {
   z-index: 50 !important;
 }
 
-.ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 46px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--color-paper-sunken);
-  color: var(--color-ink);
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.ghost:hover {
-  background: var(--color-paper-hover);
-}
-
-.primary {
-  height: 50px;
-  margin-top: 18px;
-  padding: 0 28px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--color-ink-soft);
-  color: var(--color-paper);
-  font: inherit;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.primary:hover {
-  background: var(--color-ink);
-}
-
-.primary.danger {
-  background: var(--color-red);
-}
-
-.primary.danger:hover {
-  background: var(--color-red-strong);
-}
-
-.toast {
-  position: fixed;
-  z-index: 200;
-  left: 50%;
-  bottom: 250px;
-  translate: -50% 0;
-  max-width: calc(100% - 32px);
-  padding: 12px 20px;
-  border-radius: 999px;
-  background: var(--color-ink);
-  color: var(--color-paper);
-  font-size: 15px;
-  box-shadow: 0 18px 40px -16px rgba(27, 25, 22, 0.6);
-}
-
-.overlay {
-  position: fixed;
-  z-index: 300;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(40, 36, 30, 0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.dialog {
-  width: min(420px, 100%);
-  padding: 30px 28px 26px;
-  box-sizing: border-box;
-  border-radius: 30px;
-  background: var(--color-paper-raised);
-  text-align: center;
-  box-shadow: 0 40px 80px -30px rgba(40, 36, 30, 0.6);
-}
-
-.dialog h2 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-}
-
-.dialog p {
-  margin: 10px 0 0;
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--color-ink-muted);
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 22px;
-}
-
-.dialog-actions .primary {
-  margin-top: 0;
-}
-
-.result-cards {
-  position: relative;
-  height: 150px;
-  margin-bottom: 14px;
-}
-
-.rc-a,
-.rc-b {
-  position: absolute;
-  top: 0;
-  left: 50%;
-}
-
-.rc-a {
-  transform: translateX(-80%) rotate(-12deg);
-}
-
-.rc-b {
-  transform: translateX(-20%) rotate(10deg);
-}
-
-.result.lose h2 {
-  color: var(--color-red);
-}
-
-.pair-enter-active {
-  transition:
-    opacity 0.35s,
-    transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.pair-enter-from {
-  opacity: 0;
-  transform: translateY(60px) scale(0.9);
-}
-
-.pair-leave-active {
-  pointer-events: none;
-  transition:
-    opacity 0.3s,
-    transform 0.3s;
-}
-
-.pair-leave-to {
-  opacity: 0;
-  transform: scale(0.85);
-}
-
-.defend-enter-active {
-  transition:
-    opacity 0.3s,
-    transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.defend-enter-from {
-  opacity: 0;
-  transform: rotate(30deg) translate(30px, 60px);
+.hand-empty {
+  margin: auto;
+  color: var(--color-ink-faint);
 }
 
 .hand-enter-active {
@@ -1298,19 +943,139 @@ const modeLabel = computed(() => {
   transform: translateY(-80px);
 }
 
-.toast-enter-active,
-.toast-leave-active,
-.fade-enter-active,
-.fade-leave-active {
-  transition:
-    opacity 0.25s,
-    translate 0.25s;
+.chat-col {
+  position: relative;
+  min-height: 0;
+  padding: 16px;
+  border-left: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-paper-sunken) 60%, transparent);
 }
 
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  translate: -50% 10px;
+.chat-box {
+  height: 100%;
+  padding: 14px 12px;
+  box-sizing: border-box;
+  border-radius: 22px;
+  background: var(--color-paper-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.chat-box.sheet {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--color-scrim);
+  backdrop-filter: blur(3px);
+}
+
+.dialog {
+  width: min(420px, 100%);
+  padding: 28px;
+  box-sizing: border-box;
+  border-radius: 28px;
+  background: var(--color-paper-raised);
+  box-shadow: var(--shadow-panel);
+}
+
+.dialog h2 {
+  margin: 0;
+  font-family: var(--font-card);
+  font-size: 34px;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.dialog p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-subtle);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.dialog-actions.center {
+  justify-content: center;
+}
+
+.btn {
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.btn.ghost {
+  background: var(--color-paper-hover);
+  color: var(--color-ink);
+}
+
+.btn.primary {
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
+}
+
+.btn.danger {
+  background: var(--color-red);
+  color: #fff;
+}
+
+.result {
+  text-align: center;
+}
+
+.result-cards {
+  position: relative;
+  height: 130px;
+  margin-bottom: 12px;
+}
+
+.rc-a,
+.rc-b {
+  position: absolute;
+  left: 50%;
+  top: 0;
+}
+
+.rc-a {
+  translate: -80% 0;
+  rotate: -12deg;
+}
+
+.rc-b {
+  translate: -20% 6px;
+  rotate: 10deg;
+}
+
+.result.win h2 {
+  color: var(--color-gold-ink);
+}
+
+.result.lose h2 {
+  color: var(--color-red);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s;
 }
 
 .fade-enter-from,
@@ -1318,59 +1083,111 @@ const modeLabel = computed(() => {
   opacity: 0;
 }
 
-@media (max-width: 760px) {
-  .felt {
-    grid-template-columns: 1fr;
-    padding: 18px 12px;
-    border-radius: 30px;
-  }
-
-  .pile {
-    flex-direction: row;
-  }
-
-  .deck-pile {
-    order: -1;
-    justify-content: center;
-  }
-
-  .discard-pile {
-    justify-content: center;
-  }
-
-  .pair {
-    width: 84px;
-    height: 120px;
-  }
-
-  .pair :deep(.game-card) {
-    --w: 70px;
-  }
-
-  .defend-card {
-    left: 14px;
-    top: 14px;
+@media (max-width: 1100px) {
+  .arena {
+    padding: 70px 70px 24px;
   }
 
   .hand-slot :deep(.game-card) {
-    --w: 72px;
+    --w: 88px;
+  }
+}
+
+@media (max-width: 767px) {
+  .arena {
+    padding: 8px 10px;
+    place-items: stretch;
+    container-type: normal;
   }
 
-  .hand-slot {
-    margin: 0 -18px;
+  .oval {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: 36px;
+    box-shadow:
+      0 0 0 6px var(--color-paper-raised),
+      0 0 0 7px var(--color-line-strong),
+      inset 0 0 40px color-mix(in srgb, var(--color-felt-deep) 70%, transparent);
   }
 
-  .opp {
-    min-width: 120px;
-    padding: 10px 12px;
+  .rim {
+    inset: 10px;
+    border-radius: 28px;
   }
 
-  .status-text {
+  .seats {
+    position: relative;
+    display: flex;
+    justify-content: space-around;
+    padding: 12px 6px 0;
+  }
+
+  .seat-pos {
+    position: relative;
+    left: auto;
+    top: auto;
+    translate: none;
+    width: auto;
+    max-width: 96px;
+  }
+
+  .seat-pos :deep(.backs) {
+    display: none;
+  }
+
+  .felt-content {
+    position: relative;
+    inset: auto;
+    flex: 1;
+    padding: 8px 12px 14px;
+  }
+
+  .dock {
+    padding: 0 10px 8px;
+  }
+
+  .action-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .me-seat {
+    display: none;
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .actions:empty {
+    display: none;
+  }
+
+  .act {
+    height: 46px;
+    padding: 0 22px;
     font-size: 16px;
   }
 
-  .toast {
-    bottom: 200px;
+  .status-text {
+    font-size: 15px;
+  }
+
+  .hand {
+    min-height: 120px;
+    padding-top: 22px;
+  }
+
+  .hand-slot {
+    margin: 0 -16px;
+  }
+
+  .hand-slot :deep(.game-card) {
+    --w: 66px;
   }
 }
 </style>

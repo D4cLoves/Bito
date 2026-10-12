@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 export type ThemeId = 'hall' | 'paper' | 'forest'
-export type FeltId = 'green' | 'wine' | 'navy' | 'graphite'
+export type FeltId = 'linen' | 'green' | 'wine' | 'navy' | 'graphite'
 export type CardBackId = 'classic' | 'midnight' | 'bito' | 'grove'
 export type InvitePolicy = 'all' | 'friends' | 'nobody'
 
@@ -18,8 +18,8 @@ const KEY = 'bito_settings'
 const SOUND_KEY = 'bito_sound_muted'
 
 const DEFAULTS: StoredSettings = {
-  theme: 'hall',
-  felt: 'green',
+  theme: 'paper',
+  felt: 'linen',
   cardBack: 'classic',
   showChat: true,
   invites: 'all',

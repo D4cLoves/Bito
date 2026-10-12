@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import FriendsList from './FriendsList.vue'
-import LobbyChat from './LobbyChat.vue'
-import type { Friend, FriendRequest, LobbyMessage } from '../../types/social'
+import ChatBox from './ChatBox.vue'
+import type { Friend, FriendRequest, ChatEntry } from '../../types/social'
 
 defineProps<{
   friends: Friend[]
   requests: FriendRequest[]
-  messages: LobbyMessage[]
+  messages: ChatEntry[]
   myId?: string
   showChat: boolean
 }>()
@@ -31,7 +31,7 @@ defineEmits<{
       @accept="(r) => $emit('accept', r)"
       @decline="(r) => $emit('decline', r)"
     />
-    <LobbyChat v-if="showChat" class="block chat" :messages="messages" :my-id="myId" @send="(t) => $emit('send', t)" />
+    <ChatBox v-if="showChat" class="block chat" :messages="messages" :my-id="myId" @send="(t) => $emit('send', t)" />
   </aside>
 </template>
 

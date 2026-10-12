@@ -25,7 +25,7 @@ import { useToast } from '../../composables/useToast'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
 import { MOCK_ACTIVE_TABLE, MOCK_FRIENDS, MOCK_HISTORY, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { DeckSize, GameMode, TableInfo } from '../../types/game'
-import type { Friend, FriendRequest, LobbyMessage } from '../../types/social'
+import type { Friend, FriendRequest, ChatEntry } from '../../types/social'
 
 const POLL_MS = 3000
 
@@ -51,7 +51,7 @@ const now = ref(Date.now())
 
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
-const messages = ref<LobbyMessage[]>([...MOCK_MESSAGES])
+const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
 const activeTable = ref(MOCK_ACTIVE_TABLE)
 
 let pollTimer: number | null = null

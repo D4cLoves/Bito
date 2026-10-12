@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,8 @@ const (
 	disconnectGraceDur = 30 * time.Second
 	// emptyRoomTTL closes a table created via REST that nobody joined.
 	emptyRoomTTL = 5 * time.Minute
+	chatMaxRunes = 200
+	chatCooldown = 700 * time.Millisecond
 )
 
 // RoomInfo is the lobby view of a table; safe to build from any goroutine.
@@ -50,6 +53,7 @@ type Room struct {
 	turnTimer         *time.Timer
 	turnEndsAt        time.Time
 	disconnectTimers  map[string]*time.Timer
+	lastChatAt        map[string]time.Time
 	mu                sync.RWMutex
 	closed            bool
 	createdBy         string
@@ -74,6 +78,7 @@ func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int
 		disconnectTimeout: make(chan string, 10),
 		stop:              make(chan struct{}),
 		disconnectTimers:  make(map[string]*time.Timer),
+		lastChatAt:        make(map[string]time.Time),
 	}
 }
 
@@ -509,6 +514,22 @@ func (r *Room) handleChat(sender *Client, rawData []byte) {
 		return
 	}
 
+	text := strings.TrimSpace(chatMsg.Payload.Message)
+	if text == "" {
+		return
+	}
+	if runes := []rune(text); len(runes) > chatMaxRunes {
+		text = string(runes[:chatMaxRunes])
+	}
+
+	now := time.Now()
+	if now.Sub(r.lastChatAt[sender.ID()]) < chatCooldown {
+		r.sendError(sender, "слишком часто, подождите секунду")
+		return
+	}
+	r.lastChatAt[sender.ID()] = now
+
+	chatMsg.Payload.Message = text
 	chatMsg.Payload.SenderID = sender.ID()
 	chatMsg.Payload.SenderName = sender.Name()
 

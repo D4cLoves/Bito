@@ -224,9 +224,9 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
 
 <style scoped>
 .play {
-  --on-felt: #f3eee4;
-  --on-felt-muted: rgba(243, 238, 228, 0.66);
-  --on-felt-faint: rgba(243, 238, 228, 0.42);
+  --on-felt: var(--color-on-felt);
+  --on-felt-muted: var(--color-on-felt-muted);
+  --on-felt-faint: var(--color-on-felt-faint);
 
   position: relative;
   display: grid;
@@ -240,9 +240,9 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
     radial-gradient(ellipse at 50% 120%, var(--color-felt-deep), var(--color-felt) 70%);
   color: var(--on-felt);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 0 80px rgba(0, 0, 0, 0.35),
-    0 30px 60px -36px rgba(0, 0, 0, 0.7);
+    inset 0 0 0 1px var(--color-felt-line),
+    inset 0 0 80px color-mix(in srgb, var(--color-felt-deep) 80%, transparent),
+    0 30px 60px -36px rgba(0, 0, 0, 0.5);
 }
 
 .play::before {
@@ -268,7 +268,7 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
   position: absolute;
   inset: 10px;
   border-radius: 24px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.1);
+  border: 1.5px dashed var(--color-felt-line);
   pointer-events: none;
 }
 
@@ -412,8 +412,8 @@ h2 {
   display: flex;
   padding: 4px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.28);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
 }
 
 .switch button {
@@ -446,7 +446,7 @@ h2 {
 }
 
 .switch button.on {
-  color: #1b1916;
+  color: var(--color-on-felt-invert);
 }
 
 .pill {
@@ -468,11 +468,11 @@ h2 {
 }
 
 .suit.red {
-  color: #e6a197;
+  color: var(--color-felt-minus);
 }
 
 .on .suit.red {
-  color: #a1473f;
+  color: var(--color-felt-pill-red);
 }
 
 .action {
@@ -525,11 +525,11 @@ h2 {
 }
 
 .plus {
-  color: #b5e0a0;
+  color: var(--color-felt-plus);
 }
 
 .minus {
-  color: #f0a99f;
+  color: var(--color-felt-minus);
 }
 
 .go {
@@ -595,8 +595,8 @@ h2 {
   padding: 0 16px;
   border: 0;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.25);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
   color: var(--on-felt);
   font: inherit;
   font-size: 14px;
@@ -606,7 +606,7 @@ h2 {
 }
 
 .ghost:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 0 1px var(--color-on-felt-faint);
 }
 
 .ghost:disabled {
@@ -617,7 +617,7 @@ h2 {
 .soon {
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-felt-well);
   font-size: 11px;
   color: var(--on-felt-muted);
 }
@@ -634,7 +634,7 @@ h2 {
 .spinner.small {
   width: 14px;
   height: 14px;
-  border-color: rgba(243, 238, 228, 0.3);
+  border-color: var(--color-on-felt-faint);
   border-top-color: var(--on-felt);
 }
 

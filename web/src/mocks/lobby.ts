@@ -1,4 +1,4 @@
-import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, LobbyMessage } from '../types/social'
+import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, ChatEntry } from '../types/social'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
@@ -21,7 +21,7 @@ export const MOCK_FRIENDS: Friend[] = [
 
 export const MOCK_REQUESTS: FriendRequest[] = [{ id: 'r1', username: 'Козырь77' }]
 
-export const MOCK_MESSAGES: LobbyMessage[] = [
+export const MOCK_MESSAGES: ChatEntry[] = [
   { id: 'm0', userId: 'sys', username: 'Bito', text: 'Добро пожаловать в общий чат. Будьте вежливы.', at: ago(30), system: true },
   { id: 'm1', userId: 'u1', username: 'Тузовый', text: 'кто на переводного по 500?', at: ago(12) },
   { id: 'm2', userId: 'u2', username: 'Оля_К', text: 'я, создавай', at: ago(11) },

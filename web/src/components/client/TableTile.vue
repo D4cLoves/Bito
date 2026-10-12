@@ -89,15 +89,15 @@ const ago = computed(() => {
   border-radius: 999px;
   background: radial-gradient(ellipse at 50% 30%, var(--color-felt), var(--color-felt-deep));
   box-shadow:
-    inset 0 0 0 5px rgba(0, 0, 0, 0.25),
-    inset 0 0 22px rgba(0, 0, 0, 0.4);
+    inset 0 0 0 5px var(--color-felt-well),
+    inset 0 0 0 6px var(--color-felt-line);
 }
 
 .felt-inner {
   position: absolute;
   inset: 14%;
   border-radius: 999px;
-  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border: 1px dashed var(--color-felt-line);
 }
 
 .seat {
@@ -106,12 +106,12 @@ const ago = computed(() => {
   height: 14px;
   translate: -50% -50%;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.35);
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1.5px var(--color-on-felt-faint);
 }
 
 .seat.taken {
-  background: #f3eee4;
+  background: var(--color-on-felt);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
@@ -125,8 +125,8 @@ const ago = computed(() => {
   gap: 5px;
   padding: 4px 10px 4px 5px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #f3eee4;
+  background: var(--color-felt-well);
+  color: var(--color-on-felt);
   font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;

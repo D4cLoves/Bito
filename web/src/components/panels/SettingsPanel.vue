@@ -25,12 +25,13 @@ const SECTIONS: { id: Section; label: string; icon: typeof PhPaintBrush }[] = [
 ]
 
 const THEMES: { id: ThemeId; name: string; note: string }[] = [
-  { id: 'hall', name: 'Тёмный зал', note: 'тёплый свет над столом' },
   { id: 'paper', name: 'Бумага', note: 'светлая, как на лендинге' },
+  { id: 'hall', name: 'Тёмный зал', note: 'тёплый свет над столом' },
   { id: 'forest', name: 'Лес', note: 'тёмно-зелёная' },
 ]
 
 const FELTS: { id: FeltId; name: string }[] = [
+  { id: 'linen', name: 'Льняное' },
   { id: 'green', name: 'Зелёное' },
   { id: 'wine', name: 'Бордо' },
   { id: 'navy', name: 'Синее' },
@@ -299,7 +300,10 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.felts,
+.felts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .backs {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -412,8 +416,8 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
   border-radius: 999px;
   background: radial-gradient(ellipse at 50% 30%, var(--color-felt), var(--color-felt-deep));
   box-shadow:
-    inset 0 0 0 4px rgba(0, 0, 0, 0.25),
-    inset 0 0 18px rgba(0, 0, 0, 0.4);
+    inset 0 0 0 4px var(--color-felt-well),
+    inset 0 0 0 5px var(--color-felt-line);
 }
 
 .back-preview {

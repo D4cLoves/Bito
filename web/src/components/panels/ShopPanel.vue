@@ -87,7 +87,9 @@ defineEmits<{ (e: 'buy'): void }>()
   aspect-ratio: 2 / 1;
   border-radius: 999px;
   background: radial-gradient(ellipse at 50% 30%, var(--color-felt), var(--color-felt-deep));
-  box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.25);
+  box-shadow:
+    inset 0 0 0 4px var(--color-felt-well),
+    inset 0 0 0 5px var(--color-felt-line);
 }
 
 .theme {

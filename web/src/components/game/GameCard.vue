@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PaperCard from '../landing/PaperCard.vue'
+import CardBack from '../client/CardBack.vue'
+import { useSettingsStore } from '../../stores/settings'
 import { getRankLabel, getSuitSymbol, type Card } from '../../types/game'
 
 const props = withDefaults(
@@ -18,6 +20,8 @@ const props = withDefaults(
 
 defineEmits<{ (e: 'click'): void }>()
 
+const settings = useSettingsStore()
+
 const rank = computed(() => (props.card ? getRankLabel(props.card.rank) : ''))
 const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as '♠' | '♣' | '♥' | '♦') : undefined))
 </script>
@@ -32,7 +36,9 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as '�
     @click="$emit('click')"
   >
     <span class="flip">
-      <PaperCard :rank="rank" :suit="suit" />
+      <PaperCard :rank="rank" :suit="suit">
+        <template #back><CardBack :variant="settings.cardBack" /></template>
+      </PaperCard>
     </span>
   </button>
 </template>
