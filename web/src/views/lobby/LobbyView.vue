@@ -84,7 +84,7 @@ async function refreshTables(manual = false) {
 }
 
 function goToTable(id: string) {
-  sound.playCardDeal()
+  sound.playChips()
   router.push({ name: 'table', params: { id } })
 }
 

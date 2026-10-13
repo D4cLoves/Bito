@@ -39,7 +39,7 @@ const broke = computed(() => props.balance !== null && !affordable(stake.value))
 
 function pickStake(s: number) {
   if (!affordable(s) || stake.value === s) return
-  sound.playClick()
+  sound.playChip()
   stake.value = s
 }
 
@@ -58,7 +58,7 @@ function pickDeck(d: DeckSize) {
 
 function pickPlayers(n: number) {
   if (!fits(n) || players.value === n) return
-  sound.playCardDeal()
+  sound.playClick()
   players.value = n
 }
 

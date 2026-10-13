@@ -117,6 +117,23 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
 
           <div class="setting">
             <div class="setting-text">
+              <b>Музыка за столом</b>
+              <small>Лаунж-джаз Kevin MacLeod, incompetech.com, CC BY 4.0</small>
+            </div>
+            <button
+              type="button"
+              class="switch"
+              role="switch"
+              :aria-checked="settings.music"
+              aria-label="Музыка за столом"
+              @click="settings.music = !settings.music"
+            >
+              <span class="knob"></span>
+            </button>
+          </div>
+
+          <div class="setting">
+            <div class="setting-text">
               <b>Общий чат в лобби</b>
               <small>Скрыть, если отвлекает</small>
             </div>

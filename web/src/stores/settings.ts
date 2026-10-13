@@ -22,6 +22,7 @@ interface StoredSettings {
   cardBack: CardBackId
   showChat: boolean
   invites: InvitePolicy
+  music: boolean
 }
 
 const KEY = 'bito_settings'
@@ -33,6 +34,7 @@ const DEFAULTS: StoredSettings = {
   cardBack: 'classic',
   showChat: true,
   invites: 'all',
+  music: true,
 }
 
 function read(): StoredSettings {
@@ -59,6 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const cardBack = ref<CardBackId>(saved.cardBack)
   const showChat = ref(saved.showChat)
   const invites = ref<InvitePolicy>(saved.invites)
+  const music = ref(saved.music)
   const soundOn = ref(localStorage.getItem(SOUND_KEY) !== 'true')
   const owned = ref(new Set<string>(MOCK_OWNED))
 
@@ -81,18 +84,19 @@ export const useSettingsStore = defineStore('settings', () => {
     return true
   }
 
-  watch([theme, felt, cardBack, showChat, invites], () => {
+  watch([theme, felt, cardBack, showChat, invites, music], () => {
     const value: StoredSettings = {
       theme: theme.value,
       felt: felt.value,
       cardBack: cardBack.value,
       showChat: showChat.value,
       invites: invites.value,
+      music: music.value,
     }
     localStorage.setItem(KEY, JSON.stringify(value))
   })
 
   watch(soundOn, (on) => localStorage.setItem(SOUND_KEY, on ? 'false' : 'true'))
 
-  return { theme, felt, cardBack, showChat, invites, soundOn, owned, isOwned, isActive, select }
+  return { theme, felt, cardBack, showChat, invites, music, soundOn, owned, isOwned, isActive, select }
 })

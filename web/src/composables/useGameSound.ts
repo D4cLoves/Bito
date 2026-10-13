@@ -1,33 +1,64 @@
 const MUTED_KEY = 'bito_sound_muted'
+const BASE = '/sounds/'
+
+const SAMPLES = {
+  place: ['place-1', 'place-2', 'place-3', 'place-4'],
+  slide: ['slide-1', 'slide-2', 'slide-3', 'slide-4'],
+  shove: ['shove-1', 'shove-2'],
+  fan: ['fan-1', 'fan-2'],
+  pick: ['pick'],
+  shuffle: ['shuffle'],
+  chipCollide: ['chip-collide-1', 'chip-collide-2', 'chip-collide-3', 'chip-collide-4'],
+  chipStack: ['chip-stack-1', 'chip-stack-2', 'chip-stack-3'],
+  chipLay: ['chip-lay-1', 'chip-lay-2', 'chip-lay-3'],
+  chipsRattle: ['chips-rattle'],
+  tap: ['tap-1', 'tap-2'],
+  confirm: ['confirm'],
+  turn: ['turn'],
+  win: ['win'],
+  lose: ['lose'],
+  error: ['error'],
+  message: ['message'],
+} as const
+
+type Group = keyof typeof SAMPLES
+
+interface Voice {
+  gain: number
+  rate?: [number, number]
+  lowpass?: number
+  room?: number
+  at?: number
+}
 
 interface Engine {
   ctx: AudioContext
   dry: GainNode
   wet: GainNode
-  noise: AudioBuffer
-}
-
-interface NoiseOpts {
-  at?: number
-  dur: number
-  gain: number
-  type: BiquadFilterType
-  freq: number
-  freqEnd?: number
-  q?: number
-  attack?: number
-  room?: number
-}
-
-interface NoteOpts {
-  at?: number
-  freq: number
-  gain: number
-  decay: number
-  room?: number
+  buffers: Map<string, AudioBuffer>
 }
 
 let engine: Engine | null = null
+let raw: Promise<Map<string, ArrayBuffer>> | null = null
+const lastPlayed = new Map<Group, number>()
+const lastIndex = new Map<Group, number>()
+
+function fetchAll() {
+  if (raw) return raw
+  const names: string[] = [...new Set(Object.values(SAMPLES).flat())]
+  const loaded = new Map<string, ArrayBuffer>()
+  raw = Promise.all(
+    names.map(async (name) => {
+      try {
+        const res = await fetch(`${BASE}${name}.ogg`)
+        if (res.ok) loaded.set(name, await res.arrayBuffer())
+      } catch {
+        return
+      }
+    }),
+  ).then(() => loaded)
+  return raw
+}
 
 function createEngine(): Engine | null {
   if (typeof window === 'undefined') return null
@@ -36,14 +67,14 @@ function createEngine(): Engine | null {
   const ctx = new Ctx()
 
   const comp = ctx.createDynamicsCompressor()
-  comp.threshold.value = -18
-  comp.knee.value = 12
-  comp.ratio.value = 3
-  comp.attack.value = 0.003
-  comp.release.value = 0.15
+  comp.threshold.value = -14
+  comp.knee.value = 10
+  comp.ratio.value = 2.5
+  comp.attack.value = 0.005
+  comp.release.value = 0.2
 
   const master = ctx.createGain()
-  master.gain.value = 0.9
+  master.gain.value = 0.85
   master.connect(comp)
   comp.connect(ctx.destination)
 
@@ -51,16 +82,18 @@ function createEngine(): Engine | null {
   dry.connect(master)
 
   const reverb = ctx.createConvolver()
-  reverb.buffer = roomImpulse(ctx, 0.9)
+  reverb.buffer = roomImpulse(ctx, 0.7)
   const wet = ctx.createGain()
   wet.connect(reverb)
   reverb.connect(master)
 
-  const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate)
-  const data = noise.getChannelData(0)
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
-
-  return { ctx, dry, wet, noise }
+  const e: Engine = { ctx, dry, wet, buffers: new Map() }
+  fetchAll().then((map) =>
+    map.forEach((data, name) => {
+      ctx.decodeAudioData(data.slice(0)).then((buf) => e.buffers.set(name, buf)).catch(() => {})
+    }),
+  )
+  return e
 }
 
 function roomImpulse(ctx: AudioContext, seconds: number) {
@@ -68,7 +101,7 @@ function roomImpulse(ctx: AudioContext, seconds: number) {
   const buf = ctx.createBuffer(2, len, ctx.sampleRate)
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch)
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.5)
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4)
   }
   return buf
 }
@@ -80,109 +113,64 @@ function getEngine(): Engine | null {
 }
 
 if (typeof window !== 'undefined') {
+  fetchAll()
   const unlock = () => {
-    if (engine && engine.ctx.state === 'suspended') engine.ctx.resume().catch(() => {})
+    getEngine()
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('keydown', unlock)
   }
-  window.addEventListener('click', unlock, { once: true, passive: true })
-  window.addEventListener('keydown', unlock, { once: true, passive: true })
-  window.addEventListener('touchstart', unlock, { once: true, passive: true })
+  window.addEventListener('pointerdown', unlock, { passive: true })
+  window.addEventListener('keydown', unlock, { passive: true })
 }
 
-const vary = (value: number, spread: number) => value * (1 + (Math.random() * 2 - 1) * spread)
-
-function route(e: Engine, node: AudioNode, room: number) {
-  node.connect(e.dry)
-  if (room > 0) {
-    const send = e.ctx.createGain()
-    send.gain.value = room
-    node.connect(send)
-    send.connect(e.wet)
-  }
+function pickName(group: Group) {
+  const list = SAMPLES[group]
+  if (list.length === 1) return list[0]
+  const prev = lastIndex.get(group) ?? -1
+  let i = Math.floor(Math.random() * list.length)
+  if (i === prev) i = (i + 1) % list.length
+  lastIndex.set(group, i)
+  return list[i]
 }
 
-function noiseBurst(e: Engine, o: NoiseOpts) {
-  const t = e.ctx.currentTime + (o.at ?? 0)
-  const attack = o.attack ?? 0.002
+function voice(e: Engine, group: Group, v: Voice) {
+  const buf = e.buffers.get(pickName(group))
+  if (!buf) return
+  const t = e.ctx.currentTime + (v.at ?? 0)
+  const [lo, hi] = v.rate ?? [0.96, 1.04]
 
   const src = e.ctx.createBufferSource()
-  src.buffer = e.noise
+  src.buffer = buf
+  src.playbackRate.value = lo + Math.random() * (hi - lo)
 
-  const filter = e.ctx.createBiquadFilter()
-  filter.type = o.type
-  filter.Q.value = o.q ?? 1
-  filter.frequency.setValueAtTime(o.freq, t)
-  if (o.freqEnd) filter.frequency.exponentialRampToValueAtTime(o.freqEnd, t + o.dur)
+  const gain = e.ctx.createGain()
+  gain.gain.value = v.gain * (0.88 + Math.random() * 0.24)
 
-  const env = e.ctx.createGain()
-  env.gain.setValueAtTime(0.0001, t)
-  env.gain.linearRampToValueAtTime(o.gain, t + attack)
-  env.gain.exponentialRampToValueAtTime(0.0001, t + o.dur)
-
-  src.connect(filter)
-  filter.connect(env)
-  route(e, env, o.room ?? 0)
-  src.start(t, Math.random() * 1.5, o.dur + 0.05)
-}
-
-function marimba(e: Engine, o: NoteOpts) {
-  const t = e.ctx.currentTime + (o.at ?? 0)
-  const out = e.ctx.createGain()
-  out.gain.value = o.gain
-  route(e, out, o.room ?? 0.25)
-
-  const partials: [number, number, number][] = [
-    [1, 1, o.decay],
-    [3.93, 0.28, o.decay * 0.22],
-    [9.2, 0.06, o.decay * 0.08],
-  ]
-  for (const [ratio, level, decay] of partials) {
-    const osc = e.ctx.createOscillator()
-    osc.type = 'sine'
-    osc.frequency.value = o.freq * ratio
-    const env = e.ctx.createGain()
-    env.gain.setValueAtTime(0.0001, t)
-    env.gain.linearRampToValueAtTime(level, t + 0.004)
-    env.gain.exponentialRampToValueAtTime(0.0001, t + decay)
-    osc.connect(env)
-    env.connect(out)
-    osc.start(t)
-    osc.stop(t + decay + 0.02)
+  let tail: AudioNode = src
+  if (v.lowpass) {
+    const lp = e.ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = v.lowpass
+    lp.Q.value = 0.5
+    src.connect(lp)
+    tail = lp
   }
-}
-
-function thump(e: Engine, at: number, freq: number, gain: number, dur: number) {
-  const t = e.ctx.currentTime + at
-  const osc = e.ctx.createOscillator()
-  osc.type = 'sine'
-  osc.frequency.setValueAtTime(freq, t)
-  osc.frequency.exponentialRampToValueAtTime(freq * 0.6, t + dur)
-  const env = e.ctx.createGain()
-  env.gain.setValueAtTime(0.0001, t)
-  env.gain.linearRampToValueAtTime(gain, t + 0.002)
-  env.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-  osc.connect(env)
-  route(e, env, 0)
-  osc.start(t)
-  osc.stop(t + dur + 0.02)
-}
-
-function chip(e: Engine, at: number, gain: number) {
-  const t = e.ctx.currentTime + at
-  const base = vary(3400, 0.18)
-  for (const ratio of [1, 1.47, 2.09]) {
-    const osc = e.ctx.createOscillator()
-    osc.type = 'sine'
-    osc.frequency.value = base * ratio
-    const env = e.ctx.createGain()
-    env.gain.setValueAtTime(0.0001, t)
-    env.gain.linearRampToValueAtTime(gain / ratio, t + 0.001)
-    env.gain.exponentialRampToValueAtTime(0.0001, t + vary(0.07, 0.3))
-    osc.connect(env)
-    route(e, env, 0.15)
-    osc.start(t)
-    osc.stop(t + 0.12)
+  tail.connect(gain)
+  gain.connect(e.dry)
+  if (v.room) {
+    const send = e.ctx.createGain()
+    send.gain.value = v.room
+    gain.connect(send)
+    send.connect(e.wet)
   }
-  noiseBurst(e, { at, dur: 0.012, gain: gain * 1.4, type: 'bandpass', freq: vary(5200, 0.15), q: 3 })
+  src.start(t)
+}
+
+function throttled(group: Group, gapMs: number) {
+  const now = performance.now()
+  if (now - (lastPlayed.get(group) ?? -Infinity) < gapMs) return true
+  lastPlayed.set(group, now)
+  return false
 }
 
 export function useGameSound() {
@@ -198,97 +186,42 @@ export function useGameSound() {
     return next
   }
 
-  function play(fn: (e: Engine) => void) {
+  function play(group: Group, v: Voice, gapMs = 0) {
     if (isMuted()) return
+    if (gapMs && throttled(group, gapMs)) return
     const e = getEngine()
-    if (e) fn(e)
+    if (e) voice(e, group, v)
   }
 
-  const playCardDrop = () =>
-    play((e) => {
-      noiseBurst(e, { dur: 0.018, gain: vary(0.12, 0.2), type: 'highpass', freq: vary(3200, 0.15), room: 0.05 })
-      noiseBurst(e, { dur: vary(0.07, 0.15), gain: vary(0.32, 0.15), type: 'bandpass', freq: vary(1100, 0.2), q: 0.8, room: 0.08 })
-      thump(e, 0, vary(210, 0.1), 0.07, 0.05)
-    })
+  const playCardDrop = () => play('place', { gain: 0.5, rate: [0.92, 1.04], lowpass: 7000, room: 0.12 })
+  const playCardDeal = () => play('slide', { gain: 0.38, rate: [0.94, 1.08], lowpass: 7000, room: 0.08 })
+  const playCardSweep = () => play('shove', { gain: 0.42, rate: [0.95, 1.05], lowpass: 6000, room: 0.12 }, 280)
+  const playCardTake = () => play('fan', { gain: 0.5, rate: [0.97, 1.05], room: 0.1 }, 350)
+  const playCardPick = () => play('pick', { gain: 0.16, rate: [0.95, 1.1] })
+  const playShuffle = () => play('shuffle', { gain: 0.63, rate: [0.98, 1.02], lowpass: 6500, room: 0.12 }, 1500)
 
-  const playCardDeal = () =>
-    play((e) => {
-      noiseBurst(e, { dur: vary(0.1, 0.15), gain: vary(0.16, 0.2), type: 'bandpass', freq: vary(3400, 0.1), freqEnd: 1500, q: 1.3, attack: 0.025, room: 0.06 })
-      noiseBurst(e, { at: 0.085, dur: 0.03, gain: vary(0.1, 0.2), type: 'bandpass', freq: vary(1300, 0.15), q: 0.9 })
-    })
+  const playClick = () => play('tap', { gain: 0.11, rate: [0.97, 1.03], lowpass: 3500 })
+  const playChip = () => play('chipLay', { gain: 0.24, rate: [0.9, 1.0], lowpass: 3800, room: 0.1 })
 
-  const playCardSweep = () =>
-    play((e) => {
-      noiseBurst(e, { dur: vary(0.17, 0.1), gain: vary(0.16, 0.15), type: 'lowpass', freq: 2600, freqEnd: 700, q: 0.7, attack: 0.04, room: 0.1 })
-    })
+  function playChips() {
+    play('chipStack', { gain: 0.48, rate: [0.88, 0.96], lowpass: 3600, room: 0.12 })
+    play('chipCollide', { gain: 0.35, rate: [0.88, 0.96], lowpass: 3600, room: 0.12, at: 0.09 })
+  }
 
-  const playCardTake = () =>
-    play((e) => {
-      noiseBurst(e, { dur: vary(0.12, 0.1), gain: vary(0.22, 0.15), type: 'bandpass', freq: vary(1300, 0.1), freqEnd: 2800, q: 1.1, attack: 0.03, room: 0.06 })
-    })
+  const playMessage = () => play('message', { gain: 0.15, rate: [0.98, 1.02], lowpass: 3000, room: 0.1 })
+  const playSuccess = () => play('confirm', { gain: 0.15, rate: [1, 1], lowpass: 4000, room: 0.15 })
+  const playError = () => play('error', { gain: 0.24, rate: [1, 1], lowpass: 2500 }, 250)
+  const playYourTurn = () => play('turn', { gain: 0.34, rate: [1, 1], lowpass: 4500, room: 0.2 })
 
-  const playCardPick = () =>
-    play((e) => {
-      noiseBurst(e, { dur: 0.03, gain: 0.1, type: 'bandpass', freq: vary(2600, 0.1), freqEnd: 3800, q: 1.5, attack: 0.006 })
-    })
+  function playChipsWin() {
+    play('chipsRattle', { gain: 0.5, rate: [0.9, 0.95], lowpass: 3800, room: 0.15 })
+    play('win', { gain: 0.24, rate: [1, 1], lowpass: 4500, room: 0.25, at: 0.35 })
+  }
 
-  const playClick = () =>
-    play((e) => {
-      marimba(e, { freq: vary(1180, 0.02), gain: 0.07, decay: 0.06, room: 0 })
-      noiseBurst(e, { dur: 0.006, gain: 0.04, type: 'highpass', freq: 4000 })
-    })
-
-  const playMessage = () =>
-    play((e) => {
-      const t = e.ctx.currentTime
-      const osc = e.ctx.createOscillator()
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(620, t)
-      osc.frequency.exponentialRampToValueAtTime(980, t + 0.05)
-      const env = e.ctx.createGain()
-      env.gain.setValueAtTime(0.0001, t)
-      env.gain.linearRampToValueAtTime(0.2, t + 0.008)
-      env.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
-      osc.connect(env)
-      route(e, env, 0.1)
-      osc.start(t)
-      osc.stop(t + 0.14)
-    })
-
-  const playSuccess = () =>
-    play((e) => {
-      marimba(e, { freq: 659.25, gain: 0.16, decay: 0.5 })
-      marimba(e, { at: 0.09, freq: 987.77, gain: 0.15, decay: 0.7 })
-    })
-
-  const playError = () =>
-    play((e) => {
-      marimba(e, { freq: 392, gain: 0.085, decay: 0.25, room: 0.1 })
-      marimba(e, { at: 0.08, freq: 349.23, gain: 0.08, decay: 0.3, room: 0.1 })
-    })
-
-  const playChipsWin = () =>
-    play((e) => {
-      let at = 0
-      for (let i = 0; i < 7; i++) {
-        chip(e, at, vary(0.07, 0.25))
-        at += vary(0.075 - i * 0.006, 0.25)
-      }
-      const chord = [523.25, 659.25, 783.99, 1046.5]
-      chord.forEach((freq, i) => marimba(e, { at: 0.12 + i * 0.075, freq, gain: 0.14, decay: 0.9, room: 0.35 }))
-    })
-
-  const playLose = () =>
-    play((e) => {
-      const notes = [392, 329.63, 261.63]
-      notes.forEach((freq, i) => marimba(e, { at: i * 0.16, freq, gain: 0.15, decay: 0.8, room: 0.4 }))
-    })
-
-  const playYourTurn = () =>
-    play((e) => {
-      marimba(e, { freq: 880, gain: 0.2, decay: 0.7, room: 0.3 })
-      marimba(e, { at: 0.13, freq: 1318.51, gain: 0.2, decay: 0.9, room: 0.3 })
-    })
+  function playLose() {
+    play('fan', { gain: 0.32, rate: [0.9, 0.95], room: 0.12 })
+    play('lose', { gain: 0.16, rate: [0.94, 0.94], lowpass: 2500, room: 0.25, at: 0.3 })
+  }
 
   return {
     isMuted,
@@ -299,7 +232,10 @@ export function useGameSound() {
     playCardSweep,
     playCardTake,
     playCardPick,
+    playShuffle,
     playClick,
+    playChip,
+    playChips,
     playMessage,
     playSuccess,
     playError,

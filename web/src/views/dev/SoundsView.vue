@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useGameSound } from '../../composables/useGameSound'
 import { useSettingsStore } from '../../stores/settings'
+import { useLoungeMusic } from '../../composables/useLoungeMusic'
 
 const sound = useGameSound()
 const settings = useSettingsStore()
+useLoungeMusic()
 
 const groups = [
   {
@@ -14,13 +16,14 @@ const groups = [
       { label: 'Бито', where: 'карты уходят в отбой', play: sound.playCardSweep },
       { label: 'Взять', where: 'карты со стола в руку', play: sound.playCardTake },
       { label: 'Выбор карты', where: 'клик по карте в руке', play: sound.playCardPick },
+      { label: 'Тасовка', where: 'начало партии', play: sound.playShuffle },
     ],
   },
   {
     title: 'Партия',
     items: [
       { label: 'Ваш ход', where: 'вкладка свёрнута', play: sound.playYourTurn },
-      { label: 'Победа', where: 'конец партии, вы не дурак', play: sound.playChipsWin },
+      { label: 'Победа', where: 'конец партии, бонус при регистрации', play: sound.playChipsWin },
       { label: 'Проигрыш', where: 'конец партии, вы дурак', play: sound.playLose },
       { label: 'Сообщение', where: 'чат за столом', play: sound.playMessage },
     ],
@@ -28,7 +31,9 @@ const groups = [
   {
     title: 'Интерфейс',
     items: [
-      { label: 'Клик', where: 'кнопки, переключатели', play: sound.playClick },
+      { label: 'Клик', where: 'кнопки, режим, колода, вкладки', play: sound.playClick },
+      { label: 'Фишка', where: 'выбор ставки', play: sound.playChip },
+      { label: 'Ставка', where: 'садишься за стол', play: sound.playChips },
       { label: 'Успех', where: 'сохранено, вход, ничья', play: sound.playSuccess },
       { label: 'Ошибка', where: 'неверный ход, ошибка формы', play: sound.playError },
     ],
@@ -45,6 +50,10 @@ function burst(fn: () => void, count: number, gap: number) {
     <header>
       <h1>Звуки</h1>
       <p v-if="!settings.soundOn" class="warn">Звук выключен в настройках, кнопки молчат.</p>
+      <button type="button" class="music" @click="settings.music = !settings.music">
+        <b>{{ settings.music ? 'Выключить музыку' : 'Включить музыку' }}</b>
+        <span>лаунж-плейлист, как за столом</span>
+      </button>
     </header>
 
     <section v-for="g in groups" :key="g.title">
@@ -104,6 +113,11 @@ h2 {
   letter-spacing: 0.08em;
   color: var(--color-ink-muted);
   margin-bottom: 10px;
+}
+
+.music {
+  margin-top: 14px;
+  max-width: 280px;
 }
 
 .warn {

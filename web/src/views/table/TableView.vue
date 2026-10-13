@@ -21,6 +21,7 @@ import { useGameSocket } from '../../composables/useGameSocket'
 import { useCardFlights, type FlightKind } from '../../composables/useCardFlights'
 import { useGameSound } from '../../composables/useGameSound'
 import { useTurnAlert } from '../../composables/useTurnAlert'
+import { useLoungeMusic } from '../../composables/useLoungeMusic'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE } from '../../constants/economy'
 import { canBeat, cardKey, sameCard, type Card, type CardPair, type PlayerView, type TableInfo } from '../../types/game'
@@ -186,6 +187,7 @@ const turnSeconds = computed(() => Math.ceil(turnLeft.value / 1000))
 const turnFraction = computed(() => Math.min(1, turnLeft.value / TURN_MS))
 
 useTurnAlert(myTurn, turnLeft)
+useLoungeMusic()
 
 const roleOf = (id: string) => (id === state.value?.defenderId ? 'defender' : id === state.value?.attackerId ? 'attacker' : null)
 
@@ -422,6 +424,7 @@ watch(
 
 watch(state, (s, prev) => {
   if (!s) return
+  if (!prev && !gameOver.value) sound.playShuffle()
   launching.value = null
   if (selected.value && !(s.myHand ?? []).some((c) => sameCard(c, selected.value!))) selected.value = null
   if (prev && s.defenderId !== prev.defenderId) selected.value = null
