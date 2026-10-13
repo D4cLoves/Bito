@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { motion } from 'motion-v'
-import { PhPaintBrush, PhGameController, PhUserCircle, PhLockKey, PhCheck } from '@phosphor-icons/vue'
+import { PhPaintBrush, PhGameController, PhUserCircle, PhLockKey, PhCheck, PhLockSimple } from '@phosphor-icons/vue'
 import CardBack from '../client/CardBack.vue'
+import ChipIcon from '../client/ChipIcon.vue'
 import AccountForm from '../profile/AccountForm.vue'
 import SecurityForm from '../profile/SecurityForm.vue'
-import { useSettingsStore, type CardBackId, type FeltId, type InvitePolicy, type ThemeId } from '../../stores/settings'
+import { useSettingsStore, type InvitePolicy } from '../../stores/settings'
+import { CARD_BACKS as BACKS, FELTS, THEMES, type CardBackId, type CosmeticKind, type FeltId, type ThemeId } from '../../constants/cosmetics'
 import { useGameSound } from '../../composables/useGameSound'
 import type { Profile } from '../../types/user'
 
 type Section = 'appearance' | 'game' | 'account' | 'security'
 
 const props = defineProps<{ section: string | null; profile: Profile | null }>()
-const emit = defineEmits<{ (e: 'section', id: Section): void }>()
+const emit = defineEmits<{ (e: 'section', id: Section): void; (e: 'shop'): void }>()
 
 const settings = useSettingsStore()
 const sound = useGameSound()
@@ -24,27 +26,6 @@ const SECTIONS: { id: Section; label: string; icon: typeof PhPaintBrush }[] = [
   { id: 'security', label: 'Безопасность', icon: PhLockKey },
 ]
 
-const THEMES: { id: ThemeId; name: string; note: string }[] = [
-  { id: 'paper', name: 'Бумага', note: 'светлая, как на лендинге' },
-  { id: 'hall', name: 'Тёмный зал', note: 'тёплый свет над столом' },
-  { id: 'forest', name: 'Лес', note: 'тёмно-зелёная' },
-]
-
-const FELTS: { id: FeltId; name: string }[] = [
-  { id: 'linen', name: 'Льняное' },
-  { id: 'green', name: 'Зелёное' },
-  { id: 'wine', name: 'Бордо' },
-  { id: 'navy', name: 'Синее' },
-  { id: 'graphite', name: 'Графит' },
-]
-
-const BACKS: { id: CardBackId; name: string }[] = [
-  { id: 'classic', name: 'Классика' },
-  { id: 'midnight', name: 'Полночь' },
-  { id: 'bito', name: 'Bito' },
-  { id: 'grove', name: 'Роща' },
-]
-
 const INVITES: { id: InvitePolicy; label: string }[] = [
   { id: 'all', label: 'От всех' },
   { id: 'friends', label: 'От друзей' },
@@ -53,20 +34,27 @@ const INVITES: { id: InvitePolicy; label: string }[] = [
 
 const current = computed<Section>(() => SECTIONS.find((s) => s.id === props.section)?.id ?? 'appearance')
 
+function unlocked(kind: CosmeticKind, id: string) {
+  if (settings.isOwned(kind, id)) return true
+  sound.playClick()
+  emit('shop')
+  return false
+}
+
 function setTheme(id: ThemeId) {
-  if (settings.theme === id) return
+  if (settings.theme === id || !unlocked('theme', id)) return
   sound.playClick()
   settings.theme = id
 }
 
 function setFelt(id: FeltId) {
-  if (settings.felt === id) return
+  if (settings.felt === id || !unlocked('felt', id)) return
   sound.playClick()
   settings.felt = id
 }
 
 function setCardBack(id: CardBackId) {
-  if (settings.cardBack === id) return
+  if (settings.cardBack === id || !unlocked('back', id)) return
   sound.playClick()
   settings.cardBack = id
 }
@@ -106,7 +94,7 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
               :key="t.id"
               type="button"
               class="option theme"
-              :class="{ on: settings.theme === t.id }"
+              :class="{ on: settings.theme === t.id, locked: !settings.isOwned('theme', t.id) }"
               :aria-pressed="settings.theme === t.id"
               @click="setTheme(t.id)"
             >
@@ -123,6 +111,7 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
                 <small>{{ t.note }}</small>
               </span>
               <PhCheck v-if="settings.theme === t.id" class="check" :size="16" weight="bold" />
+              <span v-if="!settings.isOwned('theme', t.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ t.price.toLocaleString('ru-RU') }}</span>
             </button>
           </div>
         </section>
@@ -135,13 +124,14 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
               :key="f.id"
               type="button"
               class="option felt"
-              :class="{ on: settings.felt === f.id }"
+              :class="{ on: settings.felt === f.id, locked: !settings.isOwned('felt', f.id) }"
               :aria-pressed="settings.felt === f.id"
               @click="setFelt(f.id)"
             >
               <span class="felt-preview" :data-felt="f.id" aria-hidden="true"></span>
               <span class="option-text"><b>{{ f.name }}</b></span>
               <PhCheck v-if="settings.felt === f.id" class="check" :size="16" weight="bold" />
+              <span v-if="!settings.isOwned('felt', f.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ f.price.toLocaleString('ru-RU') }}</span>
             </button>
           </div>
         </section>
@@ -154,16 +144,17 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
               :key="b.id"
               type="button"
               class="option back"
-              :class="{ on: settings.cardBack === b.id }"
+              :class="{ on: settings.cardBack === b.id, locked: !settings.isOwned('back', b.id) }"
               :aria-pressed="settings.cardBack === b.id"
               @click="setCardBack(b.id)"
             >
               <span class="back-preview"><CardBack :variant="b.id" /></span>
               <span class="option-text"><b>{{ b.name }}</b></span>
               <PhCheck v-if="settings.cardBack === b.id" class="check" :size="16" weight="bold" />
+              <span v-if="!settings.isOwned('back', b.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ b.price.toLocaleString('ru-RU') }}</span>
             </button>
           </div>
-          <p class="hint">Новые темы, сукно и рубашки появятся в магазине.</p>
+          <p class="hint">Закрытые предметы продаются в магазине за фишки — нажмите, чтобы перейти.</p>
         </section>
       </template>
 
@@ -297,15 +288,15 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
 }
 
 .themes {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 }
 
 .felts {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
 
 .backs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
 }
 
 .option {
@@ -331,6 +322,33 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
 
 .option.on {
   box-shadow: inset 0 0 0 2px var(--color-gold);
+}
+
+.option.locked > :not(.price) {
+  opacity: 0.78;
+  filter: saturate(0.85);
+}
+
+.option.locked:hover > :not(.price) {
+  opacity: 0.85;
+  filter: none;
+}
+
+.price {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: var(--color-paper-raised);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.25);
+  color: var(--color-gold-ink);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .check {

@@ -287,9 +287,14 @@ onUnmounted(() => {
           :section="panels.section.value"
           :profile="profile"
           @section="panels.setSection"
+          @shop="panels.open('shop')"
         />
         <Leaderboard v-else-if="panels.panel.value === 'leaderboard'" :my-id="auth.user?.id" />
-        <ShopPanel v-else-if="panels.panel.value === 'shop'" @buy="soon('Магазин откроется вместе с экономикой')" />
+        <ShopPanel
+          v-else-if="panels.panel.value === 'shop'"
+          :balance="balance"
+          @buy="(item) => soon(`«${item.name}» можно будет купить, когда заработают покупки на сервере`)"
+        />
       </OverlayPanel>
 
       <OverlayPanel

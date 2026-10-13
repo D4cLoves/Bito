@@ -1,9 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import {
+  CARD_BACKS,
+  CATALOG,
+  FELTS,
+  THEMES,
+  isKnown,
+  type CardBackId,
+  type CosmeticKind,
+  type FeltId,
+  type ThemeId,
+} from '../constants/cosmetics'
+import { MOCK_OWNED } from '../mocks/lobby'
 
-export type ThemeId = 'hall' | 'paper' | 'forest'
-export type FeltId = 'linen' | 'green' | 'wine' | 'navy' | 'graphite'
-export type CardBackId = 'classic' | 'midnight' | 'bito' | 'grove'
+export type { CardBackId, FeltId, ThemeId } from '../constants/cosmetics'
 export type InvitePolicy = 'all' | 'friends' | 'nobody'
 
 interface StoredSettings {
@@ -26,10 +36,18 @@ const DEFAULTS: StoredSettings = {
 }
 
 function read(): StoredSettings {
+  let raw: Partial<StoredSettings> = {}
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
+    raw = JSON.parse(localStorage.getItem(KEY) ?? '{}')
   } catch {
-    return { ...DEFAULTS }
+    raw = {}
+  }
+  return {
+    ...DEFAULTS,
+    ...raw,
+    theme: isKnown(THEMES, raw.theme) ? raw.theme : DEFAULTS.theme,
+    felt: isKnown(FELTS, raw.felt) ? raw.felt : DEFAULTS.felt,
+    cardBack: isKnown(CARD_BACKS, raw.cardBack) ? raw.cardBack : DEFAULTS.cardBack,
   }
 }
 
@@ -42,6 +60,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const showChat = ref(saved.showChat)
   const invites = ref<InvitePolicy>(saved.invites)
   const soundOn = ref(localStorage.getItem(SOUND_KEY) !== 'true')
+  const owned = ref(new Set<string>(MOCK_OWNED))
+
+  function isOwned(kind: CosmeticKind, id: string) {
+    const item = CATALOG[kind].find((i) => i.id === id)
+    return !!item && (item.price === 0 || owned.value.has(`${kind}:${id}`))
+  }
 
   watch([theme, felt, cardBack, showChat, invites], () => {
     const value: StoredSettings = {
@@ -56,5 +80,5 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(soundOn, (on) => localStorage.setItem(SOUND_KEY, on ? 'false' : 'true'))
 
-  return { theme, felt, cardBack, showChat, invites, soundOn }
+  return { theme, felt, cardBack, showChat, invites, soundOn, owned, isOwned }
 })
