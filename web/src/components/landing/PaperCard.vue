@@ -49,13 +49,13 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
 }
 
 .face--front {
-  background: linear-gradient(160deg, var(--color-paper-raised), #f2efe7);
-  color: var(--color-card-ink);
+  background: linear-gradient(160deg, #fbfaf6, #f2efe7);
+  color: #2b2824;
   font-family: var(--font-card);
 }
 
 .face--front.red {
-  color: var(--color-red);
+  color: #a1473f;
 }
 
 .face--back {
@@ -81,7 +81,7 @@ const red = computed(() => props.suit === '♥' || props.suit === '♦')
   background:
     repeating-linear-gradient(45deg, transparent 0 6px, rgba(160, 148, 124, 0.18) 6px 7px),
     repeating-linear-gradient(-45deg, transparent 0 6px, rgba(160, 148, 124, 0.18) 6px 7px),
-    var(--color-card-back);
+    #e7e1d4;
 }
 
 .back-mark {
