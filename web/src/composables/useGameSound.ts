@@ -247,6 +247,36 @@ export function useGameSound() {
     osc.stop(now + 0.12)
   }
 
+  /**
+   * Your Turn Ding:
+   * Two-tone bell to call the player back to a hidden tab.
+   */
+  function playYourTurn() {
+    if (isMuted()) return
+    const ctx = getAudioContext()
+    if (!ctx) return
+
+    const now = ctx.currentTime
+    const notes = [880, 1318.51] // A5, E6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const start = now + i * 0.14
+
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, start)
+
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.exponentialRampToValueAtTime(0.2, start + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + 0.45)
+    })
+  }
+
   return {
     isMuted,
     setMuted,
@@ -257,5 +287,6 @@ export function useGameSound() {
     playClick,
     playSuccess,
     playError,
+    playYourTurn,
   }
 }
