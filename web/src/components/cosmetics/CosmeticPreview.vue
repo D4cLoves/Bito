@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import CardBack from '../client/CardBack.vue'
-import PaperCard from '../landing/PaperCard.vue'
 import type { CardBackId, CosmeticKind } from '../../constants/cosmetics'
 
 defineProps<{ kind: CosmeticKind; id: string }>()
@@ -14,8 +13,8 @@ defineProps<{ kind: CosmeticKind; id: string }>()
 
     <div v-else-if="kind === 'felt'" class="table" :data-felt="id">
       <span class="rim"></span>
-      <span class="mini m1"><PaperCard rank="Q" suit="♥" /></span>
-      <span class="mini m2"><PaperCard rank="A" suit="♠" /></span>
+      <span class="mini m1 red">♥</span>
+      <span class="mini m2">♠</span>
     </div>
 
     <div v-else class="ui">
@@ -73,8 +72,8 @@ defineProps<{ kind: CosmeticKind; id: string }>()
     radial-gradient(ellipse 70% 60% at 50% 35%, rgba(255, 255, 255, 0.14), transparent 70%),
     radial-gradient(ellipse at 50% 50%, var(--color-felt), var(--color-felt-deep));
   box-shadow:
-    0 0 0 5px #fbfaf6,
-    0 0 0 6px rgba(0, 0, 0, 0.12),
+    0 0 0 5px color-mix(in srgb, var(--color-paper-raised) 80%, #ffffff 20%),
+    0 0 0 6px var(--color-line-strong),
     inset 0 0 22px color-mix(in srgb, var(--color-felt-deep) 70%, transparent),
     0 18px 26px -16px rgba(0, 0, 0, 0.55);
 }
@@ -88,25 +87,25 @@ defineProps<{ kind: CosmeticKind; id: string }>()
 
 .mini {
   position: absolute;
-  top: 26%;
-  width: 17%;
+  top: 24%;
+  display: grid;
+  place-items: center;
+  width: 15%;
   aspect-ratio: 5 / 7;
-  font-size: 7px;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #fdfcf8, #f0ece2);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 6px 10px -6px rgba(0, 0, 0, 0.6);
+  color: #2b2824;
+  font-family: var(--font-card);
+  font-size: 15px;
+  line-height: 1;
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.mini :deep(.index) {
-  font-size: 8px;
-  left: 3px;
-  top: 2px;
-}
-
-.mini :deep(.index--bottom) {
-  display: none;
-}
-
-.mini :deep(.pip) {
-  font-size: 16px;
+.mini.red {
+  color: #a1473f;
 }
 
 .m1 {
