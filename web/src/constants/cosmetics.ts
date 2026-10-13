@@ -1,4 +1,5 @@
 export type CosmeticKind = 'theme' | 'felt' | 'back'
+export type CosmeticFilterValue = 'all' | CosmeticKind
 
 export interface CosmeticItem<Id extends string = string> {
   id: Id
@@ -54,3 +55,13 @@ export const CATALOG: Record<CosmeticKind, readonly CosmeticItem[]> = {
 export function isKnown<T extends string>(items: readonly CosmeticItem<T>[], id: unknown): id is T {
   return items.some((item) => item.id === id)
 }
+
+export interface CatalogEntry extends CosmeticItem {
+  kind: CosmeticKind
+}
+
+export const ALL_ITEMS: CatalogEntry[] = [
+  ...CARD_BACKS.map((i) => ({ ...i, kind: 'back' as const })),
+  ...FELTS.map((i) => ({ ...i, kind: 'felt' as const })),
+  ...THEMES.map((i) => ({ ...i, kind: 'theme' as const })),
+]

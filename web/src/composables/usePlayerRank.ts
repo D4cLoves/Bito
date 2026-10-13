@@ -10,7 +10,7 @@ export function rankTitle(games: number): string {
 export function memberSince(iso?: string): string {
   if (!iso) return ''
   const d = new Date(iso)
-  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
 export function winRate(wins: number, losses: number): number | null {

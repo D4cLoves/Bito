@@ -67,6 +67,20 @@ export const useSettingsStore = defineStore('settings', () => {
     return !!item && (item.price === 0 || owned.value.has(`${kind}:${id}`))
   }
 
+  function isActive(kind: CosmeticKind, id: string) {
+    if (kind === 'back') return cardBack.value === id
+    if (kind === 'felt') return felt.value === id
+    return theme.value === id
+  }
+
+  function select(kind: CosmeticKind, id: string) {
+    if (!isOwned(kind, id)) return false
+    if (kind === 'back' && isKnown(CARD_BACKS, id)) cardBack.value = id
+    else if (kind === 'felt' && isKnown(FELTS, id)) felt.value = id
+    else if (kind === 'theme' && isKnown(THEMES, id)) theme.value = id
+    return true
+  }
+
   watch([theme, felt, cardBack, showChat, invites], () => {
     const value: StoredSettings = {
       theme: theme.value,
@@ -80,5 +94,5 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(soundOn, (on) => localStorage.setItem(SOUND_KEY, on ? 'false' : 'true'))
 
-  return { theme, felt, cardBack, showChat, invites, soundOn, owned, isOwned }
+  return { theme, felt, cardBack, showChat, invites, soundOn, owned, isOwned, isActive, select }
 })

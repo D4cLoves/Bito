@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { motion } from 'motion-v'
-import { PhPaintBrush, PhGameController, PhUserCircle, PhLockKey, PhCheck, PhLockSimple } from '@phosphor-icons/vue'
-import CardBack from '../client/CardBack.vue'
-import ChipIcon from '../client/ChipIcon.vue'
+import { PhPaintBrush, PhGameController, PhUserCircle, PhLockKey, PhStorefront } from '@phosphor-icons/vue'
+import CosmeticTile from '../cosmetics/CosmeticTile.vue'
+import CosmeticFilter from '../cosmetics/CosmeticFilter.vue'
 import AccountForm from '../profile/AccountForm.vue'
 import SecurityForm from '../profile/SecurityForm.vue'
 import { useSettingsStore, type InvitePolicy } from '../../stores/settings'
-import { CARD_BACKS as BACKS, FELTS, THEMES, type CardBackId, type CosmeticKind, type FeltId, type ThemeId } from '../../constants/cosmetics'
+import { ALL_ITEMS, type CatalogEntry, type CosmeticFilterValue } from '../../constants/cosmetics'
 import { useGameSound } from '../../composables/useGameSound'
 import type { Profile } from '../../types/user'
 
@@ -34,29 +34,22 @@ const INVITES: { id: InvitePolicy; label: string }[] = [
 
 const current = computed<Section>(() => SECTIONS.find((s) => s.id === props.section)?.id ?? 'appearance')
 
-function unlocked(kind: CosmeticKind, id: string) {
-  if (settings.isOwned(kind, id)) return true
-  sound.playClick()
-  emit('shop')
-  return false
-}
+const filter = ref<CosmeticFilterValue>('all')
+const owned = computed(() => ALL_ITEMS.filter((i) => settings.isOwned(i.kind, i.id)))
+const ownedVisible = computed(() => (filter.value === 'all' ? owned.value : owned.value.filter((i) => i.kind === filter.value)))
+const ownedCounts = computed(() => ({
+  all: owned.value.length,
+  back: owned.value.filter((i) => i.kind === 'back').length,
+  felt: owned.value.filter((i) => i.kind === 'felt').length,
+  theme: owned.value.filter((i) => i.kind === 'theme').length,
+}))
+const lockedLeft = computed(
+  () => ALL_ITEMS.filter((i) => (filter.value === 'all' || i.kind === filter.value) && !settings.isOwned(i.kind, i.id)).length,
+)
 
-function setTheme(id: ThemeId) {
-  if (settings.theme === id || !unlocked('theme', id)) return
-  sound.playClick()
-  settings.theme = id
-}
-
-function setFelt(id: FeltId) {
-  if (settings.felt === id || !unlocked('felt', id)) return
-  sound.playClick()
-  settings.felt = id
-}
-
-function setCardBack(id: CardBackId) {
-  if (settings.cardBack === id || !unlocked('back', id)) return
-  sound.playClick()
-  settings.cardBack = id
+function pick(item: CatalogEntry) {
+  if (settings.isActive(item.kind, item.id)) return
+  if (settings.select(item.kind, item.id)) sound.playClick()
 }
 
 function toggleSound() {
@@ -86,76 +79,28 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
 
     <div class="content">
       <template v-if="current === 'appearance'">
-        <section class="block">
-          <h3>Тема</h3>
-          <div class="options themes">
-            <button
-              v-for="t in THEMES"
-              :key="t.id"
-              type="button"
-              class="option theme"
-              :class="{ on: settings.theme === t.id, locked: !settings.isOwned('theme', t.id) }"
-              :aria-pressed="settings.theme === t.id"
-              @click="setTheme(t.id)"
-            >
-              <span class="theme-preview" :data-theme="t.id" aria-hidden="true">
-                <span class="tp-rail"></span>
-                <span class="tp-main">
-                  <span class="tp-felt"></span>
-                  <span class="tp-row"><i></i><i></i><i></i></span>
-                </span>
-                <span class="tp-side"><i></i><i></i></span>
-              </span>
-              <span class="option-text">
-                <b>{{ t.name }}</b>
-                <small>{{ t.note }}</small>
-              </span>
-              <PhCheck v-if="settings.theme === t.id" class="check" :size="16" weight="bold" />
-              <span v-if="!settings.isOwned('theme', t.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ t.price.toLocaleString('ru-RU') }}</span>
+        <div class="wardrobe-head">
+          <CosmeticFilter v-model="filter" :counts="ownedCounts" layout-id="settings-filter" />
+        </div>
+        <ul class="wardrobe">
+          <li v-for="item in ownedVisible" :key="`${item.kind}:${item.id}`">
+            <CosmeticTile
+              :kind="item.kind"
+              :id="item.id"
+              :name="item.name"
+              :active="settings.isActive(item.kind, item.id)"
+              clickable
+              @pick="pick(item)"
+            />
+          </li>
+          <li v-if="lockedLeft">
+            <button type="button" class="more" @click="emit('shop')">
+              <PhStorefront :size="28" />
+              <b>Ещё {{ lockedLeft }} в магазине</b>
+              <small>рубашки, сукно и темы за фишки</small>
             </button>
-          </div>
-        </section>
-
-        <section class="block">
-          <h3>Сукно стола</h3>
-          <div class="options felts">
-            <button
-              v-for="f in FELTS"
-              :key="f.id"
-              type="button"
-              class="option felt"
-              :class="{ on: settings.felt === f.id, locked: !settings.isOwned('felt', f.id) }"
-              :aria-pressed="settings.felt === f.id"
-              @click="setFelt(f.id)"
-            >
-              <span class="felt-preview" :data-felt="f.id" aria-hidden="true"></span>
-              <span class="option-text"><b>{{ f.name }}</b></span>
-              <PhCheck v-if="settings.felt === f.id" class="check" :size="16" weight="bold" />
-              <span v-if="!settings.isOwned('felt', f.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ f.price.toLocaleString('ru-RU') }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="block">
-          <h3>Рубашка карт</h3>
-          <div class="options backs">
-            <button
-              v-for="b in BACKS"
-              :key="b.id"
-              type="button"
-              class="option back"
-              :class="{ on: settings.cardBack === b.id, locked: !settings.isOwned('back', b.id) }"
-              :aria-pressed="settings.cardBack === b.id"
-              @click="setCardBack(b.id)"
-            >
-              <span class="back-preview"><CardBack :variant="b.id" /></span>
-              <span class="option-text"><b>{{ b.name }}</b></span>
-              <PhCheck v-if="settings.cardBack === b.id" class="check" :size="16" weight="bold" />
-              <span v-if="!settings.isOwned('back', b.id)" class="price"><PhLockSimple :size="12" weight="bold" /><ChipIcon :size="14" />{{ b.price.toLocaleString('ru-RU') }}</span>
-            </button>
-          </div>
-          <p class="hint">Закрытые предметы продаются в магазине за фишки — нажмите, чтобы перейти.</p>
-        </section>
+          </li>
+        </ul>
       </template>
 
       <template v-else-if="current === 'game'">
@@ -276,178 +221,56 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
   min-width: 0;
 }
 
-.block h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 500;
+.wardrobe-head {
+  margin-bottom: 16px;
 }
 
-.options {
+.wardrobe {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.themes {
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-}
-
-.felts {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-}
-
-.backs {
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-}
-
-.option {
-  position: relative;
+.more {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border: 0;
-  border-radius: 18px;
-  background: var(--color-paper-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line);
-  color: var(--color-ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: box-shadow 0.2s;
-}
-
-.option:hover {
-  box-shadow: inset 0 0 0 1px var(--color-line-heavy);
-}
-
-.option.on {
-  box-shadow: inset 0 0 0 2px var(--color-gold);
-}
-
-.option.locked > :not(.price) {
-  opacity: 0.78;
-  filter: saturate(0.85);
-}
-
-.option.locked:hover > :not(.price) {
-  opacity: 0.85;
-  filter: none;
-}
-
-.price {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px 3px 6px;
-  border-radius: 999px;
-  background: var(--color-paper-raised);
-  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.25);
-  color: var(--color-gold-ink);
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.check {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  padding: 4px;
-  border-radius: 50%;
-  background: var(--color-gold);
-  color: var(--color-paper);
-}
-
-.option-text {
-  display: flex;
-  flex-direction: column;
-  padding: 0 4px 2px;
-}
-
-.option-text b {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.option-text small {
-  font-size: 12px;
-  color: var(--color-ink-faint);
-}
-
-.theme-preview {
-  display: flex;
-  gap: 4px;
-  height: 84px;
-  padding: 6px;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  padding: 16px;
   box-sizing: border-box;
-  border-radius: 12px;
-  background: var(--color-paper);
-  box-shadow: inset 0 0 0 1px var(--color-line);
+  border: 1.5px dashed var(--color-line-heavy);
+  border-radius: 22px;
+  background: transparent;
+  color: var(--color-ink-muted);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background-color 0.2s;
 }
 
-.tp-rail {
-  width: 12px;
-  border-radius: 4px;
-  background: var(--color-paper-sunken);
-}
-
-.tp-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.tp-felt {
-  flex: 1;
-  border-radius: 6px;
+.more:hover {
+  border-color: var(--color-gold);
   background: var(--color-gold-tint);
-  box-shadow: inset 0 0 0 1px var(--color-gold);
+  color: var(--color-gold-ink);
 }
 
-.tp-row {
-  display: flex;
-  gap: 4px;
-  height: 18px;
+.more b {
+  font-size: 15px;
+  font-weight: 500;
 }
 
-.tp-row i,
-.tp-side i {
-  flex: 1;
-  border-radius: 4px;
-  background: var(--color-paper-raised);
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
-}
-
-.tp-side {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 26%;
-}
-
-.felt-preview {
-  aspect-ratio: 2 / 1;
-  border-radius: 999px;
-  background: radial-gradient(ellipse at 50% 30%, var(--color-felt), var(--color-felt-deep));
-  box-shadow:
-    inset 0 0 0 4px var(--color-felt-well),
-    inset 0 0 0 5px var(--color-felt-line);
-}
-
-.back-preview {
-  display: block;
-  width: 62%;
-  aspect-ratio: 5 / 7;
-  margin: 4px auto 0;
-}
-
-.hint {
-  margin: 12px 0 0;
-  font-size: 13px;
+.more small {
+  font-size: 12px;
   color: var(--color-ink-faint);
 }
 
@@ -562,13 +385,9 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
     flex: none;
   }
 
-  .themes {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-
-  .felts,
-  .backs {
+  .wardrobe {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 }
 </style>
