@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { useMediaQuery } from '@vueuse/core'
@@ -12,6 +12,7 @@ import GameTopBar from '../../components/game/GameTopBar.vue'
 import TableSeat from '../../components/game/TableSeat.vue'
 import BattleArea from '../../components/game/BattleArea.vue'
 import QuickChat from '../../components/game/QuickChat.vue'
+import PostGameChat from '../../components/game/PostGameChat.vue'
 import { listTables } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
@@ -52,8 +53,6 @@ const waitingInfo = ref<TableInfo | null>(null)
 const tick = ref(Date.now())
 const chatOpen = ref(wide.value)
 const resultOpen = ref(false)
-const dockChat = ref<InstanceType<typeof ChatBox> | null>(null)
-const sheetChat = ref<InstanceType<typeof ChatBox> | null>(null)
 const unread = ref(0)
 const bubbles = ref<Record<string, ChatEntry>>({})
 
@@ -342,13 +341,6 @@ function toggleChat() {
   chatOpen.value = !chatOpen.value
 }
 
-async function writeAfterGame() {
-  resultOpen.value = false
-  chatOpen.value = true
-  await nextTick()
-  requestAnimationFrame(() => (wide.value ? dockChat.value : sheetChat.value)?.focus())
-}
-
 function say(text: string) {
   socket.say(text)
 }
@@ -596,14 +588,14 @@ onUnmounted(() => {
     </div>
 
     <aside v-if="wide && chatOpen" class="chat-col">
-      <ChatBox ref="dockChat" class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+      <ChatBox class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
         <template #tools><QuickChat @send="say" /></template>
       </ChatBox>
     </aside>
 
     <AnimatePresence>
       <OverlayPanel v-if="!wide && chatOpen" key="chat" side="right" :width="380" title="Чат стола" @close="chatOpen = false">
-        <ChatBox ref="sheetChat" class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+        <ChatBox class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
           <template #tools><QuickChat @send="say" /></template>
         </ChatBox>
       </OverlayPanel>
@@ -629,8 +621,8 @@ onUnmounted(() => {
             <PhX :size="18" />
           </button>
           <div class="result-cards" aria-hidden="true">
-            <GameCard :card="{ suit: 3, rank: 14 }" size="md" class="rc-a" />
-            <GameCard :card="{ suit: 2, rank: 12 }" size="md" class="rc-b" />
+            <GameCard :card="{ suit: 3, rank: 14 }" size="sm" class="rc-a" />
+            <GameCard :card="{ suit: 2, rank: 12 }" size="sm" class="rc-b" />
           </div>
           <h2 id="result-title">{{ result.title }}</h2>
           <p>{{ result.text }}</p>
@@ -643,8 +635,9 @@ onUnmounted(() => {
               <span class="standing-label">{{ STANDING_LABEL[s.kind](s) }}</span>
             </li>
           </ol>
+          <PostGameChat :messages="chat" :my-id="me" @send="say" />
           <div class="dialog-actions center">
-            <button type="button" class="btn ghost" @click="writeAfterGame">Написать в чат</button>
+            <button type="button" class="btn ghost" @click="resultOpen = false">Остаться за столом</button>
             <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
           </div>
         </div>
@@ -1053,7 +1046,9 @@ onUnmounted(() => {
 
 .dialog {
   position: relative;
-  width: min(420px, 100%);
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 28px;
   box-sizing: border-box;
   border-radius: 28px;
@@ -1168,8 +1163,8 @@ onUnmounted(() => {
 
 .result-cards {
   position: relative;
-  height: 130px;
-  margin-bottom: 12px;
+  height: 90px;
+  margin-bottom: 6px;
 }
 
 .rc-a,

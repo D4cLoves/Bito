@@ -15,7 +15,6 @@ const emit = defineEmits<{ (e: 'send', text: string): void }>()
 
 const draft = ref('')
 const listEl = ref<HTMLElement | null>(null)
-const inputEl = ref<HTMLInputElement | null>(null)
 
 function time(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -35,8 +34,6 @@ async function scrollDown() {
 
 onMounted(scrollDown)
 watch(() => props.messages.length, scrollDown)
-
-defineExpose({ focus: () => inputEl.value?.focus() })
 </script>
 
 <template>
@@ -65,7 +62,6 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 
     <form class="compose" @submit.prevent="send">
       <input
-        ref="inputEl"
         v-model="draft"
         type="text"
         :maxlength="MAX_LENGTH"
