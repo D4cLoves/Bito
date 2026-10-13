@@ -492,9 +492,14 @@ func (r *Room) sendGameStateTo(client *Client) {
 }
 
 func (r *Room) broadcastGameOver() {
+	places := make([]string, 0, len(r.game.Places()))
+	for _, id := range r.game.Places() {
+		places = append(places, string(id))
+	}
 	payload := GameOverPayload{
 		WinnerID: string(r.game.WinnerID()),
 		LoserID:  string(r.game.LoserID()),
+		Places:   places,
 		IsDraw:   r.game.IsDraw(),
 	}
 

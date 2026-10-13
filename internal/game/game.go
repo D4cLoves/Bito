@@ -71,6 +71,8 @@ type Game struct {
 	initialAttackerIdx int
 	isFirstRound       bool
 	winnerID           PlayerID
+	places             []PlayerID
+	surrendered        []PlayerID
 	loserID            PlayerID
 	isDraw             bool
 	passed             map[PlayerID]bool
@@ -198,6 +200,10 @@ func (g *Game) Discard() []Card {
 	discardCopy := make([]Card, len(g.discard))
 	copy(discardCopy, g.discard)
 	return discardCopy
+}
+
+func (g *Game) Places() []PlayerID {
+	return append([]PlayerID(nil), g.places...)
 }
 
 func (g *Game) IsFirstRound() bool {
@@ -508,6 +514,7 @@ func (g *Game) Surrender(playerID PlayerID) error {
 	g.discard = append(g.discard, player.Hand()...)
 	player.ClearHand()
 	player.SetState(PlayerSurrendered)
+	g.surrendered = append(g.surrendered, playerID)
 
 	activeCount := 0
 	var lastActive *Player
@@ -523,11 +530,16 @@ func (g *Game) Surrender(playerID PlayerID) error {
 		g.table.Clear()
 		g.phase = PhaseFinished
 		if activeCount == 1 {
-			g.winnerID = lastActive.ID()
+			if g.winnerID == "" {
+				g.winnerID = lastActive.ID()
+			}
 			g.loserID = playerID
+			g.places = append(g.places, lastActive.ID())
+			g.appendSurrendered()
 		} else {
 			g.isDraw = true
 			g.winnerID = ""
+			g.appendSurrendered()
 		}
 		return nil
 	}
@@ -617,7 +629,7 @@ func (g *Game) finishRound() {
 	g.initialAttackerIdx = newAttackerIdx
 	g.isFirstRound = false
 	g.phase = PhaseBattle
-		g.passed = make(map[PlayerID]bool)
+	g.passed = make(map[PlayerID]bool)
 }
 
 func (g *Game) refillHands() {
@@ -652,6 +664,7 @@ func (g *Game) checkGameOver() {
 	for _, p := range g.players {
 		if p.IsActive() && p.HandCount() == 0 {
 			p.SetState(PlayerFinished)
+			g.places = append(g.places, p.ID())
 			if g.winnerID == "" {
 				g.winnerID = p.ID()
 			}
@@ -671,12 +684,21 @@ func (g *Game) checkGameOver() {
 		g.phase = PhaseFinished
 		g.isDraw = true
 		g.winnerID = ""
+		g.appendSurrendered()
 		return
 	}
 
 	if activeCount == 1 {
 		g.phase = PhaseFinished
 		g.loserID = lastActive.ID()
+		g.places = append(g.places, lastActive.ID())
+		g.appendSurrendered()
 		return
+	}
+}
+
+func (g *Game) appendSurrendered() {
+	for i := len(g.surrendered) - 1; i >= 0; i-- {
+		g.places = append(g.places, g.surrendered[i])
 	}
 }

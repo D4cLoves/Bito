@@ -805,3 +805,164 @@ func TestGame_EdgeCases(t *testing.T) {
 		t.Errorf("nextActivePlayerIdx when all finished = %d, want -1", idx)
 	}
 }
+
+func setupEndgame(t *testing.T, ids ...string) (*Game, map[string]*Player) {
+	t.Helper()
+	players := make([]*Player, 0, len(ids))
+	byID := make(map[string]*Player, len(ids))
+	for _, id := range ids {
+		p := NewPlayer(id, id)
+		players = append(players, p)
+		byID[id] = p
+	}
+	game, err := NewGame(ModePodkidnoy, Deck36, players)
+	if err != nil {
+		t.Fatalf("NewGame: %v", err)
+	}
+	for game.deck.CardsLeft() > 0 {
+		_, _ = game.deck.Draw()
+	}
+	for i, p := range players {
+		p.ClearHand()
+		p.AddCard(Card{Suit: Spades, Rank: Rank(int(Rank6) + i)})
+	}
+	return game, byID
+}
+
+func assertPlaces(t *testing.T, game *Game, want ...string) {
+	t.Helper()
+	got := game.Places()
+	if len(got) != len(want) {
+		t.Fatalf("Places = %v, want %v", got, want)
+	}
+	for i := range want {
+		if string(got[i]) != want[i] {
+			t.Fatalf("Places = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestGame_Places_NormalFinish(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v")
+
+	p["a"].ClearHand()
+	game.checkGameOver()
+	if game.Phase() == PhaseFinished {
+		t.Fatal("game finished too early")
+	}
+
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	if game.Phase() != PhaseFinished {
+		t.Fatalf("Phase = %v, want PhaseFinished", game.Phase())
+	}
+	assertPlaces(t, game, "a", "v", "b")
+	if game.WinnerID() != "a" || game.LoserID() != "b" {
+		t.Errorf("winner/loser = %s/%s, want a/b", game.WinnerID(), game.LoserID())
+	}
+}
+
+func TestGame_Places_SameMoveFinishUsesSeatOrder(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v")
+
+	p["v"].ClearHand()
+	p["b"].ClearHand()
+	game.checkGameOver()
+
+	assertPlaces(t, game, "b", "v", "a")
+}
+
+func TestGame_Places_TwoPlayersSurrender(t *testing.T) {
+	game, _ := setupEndgame(t, "a", "b")
+
+	if err := game.Surrender("b"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+
+	assertPlaces(t, game, "a", "b")
+	if game.WinnerID() != "a" || game.LoserID() != "b" {
+		t.Errorf("winner/loser = %s/%s, want a/b", game.WinnerID(), game.LoserID())
+	}
+}
+
+func TestGame_Places_EarlySurrenderGoesBelowLoser(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v", "g")
+
+	if err := game.Surrender("b"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+	if game.Phase() == PhaseFinished {
+		t.Fatal("game must go on after one of four surrenders")
+	}
+
+	p["a"].ClearHand()
+	game.checkGameOver()
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	assertPlaces(t, game, "a", "v", "g", "b")
+	if game.WinnerID() != "a" || game.LoserID() != "g" {
+		t.Errorf("winner/loser = %s/%s, want a/g", game.WinnerID(), game.LoserID())
+	}
+}
+
+func TestGame_Places_LateSurrenderKeepsFirstWinner(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v", "g")
+
+	p["a"].ClearHand()
+	game.checkGameOver()
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	if err := game.Surrender("g"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+
+	assertPlaces(t, game, "a", "v", "b", "g")
+	if game.WinnerID() != "a" {
+		t.Errorf("WinnerID = %s, want a (first to finish)", game.WinnerID())
+	}
+	if game.LoserID() != "g" {
+		t.Errorf("LoserID = %s, want g (surrendered)", game.LoserID())
+	}
+}
+
+func TestGame_Places_SeveralSurrenderedLatestFirst(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v", "g")
+
+	_ = game.Surrender("b")
+	_ = game.Surrender("v")
+	if game.Phase() == PhaseFinished {
+		t.Fatal("game must go on with two active players")
+	}
+
+	p["a"].ClearHand()
+	game.checkGameOver()
+
+	assertPlaces(t, game, "a", "g", "v", "b")
+}
+
+func TestGame_Places_DrawWithSurrendered(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v")
+
+	_ = game.Surrender("v")
+	p["a"].ClearHand()
+	p["b"].ClearHand()
+	game.checkGameOver()
+
+	if !game.IsDraw() {
+		t.Error("IsDraw want true")
+	}
+	assertPlaces(t, game, "a", "b", "v")
+}
+
+func TestGame_Places_ReturnsCopy(t *testing.T) {
+	game, _ := setupEndgame(t, "a", "b")
+	_ = game.Surrender("b")
+
+	places := game.Places()
+	places[0] = "hacked"
+
+	assertPlaces(t, game, "a", "b")
+}

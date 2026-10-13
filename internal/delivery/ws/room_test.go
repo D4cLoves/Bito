@@ -354,3 +354,38 @@ func TestRoom_ChatValidation(t *testing.T) {
 		t.Errorf("expected message after cooldown, got %+v", ok)
 	}
 }
+
+func TestRoom_GameOverIncludesPlaces(t *testing.T) {
+	room := NewRoom("room-places", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	go room.Run()
+	defer room.Close()
+
+	c1 := createTestClient("p1", "Alice", room)
+	c2 := createTestClient("p2", "Bob", room)
+	room.RegisterClient(c1)
+	room.RegisterClient(c2)
+	time.Sleep(50 * time.Millisecond)
+	<-c1.send
+	<-c2.send
+
+	surrender, _ := json.Marshal(map[string]string{"type": TypeSurrender})
+	room.incoming <- IncomingMessage{Client: c1, Data: surrender}
+	time.Sleep(50 * time.Millisecond)
+
+	var over Message[GameOverPayload]
+	for len(c2.send) > 0 {
+		var probe Message[json.RawMessage]
+		raw := <-c2.send
+		_ = json.Unmarshal(raw, &probe)
+		if probe.Type == TypeGameOver {
+			_ = json.Unmarshal(raw, &over)
+		}
+	}
+
+	if over.Type != TypeGameOver {
+		t.Fatal("expected game_over message")
+	}
+	if len(over.Payload.Places) != 2 || over.Payload.Places[0] != "p2" || over.Payload.Places[1] != "p1" {
+		t.Errorf("Places = %v, want [p2 p1]", over.Payload.Places)
+	}
+}

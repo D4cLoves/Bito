@@ -62,9 +62,10 @@ type TimerTickPayload struct {
 }
 
 type GameOverPayload struct {
-	WinnerID string `json:"winnerId,omitempty"`
-	LoserID  string `json:"loserId,omitempty"`
-	IsDraw   bool   `json:"isDraw"`
+	WinnerID string   `json:"winnerId,omitempty"`
+	LoserID  string   `json:"loserId,omitempty"`
+	Places   []string `json:"places,omitempty"`
+	IsDraw   bool     `json:"isDraw"`
 }
 
 type PlayerView struct {
