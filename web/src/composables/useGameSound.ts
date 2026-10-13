@@ -12,7 +12,7 @@ const SAMPLES = {
   chipStack: ['chip-stack-1', 'chip-stack-2', 'chip-stack-3'],
   chipLay: ['chip-lay-1', 'chip-lay-2', 'chip-lay-3'],
   chipsRattle: ['chips-rattle'],
-  tap: ['tap-1', 'tap-2'],
+  tap: ['tap'],
   confirm: ['confirm'],
   turn: ['turn'],
   win: ['win'],
@@ -200,7 +200,7 @@ export function useGameSound() {
   const playCardPick = () => play('pick', { gain: 0.16, rate: [0.95, 1.1] })
   const playShuffle = () => play('shuffle', { gain: 0.63, rate: [0.98, 1.02], lowpass: 6500, room: 0.12 }, 1500)
 
-  const playClick = () => play('tap', { gain: 0.11, rate: [0.97, 1.03], lowpass: 3500 })
+  const playClick = () => play('tap', { gain: 0.15, rate: [0.97, 1.03], lowpass: 3500 })
   const playChip = () => play('chipLay', { gain: 0.24, rate: [0.9, 1.0], lowpass: 3800, room: 0.1 })
 
   function playChips() {
