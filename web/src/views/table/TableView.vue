@@ -300,12 +300,14 @@ function onLand(kind: FlightKind) {
   if (now - (landedAt[kind] ?? 0) < 40) return
   landedAt[kind] = now
   if (kind === 'throw') sound.playCardDrop()
+  else if (kind === 'sweep') sound.playCardSweep()
+  else if (kind === 'take') sound.playCardTake()
   else sound.playCardDeal()
 }
 
 function onHandClick(card: Card) {
   if (!isPlayable(card)) return
-  sound.playClick()
+  sound.playCardPick()
 
   if (!isDefender.value) {
     lift(card)
@@ -428,7 +430,8 @@ watch(state, (s, prev) => {
 watch(gameOver, (g) => {
   if (!g) return
   resultOpen.value = true
-  if (g.loserId === me.value) sound.playError()
+  if (g.isDraw) sound.playSuccess()
+  else if (g.loserId === me.value) sound.playLose()
   else sound.playChipsWin()
 })
 
@@ -440,7 +443,7 @@ watch(
       showBubble(entry)
       if (entry.userId !== me.value) {
         if (!chatOpen.value) unread.value++
-        sound.playClick()
+        sound.playMessage()
       }
     }
   },

@@ -35,6 +35,9 @@ const router = createRouter({
       component: () => import('../views/table/TableView.vue'),
       meta: { requiresAuth: true },
     },
+    ...(import.meta.env.DEV
+      ? [{ path: '/dev/sounds', name: 'dev-sounds', component: () => import('../views/dev/SoundsView.vue') }]
+      : []),
   ],
 })
 
