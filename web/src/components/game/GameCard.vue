@@ -12,8 +12,6 @@ const props = withDefaults(
     size?: 'xs' | 'sm' | 'md' | 'lg'
     selected?: boolean
     playable?: boolean
-    dimmed?: boolean
-    trump?: boolean
   }>(),
   { size: 'md' },
 )
@@ -30,7 +28,7 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as '�
   <button
     type="button"
     class="game-card"
-    :class="[`s-${size}`, { selected, playable, dimmed, trump, down: faceDown || !card }]"
+    :class="[`s-${size}`, { selected, playable, down: faceDown || !card }]"
     :tabindex="playable ? 0 : -1"
     :aria-label="card && !faceDown ? `${rank}${suit}` : 'карта рубашкой вверх'"
     @click="$emit('click')"
@@ -55,10 +53,7 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as '�
   background: none;
   perspective: 900px;
   cursor: default;
-  transition:
-    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 0.2s,
-    opacity 0.2s;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .s-xs {
@@ -113,35 +108,23 @@ const suit = computed(() => (props.card ? (getSuitSymbol(props.card.suit) as '�
   cursor: pointer;
 }
 
-.playable:hover {
-  transform: translateY(-14px);
-}
-
 .playable:focus-visible {
-  outline: 2px solid var(--color-ink-soft);
+  outline: 2px solid var(--color-gold);
   outline-offset: 4px;
   border-radius: 10px;
 }
 
-.selected,
-.selected.playable:hover {
-  transform: translateY(-26px);
+.selected {
+  transform: translateY(-30px);
 }
 
 .selected :deep(.face--front) {
   box-shadow:
-    0 0 0 2px var(--color-ink-soft),
-    0 18px 30px -14px rgba(54, 50, 44, 0.55);
+    0 0 0 1.5px color-mix(in srgb, var(--color-gold) 70%, transparent),
+    0 26px 36px -18px rgba(40, 32, 20, 0.55);
 }
 
-.trump :deep(.face--front) {
-  box-shadow:
-    0 0 0 2px var(--color-gold),
-    0 10px 20px -12px rgba(120, 90, 40, 0.5);
-}
-
-.dimmed {
-  filter: saturate(0.4);
-  opacity: 0.55;
+:deep(.face--front) {
+  transition: box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 </style>

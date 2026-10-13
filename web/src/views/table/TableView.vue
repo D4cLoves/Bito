@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { useMediaQuery } from '@vueuse/core'
+import { PhX } from '@phosphor-icons/vue'
 import ToastStack from '../../components/app/ToastStack.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ChatBox from '../../components/client/ChatBox.vue'
@@ -50,6 +51,9 @@ const copied = ref(false)
 const waitingInfo = ref<TableInfo | null>(null)
 const tick = ref(Date.now())
 const chatOpen = ref(wide.value)
+const resultOpen = ref(false)
+const dockChat = ref<InstanceType<typeof ChatBox> | null>(null)
+const sheetChat = ref<InstanceType<typeof ChatBox> | null>(null)
 const unread = ref(0)
 const bubbles = ref<Record<string, ChatEntry>>({})
 
@@ -338,6 +342,13 @@ function toggleChat() {
   chatOpen.value = !chatOpen.value
 }
 
+async function writeAfterGame() {
+  resultOpen.value = false
+  chatOpen.value = true
+  await nextTick()
+  requestAnimationFrame(() => (wide.value ? dockChat.value : sheetChat.value)?.focus())
+}
+
 function say(text: string) {
   socket.say(text)
 }
@@ -394,6 +405,7 @@ watch(state, (s, prev) => {
 
 watch(gameOver, (g) => {
   if (!g) return
+  resultOpen.value = true
   if (g.loserId === me.value) sound.playError()
   else sound.playChipsWin()
 })
@@ -544,7 +556,8 @@ onUnmounted(() => {
 
           <div class="status">
             <span v-if="roleText" class="role">{{ roleText }}</span>
-            <span class="status-text">{{ state ? statusText : 'Садитесь поудобнее — ждём остальных' }}</span>
+            <span v-if="result && !resultOpen" class="status-text result-line" :class="result.tone">{{ result.title }}</span>
+            <span v-else class="status-text">{{ state ? statusText : 'Садитесь поудобнее — ждём остальных' }}</span>
             <div v-if="myTurn && turnLeft > 0" class="timer" :class="{ urgent: turnSeconds <= 5 }">
               <div class="timer-bar" :style="{ transform: `scaleX(${turnFraction})` }"></div>
               <span class="timer-text">{{ turnSeconds }} с</span>
@@ -552,6 +565,10 @@ onUnmounted(() => {
           </div>
 
           <div class="actions">
+            <template v-if="result && !resultOpen">
+              <button type="button" class="bar-btn" @click="resultOpen = true">Итоги</button>
+              <button type="button" class="bar-btn primary" @click="router.push('/lobby')">В лобби</button>
+            </template>
             <button v-if="showTransfer" type="button" class="act" @click="doTransfer">Перевести</button>
             <button v-if="showTake" type="button" class="act warn" @click="doTake">Беру</button>
             <button v-if="showBeaten" type="button" class="act" @click="doPass">Бито</button>
@@ -566,9 +583,7 @@ onUnmounted(() => {
                 <GameCard
                   :card="card"
                   size="lg"
-                  :trump="card.suit === state?.trumpSuit"
                   :playable="isPlayable(card)"
-                  :dimmed="myTurn && !isPlayable(card)"
                   :selected="!!selected && sameCard(selected, card)"
                   @click="onHandClick(card)"
                 />
@@ -581,14 +596,14 @@ onUnmounted(() => {
     </div>
 
     <aside v-if="wide && chatOpen" class="chat-col">
-      <ChatBox class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+      <ChatBox ref="dockChat" class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
         <template #tools><QuickChat @send="say" /></template>
       </ChatBox>
     </aside>
 
     <AnimatePresence>
       <OverlayPanel v-if="!wide && chatOpen" key="chat" side="right" :width="380" title="Чат стола" @close="chatOpen = false">
-        <ChatBox class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
+        <ChatBox ref="sheetChat" class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
           <template #tools><QuickChat @send="say" /></template>
         </ChatBox>
       </OverlayPanel>
@@ -608,8 +623,11 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="fade">
-      <div v-if="result" class="modal">
+      <div v-if="result && resultOpen" class="modal" @click.self="resultOpen = false">
         <div class="dialog result" :class="result.tone" role="dialog" aria-modal="true" aria-labelledby="result-title">
+          <button type="button" class="dialog-close" aria-label="Свернуть итоги" title="Свернуть" @click="resultOpen = false">
+            <PhX :size="18" />
+          </button>
           <div class="result-cards" aria-hidden="true">
             <GameCard :card="{ suit: 3, rank: 14 }" size="md" class="rc-a" />
             <GameCard :card="{ suit: 2, rank: 12 }" size="md" class="rc-b" />
@@ -626,7 +644,7 @@ onUnmounted(() => {
             </li>
           </ol>
           <div class="dialog-actions center">
-            <button type="button" class="btn ghost" @click="chatOpen = true">Написать в чат</button>
+            <button type="button" class="btn ghost" @click="writeAfterGame">Написать в чат</button>
             <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
           </div>
         </div>
@@ -958,6 +976,17 @@ onUnmounted(() => {
   z-index: 50 !important;
 }
 
+.hand-slot:hover :deep(.game-card:not(.selected)) {
+  transform: translateY(-16px);
+}
+
+.hand-slot:hover :deep(.game-card:not(.selected) .face--front) {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 0 0 1px rgba(160, 150, 132, 0.35),
+    0 22px 30px -18px rgba(40, 32, 20, 0.5);
+}
+
 .hand-empty {
   margin: auto;
   color: var(--color-ink-faint);
@@ -1023,6 +1052,7 @@ onUnmounted(() => {
 }
 
 .dialog {
+  position: relative;
   width: min(420px, 100%);
   padding: 28px;
   box-sizing: border-box;
@@ -1084,6 +1114,56 @@ onUnmounted(() => {
 
 .result {
   text-align: center;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-paper-hover);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  color: var(--color-ink);
+}
+
+.bar-btn {
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-paper-hover);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.bar-btn.primary {
+  background: var(--color-ink-soft);
+  color: var(--color-paper);
+}
+
+.result-line {
+  font-family: var(--font-card);
+  font-size: 26px;
+  font-style: italic;
+}
+
+.result-line.win {
+  color: var(--color-gold-ink);
+}
+
+.result-line.lose {
+  color: var(--color-red);
 }
 
 .result-cards {

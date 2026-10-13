@@ -15,7 +15,7 @@ const props = defineProps<{
 
 defineEmits<{ (e: 'pair', pair: CardPair): void }>()
 
-const deckBacks = computed(() => Math.min(5, Math.ceil(props.cardsLeft / 6)))
+const deckBacks = computed(() => (props.cardsLeft > 1 ? Math.min(5, Math.ceil((props.cardsLeft - 1) / 6)) : 0))
 const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
 </script>
 
@@ -23,14 +23,14 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
   <div class="battle">
     <div class="pile deck">
       <div class="deck-stack">
-        <GameCard v-if="cardsLeft > 0" :card="trumpCard" size="sm" trump class="trump-card" />
+        <GameCard v-if="cardsLeft > 0" :card="trumpCard" size="sm" class="trump-card" />
         <GameCard
-          v-for="i in Math.max(0, deckBacks - 1)"
+          v-for="i in deckBacks"
           :key="i"
           face-down
           size="sm"
           class="deck-back"
-          :style="{ transform: `translate(${i * 1.5}px, ${-i * 1.5}px)` }"
+          :style="{ transform: `translate(${(i - 1) * 1.5}px, ${-(i - 1) * 1.5}px)` }"
         />
         <div v-if="cardsLeft === 0" class="trump-only" :class="{ red: redTrump }">{{ getSuitSymbol(trumpSuit) }}</div>
       </div>
@@ -46,9 +46,9 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
           :class="{ target: targets.has(cardKey(pair.attack)) }"
           @click="$emit('pair', pair)"
         >
-          <GameCard :card="pair.attack" size="md" :trump="pair.attack.suit === trumpSuit" />
+          <GameCard :card="pair.attack" size="md" />
           <Transition name="defend">
-            <GameCard v-if="pair.defend" :card="pair.defend" size="md" class="defend-card" :trump="pair.defend.suit === trumpSuit" />
+            <GameCard v-if="pair.defend" :card="pair.defend" size="md" class="defend-card" />
           </Transition>
         </div>
       </TransitionGroup>
@@ -169,13 +169,35 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
 
 .pair.target {
   cursor: pointer;
-  box-shadow: 0 0 0 3px var(--color-felt-target);
-  animation: target 1.2s ease-in-out infinite;
 }
 
-@keyframes target {
+.pair > :deep(.game-card:first-child) {
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pair.target > :deep(.game-card:first-child) {
+  transform: translateY(-6px);
+}
+
+.pair.target > :deep(.game-card:first-child .face--front) {
+  animation: glow 2.2s ease-in-out infinite;
+}
+
+.pair.target:hover > :deep(.game-card:first-child) {
+  transform: translateY(-10px);
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-felt-target) 45%, transparent),
+      0 14px 28px -12px color-mix(in srgb, var(--color-felt-target) 55%, transparent);
+  }
   50% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-felt-target) 30%, transparent);
+    box-shadow:
+      0 0 0 1.5px color-mix(in srgb, var(--color-felt-target) 75%, transparent),
+      0 18px 34px -12px color-mix(in srgb, var(--color-felt-target) 80%, transparent);
   }
 }
 
