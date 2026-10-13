@@ -27,11 +27,13 @@ type PlannedFlight = Omit<Flight, 'id'> & { target?: HTMLElement | null }
 const PILE_CARD_W = 58
 const SEAT_CARD_W = 26
 const MAX_FLIGHTS = 40
-const THROW_STAGGER = 110
-const SWEEP_STAGGER = 45
-const DEAL_STAGGER = 75
-const DEAL_AFTER_SWEEP = 380
-const SAFETY_MS = 1800
+const THROW_STAGGER = 150
+const SWEEP_STAGGER = 40
+const TAKE_STAGGER = 35
+const SWEEP_MS = 660
+const DEAL_STAGGER_MAX = 95
+const DEAL_WINDOW = 1300
+const SAFETY_MS = 2600
 
 function angleOf(el: HTMLElement) {
   let angle = 0
@@ -62,7 +64,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
   const safety = new Map<number, number>()
   let seq = 0
 
-  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const enabled = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   function find(selector: string) {
     return root.value?.querySelector<HTMLElement>(selector) ?? null
@@ -82,7 +84,9 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
   }
 
   function pileBox(kind: 'deck' | 'discard'): Box | null {
-    const el = find(`[data-fly-${kind}]`)
+    const pile = find(`[data-fly-${kind}]`)
+    const backs = kind === 'deck' ? pile?.querySelectorAll<HTMLElement>('.deck-back') : null
+    const el = backs?.length ? backs[backs.length - 1] : pile
     return el ? boxOf(el, PILE_CARD_W, kind === 'discard' ? 14 : 0) : null
   }
 
@@ -98,9 +102,13 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     }
   }
 
-  function done(id: number) {
+  function reveal(id: number) {
     targets.get(id)?.style.removeProperty('visibility')
     targets.delete(id)
+  }
+
+  function done(id: number) {
+    reveal(id)
     clearTimeout(safety.get(id))
     safety.delete(id)
     flights.value = flights.value.filter((f) => f.id !== id)
@@ -156,7 +164,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
           faceDown = true
         }
         if (!from) continue
-        planned.push({ kind: 'throw', card, faceDown, flip: faceDown, fade: false, from, to, delay: throws++ * THROW_STAGGER, target })
+        planned.push({ kind: 'throw', card, faceDown, flip: faceDown, fade: false, from, to, delay: throws++ * THROW_STAGGER + (key.charCodeAt(key.length - 1) % 5) * 8, target })
       }
     }
 
@@ -174,7 +182,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
           planned.push({ kind: 'sweep', card, faceDown: false, flip: true, fade: true, from, to, delay: i * SWEEP_STAGGER })
         } else if (takenBy && takenBy !== me.value) {
           const to = seatBox(takenBy, SEAT_CARD_W)
-          if (to) planned.push({ kind: 'take', card, faceDown: false, flip: true, fade: true, from, to, delay: i * SWEEP_STAGGER })
+          if (to) planned.push({ kind: 'take', card, faceDown: false, flip: true, fade: true, from, to, delay: i * TAKE_STAGGER })
         }
       })
     }
@@ -182,6 +190,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     const queues = new Map<string, PlannedFlight[]>()
     const deck = pileBox('deck')
     const myQueue: PlannedFlight[] = []
+    let takenIntoHand = 0
     for (const card of next.myHand ?? []) {
       const key = cardKey(card)
       if (prevHand.has(key)) continue
@@ -190,11 +199,12 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
       const to = boxOf(target)
       const fromTable = tableBoxes.get(key)
       if (fromTable) {
-        planned.push({ kind: 'take', card, faceDown: false, flip: false, fade: false, from: fromTable, to, delay: 0, target })
+        planned.push({ kind: 'take', card, faceDown: false, flip: false, fade: false, from: fromTable, to, delay: takenIntoHand++ * TAKE_STAGGER, target })
       } else if (deck) {
         myQueue.push({ kind: 'deal', card, faceDown: true, flip: true, fade: false, from: deck, to, delay: 0, target })
       }
     }
+    myQueue.sort((a, b) => a.to.x - b.to.x)
     if (myQueue.length) queues.set(me.value, myQueue)
 
     if (deck) {
@@ -221,20 +231,43 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
       }
     }
 
-    const base = cleared ? DEAL_AFTER_SWEEP : throws * THROW_STAGGER
+    const sweepEnd = swept ? (prevTable.length - 1) * SWEEP_STAGGER + SWEEP_MS * 0.75 + 120 : 0
+    const takeEnd = cleared && !swept ? (prevTable.length - 1) * TAKE_STAGGER + 420 : 0
+    const base = Math.max(sweepEnd, takeEnd, throws * THROW_STAGGER)
+    const dealCount = [...queues.values()].reduce((sum, q) => sum + q.length, 0)
+    const dealStagger = Math.min(DEAL_STAGGER_MAX, DEAL_WINDOW / Math.max(1, dealCount))
     let dealt = 0
     for (let round = 0; [...queues.values()].some((q) => q.length > round); round++) {
       for (const queue of queues.values()) {
         const flight = queue[round]
-        if (flight) planned.push({ ...flight, delay: base + dealt++ * DEAL_STAGGER })
+        if (flight) planned.push({ ...flight, delay: base + dealt++ * dealStagger })
       }
     }
 
     launch(planned)
   }
 
+  function locations(s: GameState | null | undefined) {
+    const map = new Map<string, string>()
+    for (const c of s?.myHand ?? []) map.set(cardKey(c), 'hand')
+    for (const c of tableCards(s)) map.set(cardKey(c), 'table')
+    return map
+  }
+
+  function settleMoving(next: GameState, prev: GameState | null | undefined) {
+    if (!flights.value.length) return
+    const before = locations(prev)
+    const after = locations(next)
+    for (const f of [...flights.value]) {
+      if (!f.card) continue
+      const key = cardKey(f.card)
+      if (before.has(key) && before.get(key) !== after.get(key)) done(f.id)
+    }
+  }
+
   watch(state, (next, prev) => {
-    if (!next || !root.value || reduced()) return
+    if (!next || !root.value || !enabled) return
+    settleMoving(next, prev)
     const prevHand = new Set((prev?.myHand ?? []).map(cardKey))
     const prevTable = tableCards(prev)
     const handBoxes = new Map<string, Box>()
@@ -247,7 +280,12 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
       const el = cardEl(cardKey(card))
       if (el) tableBoxes.set(cardKey(card), boxOf(el))
     }
-    nextTick(() => plan(next, prev ?? null, prevHand, prevTable, handBoxes, tableBoxes))
+    nextTick(() => {
+      targets.forEach((el, id) => {
+        if (!el.isConnected) done(id)
+      })
+      plan(next, prev ?? null, prevHand, prevTable, handBoxes, tableBoxes)
+    })
   })
 
   onUnmounted(() => {
@@ -255,5 +293,5 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     targets.forEach((el) => el.style.removeProperty('visibility'))
   })
 
-  return { flights, done }
+  return { flights, reveal, done, enabled }
 }

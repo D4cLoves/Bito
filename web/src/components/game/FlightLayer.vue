@@ -1,14 +1,25 @@
 <script setup lang="ts">
 import FlyingCard from './FlyingCard.vue'
-import type { Flight } from '../../composables/useCardFlights'
+import type { Flight, FlightKind } from '../../composables/useCardFlights'
 
 defineProps<{ flights: Flight[] }>()
-defineEmits<{ (e: 'done', id: number): void }>()
+defineEmits<{
+  (e: 'land', kind: FlightKind): void
+  (e: 'reveal', id: number): void
+  (e: 'done', id: number): void
+}>()
 </script>
 
 <template>
   <div class="flight-layer" aria-hidden="true">
-    <FlyingCard v-for="f in flights" :key="f.id" :flight="f" @done="(id) => $emit('done', id)" />
+    <FlyingCard
+      v-for="f in flights"
+      :key="f.id"
+      :flight="f"
+      @land="(kind) => $emit('land', kind)"
+      @reveal="(id) => $emit('reveal', id)"
+      @done="(id) => $emit('done', id)"
+    />
   </div>
 </template>
 

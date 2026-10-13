@@ -18,7 +18,7 @@ import { listTables } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
-import { useCardFlights } from '../../composables/useCardFlights'
+import { useCardFlights, type FlightKind } from '../../composables/useCardFlights'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE } from '../../constants/economy'
@@ -49,7 +49,10 @@ const { state, gameOver, status, offline, lastError, chat } = socket
 
 const me = computed(() => auth.user?.id ?? '')
 const gameEl = ref<HTMLElement | null>(null)
-const { flights, done: flightDone } = useCardFlights(gameEl, state, me)
+const { flights, reveal: flightReveal, done: flightDone, enabled: flightsEnabled } = useCardFlights(gameEl, state, me)
+const launching = ref<string | null>(null)
+const landedAt: Partial<Record<FlightKind, number>> = {}
+let launchTimer: number | null = null
 const selected = ref<Card | null>(null)
 const confirmSurrender = ref(false)
 const copied = ref(false)
@@ -283,11 +286,26 @@ function fanStyle(i: number, n: number) {
   return { transform: `rotate(${angle}deg) translateY(${lift}px)` }
 }
 
+function lift(card: Card) {
+  launching.value = cardKey(card)
+  if (launchTimer) clearTimeout(launchTimer)
+  launchTimer = window.setTimeout(() => (launching.value = null), 1500)
+}
+
+function onLand(kind: FlightKind) {
+  const now = performance.now()
+  if (now - (landedAt[kind] ?? 0) < 40) return
+  landedAt[kind] = now
+  if (kind === 'throw') sound.playCardDrop()
+  else sound.playCardDeal()
+}
+
 function onHandClick(card: Card) {
   if (!isPlayable(card)) return
   sound.playClick()
 
   if (!isDefender.value) {
+    lift(card)
     socket.attack(card)
     selected.value = null
     return
@@ -300,6 +318,7 @@ function onHandClick(card: Card) {
 
   const targets = unbeaten.value.filter((p) => canBeat(p.attack, card, trumpSuit.value))
   if (targets.length === 1 && !canTransferWith(card)) {
+    lift(card)
     socket.defend(targets[0].attack, card)
     selected.value = null
     return
@@ -310,12 +329,14 @@ function onHandClick(card: Card) {
 function onPairClick(pair: CardPair) {
   if (!selected.value || pair.defend) return
   if (!defendTargets.value.has(cardKey(pair.attack))) return
+  lift(selected.value)
   socket.defend(pair.attack, selected.value)
   selected.value = null
 }
 
 function doTransfer() {
   if (!selected.value) return
+  lift(selected.value)
   socket.transfer(selected.value)
   selected.value = null
 }
@@ -380,6 +401,7 @@ const ERRORS: Record<string, string> = {
 
 watch(lastError, (e) => {
   if (!e) return
+  launching.value = null
   sound.playError()
   toast.show(ERRORS[e.text] ?? e.text, 'error')
 })
@@ -387,7 +409,7 @@ watch(lastError, (e) => {
 watch(
   () => [pairs.value.length, pairs.value.filter((p) => p.defend).length, state.value?.cardsLeft],
   (next, prev) => {
-    if (!prev || !state.value) return
+    if (flightsEnabled || !prev || !state.value) return
     if (next[0] !== prev[0] || next[1] !== prev[1]) sound.playCardDrop()
     else if (next[2] !== prev[2]) sound.playCardDeal()
   },
@@ -395,6 +417,7 @@ watch(
 
 watch(state, (s, prev) => {
   if (!s) return
+  launching.value = null
   if (selected.value && !(s.myHand ?? []).some((c) => sameCard(c, selected.value!))) selected.value = null
   if (prev && s.defenderId !== prev.defenderId) selected.value = null
 })
@@ -460,6 +483,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
+  if (launchTimer) clearTimeout(launchTimer)
   if (waitTimer) clearInterval(waitTimer)
   bubbleTimers.forEach((t) => clearTimeout(t))
 })
@@ -575,18 +599,26 @@ onUnmounted(() => {
         </div>
 
         <div class="hand" :class="{ crowded: hand.length > 10 }">
-          <div v-for="(card, i) in hand" :key="cardKey(card)" class="hand-slot" :style="{ zIndex: i }">
-            <div class="fan" :style="fanStyle(i, hand.length)">
-              <GameCard
-                :card="card"
-                size="lg"
-                :data-fly="cardKey(card)"
-                :playable="isPlayable(card)"
-                :selected="!!selected && sameCard(selected, card)"
-                @click="onHandClick(card)"
-              />
+          <TransitionGroup name="hand-slot">
+            <div
+              v-for="(card, i) in hand"
+              :key="cardKey(card)"
+              class="hand-slot"
+              :class="{ launching: launching === cardKey(card) }"
+              :style="{ zIndex: i }"
+            >
+              <div class="fan" :style="fanStyle(i, hand.length)">
+                <GameCard
+                  :card="card"
+                  size="lg"
+                  :data-fly="cardKey(card)"
+                  :playable="isPlayable(card)"
+                  :selected="!!selected && sameCard(selected, card)"
+                  @click="onHandClick(card)"
+                />
+              </div>
             </div>
-          </div>
+          </TransitionGroup>
           <p v-if="state && !hand.length && iAmActive" class="hand-empty">У вас нет карт</p>
         </div>
       </section>
@@ -606,7 +638,7 @@ onUnmounted(() => {
       </OverlayPanel>
     </AnimatePresence>
 
-    <FlightLayer :flights="flights" @done="flightDone" />
+    <FlightLayer :flights="flights" @land="onLand" @reveal="flightReveal" @done="flightDone" />
 
     <Transition name="fade">
       <div v-if="confirmSurrender" class="modal" @click.self="confirmSurrender = false">
@@ -974,6 +1006,15 @@ onUnmounted(() => {
 
 .hand-slot:hover {
   z-index: 50 !important;
+}
+
+.hand-slot-move {
+  transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.hand-slot.launching :deep(.game-card) {
+  transform: translateY(-30px) scale(1.05);
+  transition-duration: 0.16s;
 }
 
 .hand-slot:hover :deep(.game-card:not(.selected)) {

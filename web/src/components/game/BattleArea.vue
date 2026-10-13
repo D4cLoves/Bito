@@ -26,9 +26,9 @@ function hash(key: string) {
 
 function toss(key: string, defend = false) {
   const h = hash(key)
-  const rotate = defend ? 5 + (h % 10) : (h % 11) - 5
-  const x = (h % 9) - 4
-  const y = (Math.floor(h / 9) % 7) - 3
+  const rotate = defend ? 4 + (h % 13) : (h % 19) - 9
+  const x = (h % 17) - 8
+  const y = (Math.floor(h / 17) % 13) - 6
   return `translate(${x}px, ${y}px) rotate(${rotate}deg)`
 }
 </script>
@@ -52,7 +52,7 @@ function toss(key: string, defend = false) {
     </div>
 
     <div class="center">
-      <div class="pairs">
+      <TransitionGroup tag="div" class="pairs" name="pair">
         <div
           v-for="pair in pairs"
           :key="cardKey(pair.attack)"
@@ -70,7 +70,7 @@ function toss(key: string, defend = false) {
             :style="{ '--toss': toss(cardKey(pair.defend), true) }"
           />
         </div>
-      </div>
+      </TransitionGroup>
       <p v-if="!pairs.length" class="hint">{{ hint }}</p>
     </div>
 
@@ -219,6 +219,10 @@ function toss(key: string, defend = false) {
       0 0 0 1.5px color-mix(in srgb, var(--color-felt-target) 75%, transparent),
       0 18px 34px -12px color-mix(in srgb, var(--color-felt-target) 80%, transparent);
   }
+}
+
+.pair-move {
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .defend-card {
