@@ -6,6 +6,9 @@ import GameModes from '../../components/landing/GameModes.vue'
 import FairPlay from '../../components/landing/FairPlay.vue'
 import FaqSection from '../../components/landing/FaqSection.vue'
 import SiteFooter from '../../components/landing/SiteFooter.vue'
+import { useSmoothScroll } from '../../composables/useSmoothScroll'
+
+useSmoothScroll()
 </script>
 
 <template>

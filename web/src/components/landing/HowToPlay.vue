@@ -4,6 +4,7 @@ import { createTimeline, onScroll, utils } from 'animejs'
 import type { Timeline } from 'animejs'
 import PaperCard from './PaperCard.vue'
 import { requestJoin } from '../../composables/useLanding'
+import { scrollPageTo } from '../../composables/useSmoothScroll'
 
 // Закреплённая сцена: прокрутка проигрывает один раунд дурака.
 // Для каждой карты задана поза на каждом из 8 состояний стола,
@@ -210,7 +211,7 @@ function goToStep(i: number) {
   if (!section) return
   const top = section.getBoundingClientRect().top + window.scrollY
   const travel = section.offsetHeight - window.innerHeight
-  window.scrollTo({ top: top + ((i + 0.55) / STEPS.length) * travel, behavior: 'smooth' })
+  scrollPageTo(top + ((i + 0.55) / STEPS.length) * travel)
 }
 
 onMounted(() => {

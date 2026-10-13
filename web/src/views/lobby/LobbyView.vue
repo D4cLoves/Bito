@@ -20,6 +20,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useProfileStore } from '../../stores/profile'
 import { useSettingsStore } from '../../stores/settings'
 import { usePanel } from '../../composables/usePanel'
+import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
@@ -36,6 +37,9 @@ const settings = useSettingsStore()
 const panels = usePanel()
 const sound = useGameSound()
 const toast = useToast()
+const mainEl = ref<HTMLElement | null>(null)
+
+useSmoothScroll(mainEl)
 
 const mode = ref<GameMode>('podkidnoy')
 const deck = ref<DeckSize>(36)
@@ -198,7 +202,7 @@ onUnmounted(() => {
       @logout="logout"
     />
 
-    <main class="main">
+    <main ref="mainEl" class="main">
       <div class="main-inner">
         <TopBar
           :username="username"

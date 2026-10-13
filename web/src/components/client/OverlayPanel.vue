@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { motion } from 'motion-v'
 import { PhX } from '@phosphor-icons/vue'
+import { useSmoothScroll } from '../../composables/useSmoothScroll'
 
 const props = withDefaults(defineProps<{ title: string; side?: 'left' | 'right'; width?: number }>(), {
   side: 'left',
@@ -9,6 +10,10 @@ const props = withDefaults(defineProps<{ title: string; side?: 'left' | 'right';
 })
 
 const emit = defineEmits<{ (e: 'close'): void }>()
+
+const bodyEl = ref<HTMLElement | null>(null)
+
+useSmoothScroll(bodyEl)
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close')
@@ -48,7 +53,7 @@ const offset = props.side === 'left' ? -60 : 60
           <PhX :size="20" />
         </button>
       </header>
-      <div class="sheet-body">
+      <div ref="bodyEl" class="sheet-body">
         <slot />
       </div>
     </motion.section>

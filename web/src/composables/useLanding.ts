@@ -1,3 +1,5 @@
+import { scrollPageTo } from './useSmoothScroll'
+
 // Общие вещи лендинга: разделы для навигации и прокрутка к ним.
 
 export interface LandingSection {
@@ -28,12 +30,12 @@ export function scrollToSection(id: string) {
   const el = document.getElementById(id)
   if (!el) return
   const top = el.getBoundingClientRect().top + window.scrollY
-  window.scrollTo({ top, behavior: 'smooth' })
+  scrollPageTo(top)
 }
 
 // Любая кнопка «играть» на странице: наверх к карточке регистрации.
 export function requestJoin() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  scrollPageTo(0)
   window.dispatchEvent(new CustomEvent(JOIN_EVENT))
 }
 
