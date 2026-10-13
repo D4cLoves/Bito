@@ -200,11 +200,46 @@ function polar(deg: number) {
   return { x: 50 + 50 * Math.cos(rad), y: 50 + 50 * Math.sin(rad) }
 }
 
+type StandingKind = 'place' | 'fool' | 'surrendered' | 'draw'
+
+interface Standing {
+  id: string
+  name: string
+  place: number
+  kind: StandingKind
+  me: boolean
+}
+
+const standings = computed<Standing[]>(() => {
+  const g = gameOver.value
+  if (!g?.places?.length) return []
+  const loserIdx = g.loserId ? g.places.indexOf(g.loserId) : -1
+  return g.places.map((id, i) => {
+    let kind: StandingKind = 'place'
+    if (g.isDraw) kind = 'draw'
+    else if (i === loserIdx) kind = 'fool'
+    else if (loserIdx >= 0 && i > loserIdx) kind = 'surrendered'
+    return { id, name: nameOf(id), place: i + 1, kind, me: id === me.value }
+  })
+})
+
+const STANDING_LABEL: Record<StandingKind, (s: Standing) => string> = {
+  place: (s) => `${s.place} место`,
+  fool: () => 'дурак',
+  surrendered: () => 'сдался',
+  draw: () => 'ничья',
+}
+
 const result = computed(() => {
   const g = gameOver.value
   if (!g) return null
-  if (g.isDraw) return { title: 'Ничья', text: 'Все вышли одновременно — дураков нет.', tone: 'draw' as const }
+  if (g.isDraw) return { title: 'Ничья', text: 'Последние вышли одновременно — дураков нет.', tone: 'draw' as const }
   if (g.loserId === me.value) return { title: 'Вы — дурак', text: 'Бывает. Отыграетесь в следующей партии.', tone: 'lose' as const }
+  const mine = standings.value.find((s) => s.me)
+  if (mine?.kind === 'surrendered') return { title: 'Вы сдались', text: 'Партия доиграна без вас.', tone: 'lose' as const }
+  if (mine && mine.place > 1) {
+    return { title: `${mine.place} место`, text: g.loserId ? `В дураках — ${nameOf(g.loserId)}.` : 'Партия окончена.', tone: 'win' as const }
+  }
   if (g.winnerId === me.value) return { title: 'Победа', text: 'Вы первым избавились от карт.', tone: 'win' as const }
   return {
     title: 'Вы не дурак',
@@ -581,6 +616,15 @@ onUnmounted(() => {
           </div>
           <h2 id="result-title">{{ result.title }}</h2>
           <p>{{ result.text }}</p>
+          <ol v-if="standings.length" class="standings" aria-label="Итоги партии">
+            <li v-for="(s, i) in standings" :key="s.id" class="standing" :class="[s.kind, { me: s.me }]" :style="{ '--i': i }">
+              <span class="medal" :class="s.kind === 'place' && s.place <= 3 ? `m${s.place}` : ''">
+                {{ s.kind === 'fool' ? '🃏' : s.kind === 'surrendered' ? '⚑' : s.place }}
+              </span>
+              <span class="standing-name">{{ s.name }}<small v-if="s.me"> · вы</small></span>
+              <span class="standing-label">{{ STANDING_LABEL[s.kind](s) }}</span>
+            </li>
+          </ol>
           <div class="dialog-actions center">
             <button type="button" class="btn ghost" @click="chatOpen = true">Написать в чат</button>
             <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
@@ -1063,6 +1107,113 @@ onUnmounted(() => {
 .rc-b {
   translate: -20% 6px;
   rotate: 10deg;
+}
+
+.standings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 18px 0 0;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--color-paper-sunken);
+  list-style: none;
+  text-align: left;
+}
+
+.standing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  animation: standing-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(0.25s + var(--i) * 0.08s);
+}
+
+.standing.me {
+  background: var(--color-paper-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+@keyframes standing-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.medal {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-paper-hover);
+  color: var(--color-ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.medal.m1 {
+  background: var(--color-gold);
+  color: #fff;
+}
+
+.medal.m2 {
+  background: #b9bec6;
+  color: #fff;
+}
+
+.medal.m3 {
+  background: #c79a6b;
+  color: #fff;
+}
+
+.fool .medal {
+  background: var(--color-red-tint);
+  font-size: 15px;
+}
+
+.surrendered .medal {
+  color: var(--color-ink-faint);
+}
+
+.standing-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.standing-name small {
+  font-size: 13px;
+  color: var(--color-ink-faint);
+}
+
+.standing-label {
+  font-size: 13px;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+}
+
+.fool .standing-label {
+  color: var(--color-red);
+}
+
+.surrendered .standing-name,
+.surrendered .standing-label {
+  color: var(--color-ink-ghost);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .standing {
+    animation: none;
+  }
 }
 
 .result.win h2 {

@@ -113,6 +113,7 @@ export interface GameState {
 export interface GameOver {
   winnerId?: string
   loserId?: string
+  places?: string[]
   isDraw: boolean
 }
 
