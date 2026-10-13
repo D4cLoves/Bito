@@ -13,10 +13,12 @@ import TableSeat from '../../components/game/TableSeat.vue'
 import BattleArea from '../../components/game/BattleArea.vue'
 import QuickChat from '../../components/game/QuickChat.vue'
 import PostGameChat from '../../components/game/PostGameChat.vue'
+import FlightLayer from '../../components/game/FlightLayer.vue'
 import { listTables } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
+import { useCardFlights } from '../../composables/useCardFlights'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE } from '../../constants/economy'
@@ -46,6 +48,8 @@ const socket = useGameSocket(roomId)
 const { state, gameOver, status, offline, lastError, chat } = socket
 
 const me = computed(() => auth.user?.id ?? '')
+const gameEl = ref<HTMLElement | null>(null)
+const { flights, done: flightDone } = useCardFlights(gameEl, state, me)
 const selected = ref<Card | null>(null)
 const confirmSurrender = ref(false)
 const copied = ref(false)
@@ -462,7 +466,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="game" :class="{ 'chat-docked': wide && chatOpen }" :data-theme="settings.theme" :data-felt="settings.felt">
+  <div ref="gameEl" class="game" :class="{ 'chat-docked': wide && chatOpen }" :data-theme="settings.theme" :data-felt="settings.felt">
     <div class="glow" aria-hidden="true"></div>
 
     <div class="main">
@@ -494,6 +498,7 @@ onUnmounted(() => {
               v-for="s in seats"
               :key="s.key"
               class="seat-pos"
+              :data-fly-seat="s.player?.id"
               :style="{ '--x': `${s.x}%`, '--y': `${s.y}%` }"
               :name="s.player?.name ?? s.waitingName"
               :hand-count="s.player?.handCount ?? 0"
@@ -539,6 +544,7 @@ onUnmounted(() => {
           <TableSeat
             class="me-seat"
             me
+            :data-fly-seat="me"
             bubble-side="up"
             :name="myName"
             :role="state && canAct ? roleOf(me) : null"
@@ -569,19 +575,18 @@ onUnmounted(() => {
         </div>
 
         <div class="hand" :class="{ crowded: hand.length > 10 }">
-          <TransitionGroup name="hand">
-            <div v-for="(card, i) in hand" :key="cardKey(card)" class="hand-slot" :style="{ zIndex: i }">
-              <div class="fan" :style="fanStyle(i, hand.length)">
-                <GameCard
-                  :card="card"
-                  size="lg"
-                  :playable="isPlayable(card)"
-                  :selected="!!selected && sameCard(selected, card)"
-                  @click="onHandClick(card)"
-                />
-              </div>
+          <div v-for="(card, i) in hand" :key="cardKey(card)" class="hand-slot" :style="{ zIndex: i }">
+            <div class="fan" :style="fanStyle(i, hand.length)">
+              <GameCard
+                :card="card"
+                size="lg"
+                :data-fly="cardKey(card)"
+                :playable="isPlayable(card)"
+                :selected="!!selected && sameCard(selected, card)"
+                @click="onHandClick(card)"
+              />
             </div>
-          </TransitionGroup>
+          </div>
           <p v-if="state && !hand.length && iAmActive" class="hand-empty">У вас нет карт</p>
         </div>
       </section>
@@ -600,6 +605,8 @@ onUnmounted(() => {
         </ChatBox>
       </OverlayPanel>
     </AnimatePresence>
+
+    <FlightLayer :flights="flights" @done="flightDone" />
 
     <Transition name="fade">
       <div v-if="confirmSurrender" class="modal" @click.self="confirmSurrender = false">
@@ -983,30 +990,6 @@ onUnmounted(() => {
 .hand-empty {
   margin: auto;
   color: var(--color-ink-faint);
-}
-
-.hand-enter-active {
-  transition:
-    opacity 0.35s,
-    transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hand-enter-from {
-  opacity: 0;
-  transform: translateY(-60px);
-}
-
-.hand-leave-active {
-  pointer-events: none;
-  transition:
-    opacity 0.25s,
-    transform 0.25s;
-  position: absolute;
-}
-
-.hand-leave-to {
-  opacity: 0;
-  transform: translateY(-80px);
 }
 
 .chat-col {

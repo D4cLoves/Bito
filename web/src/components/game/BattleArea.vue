@@ -17,12 +17,26 @@ defineEmits<{ (e: 'pair', pair: CardPair): void }>()
 
 const deckBacks = computed(() => (props.cardsLeft > 1 ? Math.min(5, Math.ceil((props.cardsLeft - 1) / 6)) : 0))
 const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
+
+function hash(key: string) {
+  let h = 7
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) % 9973
+  return h
+}
+
+function toss(key: string, defend = false) {
+  const h = hash(key)
+  const rotate = defend ? 5 + (h % 10) : (h % 11) - 5
+  const x = (h % 9) - 4
+  const y = (Math.floor(h / 9) % 7) - 3
+  return `translate(${x}px, ${y}px) rotate(${rotate}deg)`
+}
 </script>
 
 <template>
   <div class="battle">
     <div class="pile deck">
-      <div class="deck-stack">
+      <div class="deck-stack" data-fly-deck>
         <GameCard v-if="cardsLeft > 0" :card="trumpCard" size="sm" class="trump-card" />
         <GameCard
           v-for="i in deckBacks"
@@ -38,7 +52,7 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
     </div>
 
     <div class="center">
-      <TransitionGroup name="pair" tag="div" class="pairs">
+      <div class="pairs">
         <div
           v-for="pair in pairs"
           :key="cardKey(pair.attack)"
@@ -46,17 +60,22 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
           :class="{ target: targets.has(cardKey(pair.attack)) }"
           @click="$emit('pair', pair)"
         >
-          <GameCard :card="pair.attack" size="md" />
-          <Transition name="defend">
-            <GameCard v-if="pair.defend" :card="pair.defend" size="md" class="defend-card" />
-          </Transition>
+          <GameCard :card="pair.attack" size="md" :data-fly="cardKey(pair.attack)" :style="{ '--toss': toss(cardKey(pair.attack)) }" />
+          <GameCard
+            v-if="pair.defend"
+            :card="pair.defend"
+            size="md"
+            class="defend-card"
+            :data-fly="cardKey(pair.defend)"
+            :style="{ '--toss': toss(cardKey(pair.defend), true) }"
+          />
         </div>
-      </TransitionGroup>
+      </div>
       <p v-if="!pairs.length" class="hint">{{ hint }}</p>
     </div>
 
     <div class="pile discard">
-      <div class="discard-stack" :class="{ empty: !discardSize }">
+      <div class="discard-stack" :class="{ empty: !discardSize }" data-fly-discard>
         <GameCard v-if="discardSize" face-down size="sm" style="transform: rotate(14deg)" />
         <GameCard v-if="discardSize > 6" face-down size="sm" class="discard-2" />
       </div>
@@ -172,11 +191,12 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
 }
 
 .pair > :deep(.game-card:first-child) {
+  transform: var(--toss);
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .pair.target > :deep(.game-card:first-child) {
-  transform: translateY(-6px);
+  transform: translateY(-6px) var(--toss);
 }
 
 .pair.target > :deep(.game-card:first-child .face--front) {
@@ -184,7 +204,7 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
 }
 
 .pair.target:hover > :deep(.game-card:first-child) {
-  transform: translateY(-10px);
+  transform: translateY(-10px) var(--toss);
 }
 
 @keyframes glow {
@@ -205,7 +225,7 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
   position: absolute;
   left: 22px;
   top: 22px;
-  transform: rotate(9deg);
+  transform: var(--toss);
 }
 
 .hint {
@@ -216,40 +236,6 @@ const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
   color: var(--color-on-felt-muted);
   font-size: 15px;
   text-align: center;
-}
-
-.pair-enter-active {
-  transition:
-    opacity 0.35s,
-    transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.pair-enter-from {
-  opacity: 0;
-  transform: translateY(60px) scale(0.9);
-}
-
-.pair-leave-active {
-  pointer-events: none;
-  transition:
-    opacity 0.3s,
-    transform 0.3s;
-}
-
-.pair-leave-to {
-  opacity: 0;
-  transform: scale(0.85);
-}
-
-.defend-enter-active {
-  transition:
-    opacity 0.3s,
-    transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.defend-enter-from {
-  opacity: 0;
-  transform: rotate(30deg) translate(30px, 60px);
 }
 
 @media (max-width: 1100px) {
