@@ -966,3 +966,82 @@ func TestGame_Places_ReturnsCopy(t *testing.T) {
 
 	assertPlaces(t, game, "a", "b")
 }
+
+func assertLosers(t *testing.T, game *Game, want ...PlayerID) {
+	t.Helper()
+	got := game.Losers()
+	if len(got) != len(want) {
+		t.Fatalf("Losers = %v, want %v", got, want)
+	}
+	seen := make(map[PlayerID]bool, len(got))
+	for _, id := range got {
+		if seen[id] {
+			t.Fatalf("Losers = %v, has duplicate %s", got, id)
+		}
+		seen[id] = true
+	}
+	for _, id := range want {
+		if !seen[id] {
+			t.Fatalf("Losers = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestGame_Losers_FoolOnly(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v")
+
+	p["a"].ClearHand()
+	game.checkGameOver()
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	assertLosers(t, game, "b")
+}
+
+func TestGame_Losers_LastSurrenderIsNotDuplicated(t *testing.T) {
+	game, _ := setupEndgame(t, "a", "b")
+
+	if err := game.Surrender("b"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+
+	assertLosers(t, game, "b")
+}
+
+func TestGame_Losers_FoolAndEarlySurrender(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v", "g")
+
+	if err := game.Surrender("b"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+	p["a"].ClearHand()
+	game.checkGameOver()
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	assertLosers(t, game, "g", "b")
+}
+
+func TestGame_Losers_SurrenderBeforeSimultaneousFinish(t *testing.T) {
+	game, p := setupEndgame(t, "a", "b", "v")
+
+	if err := game.Surrender("a"); err != nil {
+		t.Fatalf("Surrender: %v", err)
+	}
+	p["b"].ClearHand()
+	p["v"].ClearHand()
+	game.checkGameOver()
+
+	if !game.IsDraw() {
+		t.Fatal("expected the game to report a draw between the last two")
+	}
+	assertLosers(t, game, "a")
+}
+
+func TestGame_Losers_EmptyWhileRunning(t *testing.T) {
+	game, _ := setupEndgame(t, "a", "b", "v")
+
+	if got := game.Losers(); len(got) != 0 {
+		t.Errorf("Losers = %v, want none before the end", got)
+	}
+}

@@ -1,6 +1,9 @@
 package game
 
-import "errors"
+import (
+	"errors"
+	"slices"
+)
 
 var (
 	ErrNoPlayers            = errors.New("no players")
@@ -224,6 +227,15 @@ func (g *Game) IsDraw() bool {
 
 func (g *Game) HasPassed(id PlayerID) bool {
 	return g.passed[id]
+}
+
+func (g *Game) Losers() []PlayerID {
+	losers := make([]PlayerID, 0, len(g.surrendered)+1)
+	losers = append(losers, g.surrendered...)
+	if g.loserID != "" && !slices.Contains(g.surrendered, g.loserID) {
+		losers = append(losers, g.loserID)
+	}
+	return losers
 }
 
 func (g *Game) PlayerByID(id PlayerID) (*Player, int) {
