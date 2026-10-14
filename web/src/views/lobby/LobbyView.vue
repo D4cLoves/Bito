@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
+import { useMediaQuery } from '@vueuse/core'
 import ToastStack from '../../components/app/ToastStack.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
@@ -9,6 +10,9 @@ import ReturnBanner from '../../components/client/ReturnBanner.vue'
 import PlayPanel from '../../components/client/PlayPanel.vue'
 import TablesBoard from '../../components/client/TablesBoard.vue'
 import SocialPanel from '../../components/client/SocialPanel.vue'
+import FriendsRail from '../../components/client/FriendsRail.vue'
+import StatsCard from '../../components/client/StatsCard.vue'
+import LobbyChat from '../../components/client/LobbyChat.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ProfilePanel from '../../components/panels/ProfilePanel.vue'
 import SettingsPanel from '../../components/panels/SettingsPanel.vue'
@@ -17,6 +21,7 @@ import Leaderboard from '../../components/lobby/Leaderboard.vue'
 import { createTable, getActiveTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
 import { topUp as requestTopUp } from '../../api/wallet'
+import { getGameHistory } from '../../api/users'
 import { useAuthStore } from '../../stores/auth'
 import { useProfileStore } from '../../stores/profile'
 import { useSettingsStore } from '../../stores/settings'
@@ -25,9 +30,9 @@ import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_FRIENDS, MOCK_HISTORY, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
+import { MOCK_FRIENDS, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { DeckSize, GameMode, TableInfo } from '../../types/game'
-import type { ActiveTable, Friend, FriendRequest, ChatEntry } from '../../types/social'
+import type { ActiveTable, Friend, FriendRequest, ChatEntry, GameHistoryEntry } from '../../types/social'
 
 const POLL_MS = 3000
 
@@ -39,12 +44,13 @@ const panels = usePanel()
 const sound = useGameSound()
 const toast = useToast()
 const mainEl = ref<HTMLElement | null>(null)
+const sideColumn = useMediaQuery('(min-width: 1024px)')
 
 useSmoothScroll(mainEl)
 
 const mode = ref<GameMode>('podkidnoy')
 const deck = ref<DeckSize>(36)
-const players = ref(2)
+const players = ref(3)
 const stake = ref(MIN_STAKE)
 const busy = ref<'find' | 'create' | null>(null)
 
@@ -57,6 +63,7 @@ const now = ref(Date.now())
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
 const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
+const history = ref<GameHistoryEntry[]>([])
 const activeTable = ref<ActiveTable | null>(null)
 const dismissedTable = ref<string | null>(null)
 
@@ -95,7 +102,7 @@ async function create() {
   sound.playClick()
   busy.value = 'create'
   try {
-    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
+    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: Math.max(3, players.value), stake: stake.value })
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -186,6 +193,7 @@ const PANEL_TITLES = {
   leaderboard: 'Рейтинг',
   shop: 'Магазин',
   social: 'Друзья и чат',
+  tables: 'Все столы',
 } as const
 
 async function refreshActiveTable() {
@@ -193,6 +201,14 @@ async function refreshActiveTable() {
     const t = await getActiveTable()
     activeTable.value =
       t && t.id !== dismissedTable.value ? { id: t.id, mode: t.mode, stake: t.stake ?? MIN_STAKE, players: t.maxPlayers } : null
+  } catch {
+    return
+  }
+}
+
+async function loadHistory() {
+  try {
+    history.value = await getGameHistory(20)
   } catch {
     return
   }
@@ -220,6 +236,7 @@ function onVisibility() {
 
 onMounted(() => {
   profileStore.load(true)
+  loadHistory()
   refreshAll()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') refreshAll()
@@ -298,26 +315,48 @@ onUnmounted(() => {
           @refresh="refreshTables(true)"
           @create="create"
         />
+
+        <div v-if="!sideColumn" class="side-inline">
+          <StatsCard class="rise" style="--d: 4" :profile="profile" :history="history" @profile="panels.open('profile')" />
+          <LobbyChat
+            v-if="settings.showChat"
+            class="rise chat-inline"
+            style="--d: 5"
+            :messages="messages"
+            :my-id="auth.user?.id"
+            :online="MOCK_ONLINE"
+            @send="sendMessage"
+          />
+        </div>
       </div>
     </main>
 
-    <SocialPanel
-      class="social-col"
+    <aside v-if="sideColumn" class="side" aria-label="Статистика и чат">
+      <StatsCard class="rise" style="--d: 2" :profile="profile" :history="history" @profile="panels.open('profile')" />
+      <LobbyChat
+        v-if="settings.showChat"
+        class="rise side-chat"
+        style="--d: 3"
+        :messages="messages"
+        :my-id="auth.user?.id"
+        :online="MOCK_ONLINE"
+        @send="sendMessage"
+      />
+    </aside>
+
+    <FriendsRail
+      class="friends"
+      :username="username"
       :friends="friends"
       :requests="requests"
-      :messages="messages"
-      :my-id="auth.user?.id"
-      :show-chat="settings.showChat"
-      @add-friend="soon('Поиск друзей по имени скоро появится')"
-      @invite="invite"
-      @accept="acceptRequest"
-      @decline="declineRequest"
-      @send="sendMessage"
+      @profile="panels.open('profile')"
+      @social="panels.open('social')"
+      @add="soon('Поиск друзей по имени скоро появится')"
     />
 
     <AnimatePresence>
       <OverlayPanel
-        v-if="panels.panel.value && panels.panel.value !== 'social'"
+        v-if="panels.panel.value && panels.panel.value !== 'social' && panels.panel.value !== 'tables'"
         :key="panels.panel.value"
         :title="PANEL_TITLES[panels.panel.value]"
         :width="panels.panel.value === 'leaderboard' ? 520 : 880"
@@ -327,7 +366,7 @@ onUnmounted(() => {
           v-if="panels.panel.value === 'profile'"
           :profile="profile"
           :error="profileStore.error"
-          :history="MOCK_HISTORY"
+          :history="history"
           @settings="(s) => panels.open('settings', s)"
           @retry="profileStore.load(true)"
         />
@@ -376,12 +415,14 @@ onUnmounted(() => {
 
 <style scoped>
 .client {
-  --rail-w: 84px;
+  --rail-w: 98px;
+  --side-w: 340px;
+  --friends-w: 100px;
   --rail-h: 0px;
 
   position: relative;
   display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) 360px;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--side-w) var(--friends-w);
   height: 100dvh;
   overflow: hidden;
   background: var(--color-paper);
@@ -400,7 +441,8 @@ onUnmounted(() => {
 
 .rail,
 .main,
-.social-col {
+.side,
+.friends {
   position: relative;
   min-height: 0;
 }
@@ -413,15 +455,35 @@ onUnmounted(() => {
 .main-inner {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  max-width: 1280px;
+  gap: 24px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 8px 32px 48px;
+  padding: 8px 26px 48px;
 }
 
-.social-col {
-  border-left: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-paper-sunken) 60%, transparent);
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100dvh;
+  padding: 14px 0;
+  box-sizing: border-box;
+}
+
+.side-chat {
+  flex: 1;
+  min-height: 0;
+}
+
+.side-inline {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.chat-inline {
+  height: 420px;
 }
 
 .social-sheet {
@@ -429,19 +491,31 @@ onUnmounted(() => {
   padding: 0;
 }
 
-@media (min-width: 1700px) {
+@media (min-width: 1800px) {
   .client {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) 400px;
+    --side-w: 380px;
   }
 }
 
 @media (max-width: 1279px) {
   .client {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    --side-w: 320px;
+
+    grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--side-w);
   }
 
-  .social-col {
+  .side {
+    padding-right: 14px;
+  }
+
+  .friends {
     display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .client {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
   }
 }
 
@@ -464,8 +538,12 @@ onUnmounted(() => {
   }
 
   .main-inner {
-    gap: 16px;
+    gap: 18px;
     padding: 4px 16px 32px;
+  }
+
+  .side-inline {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

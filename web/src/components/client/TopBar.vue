@@ -17,12 +17,21 @@ defineEmits<{ (e: 'profile'): void; (e: 'social'): void; (e: 'top-up'): void }>(
 const shown = useCountUp(computed(() => props.balance ?? undefined), 900)
 const canTopUp = computed(() => props.balance !== null && props.balance < TOP_UP_THRESHOLD)
 const initial = computed(() => (props.username[0] ?? '?').toUpperCase())
+
+function greetingFor(hour: number) {
+  if (hour >= 5 && hour < 12) return 'Доброе утро'
+  if (hour >= 12 && hour < 17) return 'Добрый день'
+  if (hour >= 17 && hour < 23) return 'Добрый вечер'
+  return 'Доброй ночи'
+}
+
+const greeting = greetingFor(new Date().getHours())
 </script>
 
 <template>
   <header class="top">
     <div class="where">
-      <h1>Лобби</h1>
+      <h1><span class="hello">{{ greeting }},</span> {{ username }}</h1>
       <span class="online"><i aria-hidden="true"></i>{{ online }} онлайн</span>
     </div>
 
@@ -47,7 +56,7 @@ const initial = computed(() => (props.username[0] ?? '?').toUpperCase())
         </button>
       </div>
 
-      <button type="button" class="me" @click="$emit('profile')">
+      <button type="button" class="me compact-only" @click="$emit('profile')">
         <span class="avatar" aria-hidden="true">{{ initial }}</span>
         <span class="name">{{ username }}</span>
       </button>
@@ -73,11 +82,18 @@ const initial = computed(() => (props.username[0] ?? '?').toUpperCase())
 
 h1 {
   margin: 0;
+  overflow: hidden;
   font-family: var(--font-card);
-  font-size: 32px;
+  font-size: 30px;
   font-style: italic;
   font-weight: 400;
   letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hello {
+  color: var(--color-ink-faint);
 }
 
 .online {
@@ -229,6 +245,12 @@ h1 {
   font-size: 15px;
 }
 
+@media (min-width: 1280px) {
+  .compact-only {
+    display: none;
+  }
+}
+
 @media (max-width: 1279px) {
   .social-btn {
     display: grid;
@@ -241,7 +263,7 @@ h1 {
   }
 
   h1 {
-    font-size: 26px;
+    font-size: 22px;
   }
 
   .online,
