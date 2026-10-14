@@ -14,7 +14,20 @@ function when(iso: string) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
-const isLoss = (g: GameHistoryEntry) => g.payout < 0
+const outcomeOf = (g: GameHistoryEntry) => g.outcome ?? (g.payout > 0 ? 'win' : g.payout < 0 ? 'lose' : 'draw')
+const isLoss = (g: GameHistoryEntry) => outcomeOf(g) === 'lose'
+
+function placeText(g: GameHistoryEntry) {
+  const o = outcomeOf(g)
+  if (o === 'draw') return 'ничья'
+  if (o === 'lose') return 'дурак'
+  return `${g.place} место`
+}
+
+function payoutText(p: number) {
+  if (p === 0) return '0'
+  return `${p > 0 ? '+' : '−'}${Math.abs(p).toLocaleString('ru-RU')}`
+}
 </script>
 
 <template>
@@ -28,8 +41,8 @@ const isLoss = (g: GameHistoryEntry) => g.payout < 0
           <b>{{ g.mode === 'perevodnoy' ? 'Переводной' : 'Подкидной' }}</b>
           <small>{{ when(g.finishedAt) }} · {{ g.deck }} карт · {{ g.players }} игр. · ставка {{ g.stake.toLocaleString('ru-RU') }}</small>
         </span>
-        <span class="place">{{ isLoss(g) ? 'дурак' : `${g.place} место` }}</span>
-        <span class="payout">{{ g.payout > 0 ? '+' : '−' }}{{ Math.abs(g.payout).toLocaleString('ru-RU') }}</span>
+        <span class="place">{{ placeText(g) }}</span>
+        <span class="payout">{{ payoutText(g.payout) }}</span>
       </li>
     </ol>
     <p v-else class="empty">Сыгранные партии появятся здесь.</p>

@@ -101,6 +101,8 @@ const offset = props.side === 'left' ? -60 : 60
 }
 
 h2 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-family: var(--font-card);
   font-size: 30px;

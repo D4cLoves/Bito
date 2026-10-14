@@ -5,7 +5,10 @@ import { PhCaretDown, PhCheck, PhLockSimple } from '@phosphor-icons/vue'
 import StakeChip from './StakeChip.vue'
 import type { PickOption } from '../../types/ui'
 
-const props = withDefaults(defineProps<{ label: string; options: PickOption<T>[]; align?: 'start' | 'end' }>(), { align: 'start' })
+const props = withDefaults(defineProps<{ label: string; options: PickOption<T>[]; align?: 'start' | 'end'; tone?: 'felt' | 'paper' }>(), {
+  align: 'start',
+  tone: 'felt',
+})
 const model = defineModel<T>({ required: true })
 const emit = defineEmits<{ (e: 'change', value: T): void }>()
 
@@ -90,7 +93,7 @@ function onKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div ref="root" class="pick" :class="{ open }">
+  <div ref="root" class="pick" :class="[tone, { open }]">
     <button
       ref="trigger"
       type="button"
@@ -174,6 +177,32 @@ function onKey(e: KeyboardEvent) {
 .trigger:focus-visible {
   outline: 2px solid var(--color-felt-target);
   outline-offset: 2px;
+}
+
+.paper .trigger {
+  min-height: 0;
+  padding: 7px 14px 8px;
+  border-radius: 14px;
+  background: var(--color-paper-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+.paper .trigger:hover,
+.paper.open .trigger {
+  box-shadow: inset 0 0 0 1.5px var(--color-ink-ghost);
+}
+
+.paper .trigger:focus-visible {
+  outline-color: var(--color-gold);
+}
+
+.paper .label {
+  color: var(--color-ink-faint);
+}
+
+.paper .value {
+  font-size: 14px;
 }
 
 .label {

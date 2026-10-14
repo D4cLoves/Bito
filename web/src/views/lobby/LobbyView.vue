@@ -2,13 +2,17 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
+import { PhPlus } from '@phosphor-icons/vue'
 import { useMediaQuery } from '@vueuse/core'
 import ToastStack from '../../components/app/ToastStack.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
 import ReturnBanner from '../../components/client/ReturnBanner.vue'
 import QuickPlay from '../../components/client/QuickPlay.vue'
-import TablesBoard from '../../components/client/TablesBoard.vue'
+import TablesCarousel from '../../components/client/TablesCarousel.vue'
+import AllTables from '../../components/client/AllTables.vue'
+import CreateTableDialog from '../../components/client/CreateTableDialog.vue'
+import LastGame from '../../components/client/LastGame.vue'
 import SocialPanel from '../../components/client/SocialPanel.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
 import StatsCard from '../../components/client/StatsCard.vue'
@@ -52,17 +56,18 @@ useSmoothScroll(mainEl)
 const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
 const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
+const creating = ref(false)
 
 const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
 const tablesError = ref('')
-const refreshing = ref(false)
 const now = ref(Date.now())
 
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
 const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
 const history = ref<GameHistoryEntry[]>([])
+const historyLoaded = ref(false)
 const activeTable = ref<ActiveTable | null>(null)
 const dismissedTable = ref<string | null>(null)
 
@@ -77,8 +82,7 @@ watch(balance, (b) => {
   createPrefs.stake.value = bestAffordable(b, createPrefs.stake.value)
 })
 
-async function refreshTables(manual = false) {
-  if (manual) refreshing.value = true
+async function refreshTables() {
   try {
     tables.value = await listTables()
     tablesError.value = ''
@@ -87,9 +91,13 @@ async function refreshTables(manual = false) {
     if (!auth.isAuthenticated) router.push({ name: 'landing', query: { auth: 'login' } })
   } finally {
     tablesLoaded.value = true
-    refreshing.value = false
     now.value = Date.now()
   }
+}
+
+function joinFromList(table: TableInfo) {
+  if (panels.panel.value === 'tables') panels.close()
+  goToTable(table.id)
 }
 
 function goToTable(id: string, search = false) {
@@ -97,9 +105,13 @@ function goToTable(id: string, search = false) {
   router.push({ name: 'table', params: { id }, query: search ? { search: '1' } : undefined })
 }
 
+function openCreate() {
+  sound.playClick()
+  creating.value = true
+}
+
 async function create() {
   if (busy.value) return
-  sound.playClick()
   busy.value = 'create'
   try {
     const table = await createTable({
@@ -108,6 +120,7 @@ async function create() {
       maxPlayers: createPrefs.players.value,
       stake: createPrefs.stake.value,
     })
+    creating.value = false
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -215,8 +228,25 @@ async function loadHistory() {
   try {
     history.value = await getGameHistory(20)
   } catch {
+    history.value = []
+  } finally {
+    historyLoaded.value = true
+  }
+}
+
+function playAgain(g: GameHistoryEntry) {
+  if (g.players === 2) {
+    quickMode.value = g.mode
+    quickDeck.value = g.deck
+    quickStake.value = bestAffordable(balance.value, g.stake)
+    find()
     return
   }
+  createPrefs.mode.value = g.mode
+  createPrefs.deck.value = g.deck
+  createPrefs.players.value = g.players
+  createPrefs.stake.value = bestAffordable(balance.value, g.stake)
+  openCreate()
 }
 
 function refreshAll() {
@@ -303,28 +333,36 @@ onUnmounted(() => {
           @top-up="topUp"
         />
 
-        <TablesBoard
+        <TablesCarousel
           class="rise"
           style="--d: 3"
           :tables="tables"
           :loaded="tablesLoaded"
-          :refreshing="refreshing"
           :error="tablesError"
           :my-id="auth.user?.id"
           :now="now"
-          :stake="quickStake"
           :balance="balance"
-          @join="(t) => goToTable(t.id)"
-          @refresh="refreshTables(true)"
-          @create="create"
+          @join="joinFromList"
+          @create="openCreate"
+          @all="panels.open('tables')"
+        />
+
+        <LastGame
+          class="rise"
+          style="--d: 4"
+          :entry="history[0] ?? null"
+          :loaded="historyLoaded"
+          :now="now"
+          @again="playAgain"
+          @history="panels.open('profile')"
         />
 
         <div v-if="!sideColumn" class="side-inline">
-          <StatsCard class="rise" style="--d: 4" :profile="profile" :history="history" @profile="panels.open('profile')" />
+          <StatsCard class="rise" style="--d: 5" :profile="profile" :history="history" @profile="panels.open('profile')" />
           <LobbyChat
             v-if="settings.showChat"
             class="rise chat-inline"
-            style="--d: 5"
+            style="--d: 6"
             :messages="messages"
             :my-id="auth.user?.id"
             :online="MOCK_ONLINE"
@@ -389,6 +427,30 @@ onUnmounted(() => {
       </OverlayPanel>
 
       <OverlayPanel
+        v-if="panels.panel.value === 'tables'"
+        key="tables"
+        :title="PANEL_TITLES.tables"
+        :width="920"
+        @close="panels.close()"
+      >
+        <template #head>
+          <button type="button" class="head-create" @click="openCreate">
+            <PhPlus :size="16" weight="bold" aria-hidden="true" />
+            Создать стол
+          </button>
+        </template>
+        <AllTables
+          :tables="tables"
+          :loaded="tablesLoaded"
+          :my-id="auth.user?.id"
+          :now="now"
+          :balance="balance"
+          @join="joinFromList"
+          @create="openCreate"
+        />
+      </OverlayPanel>
+
+      <OverlayPanel
         v-if="panels.panel.value === 'social'"
         key="social"
         side="right"
@@ -410,6 +472,20 @@ onUnmounted(() => {
           @send="sendMessage"
         />
       </OverlayPanel>
+    </AnimatePresence>
+
+    <AnimatePresence>
+      <CreateTableDialog
+        v-if="creating"
+        v-model:stake="createPrefs.stake.value"
+        v-model:mode="createPrefs.mode.value"
+        v-model:deck="createPrefs.deck.value"
+        v-model:players="createPrefs.players.value"
+        :balance="balance"
+        :busy="busy === 'create'"
+        @close="creating = false"
+        @create="create"
+      />
     </AnimatePresence>
 
     <ToastStack />
@@ -492,6 +568,26 @@ onUnmounted(() => {
 .social-sheet {
   height: 100%;
   padding: 0;
+}
+
+.head-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-gold);
+  color: #2b1f08;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.head-create:hover {
+  filter: brightness(1.05);
 }
 
 @media (min-width: 1800px) {

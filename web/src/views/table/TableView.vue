@@ -614,7 +614,7 @@ onUnmounted(() => {
               <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
               <p v-if="status === 'closed'">Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.</p>
               <p v-else-if="waitingInfo">
-                За столом {{ waitingInfo.players }} из {{ waitingInfo.maxPlayers }}. Партия начнётся сама, когда все сядут.
+                За столом {{ Math.max(waitingInfo.players, 1) }} из {{ waitingInfo.maxPlayers }}. Партия начнётся сама, когда все сядут.
               </p>
               <p v-else>Партия начнётся сама, когда все сядут.</p>
               <button v-if="status === 'closed'" type="button" class="felt-btn" @click="router.push('/lobby')">В лобби</button>
