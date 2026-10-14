@@ -1,287 +1,175 @@
 ---
-title: Bito — план экономики (бэкенд)
+title: Bito — экономика (бэкенд)
 tags: [bito, plan, economy, backend]
 created: 2026-10-13
+updated: 2026-10-14
 ---
 
-# Экономика: план реализации
+# Экономика: как сделано
 
-> [!abstract] Цель
-> Ставка списывается при старте партии, по итогам партии деньги распределяются по местам, всё пишется в журнал `wallet_transactions`. Баланс и статистика наконец начинают меняться после игры.
+> [!abstract] Итог
+> Ставка списывается при старте партии, в конце партии деньги делятся по местам, каждое движение денег пишется в журнал `wallet_transactions`. Баланс и статистика меняются после каждой партии. Всё в ветке `feature/economy`.
 
-Ветка: `feature/economy` от `main`.
+## 1. Статус
 
-## 0. Что уже есть в коде
+| # | Шаг | Статус | Где |
+|---|---|---|---|
+| 1 | Миграция: `games`, `game_players`, `wallet_transactions` | ✅ применена | `migrations/000002_economy.sql` |
+| 2 | Математика выплат + тест инварианта денег | ✅ | `internal/economy/` |
+| 3 | `Game.Losers()` | ✅ | `internal/game/game.go` |
+| 4 | Репозиторий кошелька | ✅ | `internal/repository/postgres/wallet.go` |
+| 5 | Сервис экономики | ✅ | `internal/service/economy.go` |
+| 6 | Ставки в комнате: списание на старте, расчёт в конце | ✅ | `internal/delivery/ws/room.go`, `bank.go` |
+| 7 | Один аккаунт — один стол | ✅ | `ws/hub.go`, `ws/room.go` |
+| 8 | REST: ставка, быстрая игра, подачка, журнал | ✅ | `delivery/http/table_handler.go`, `wallet_handler.go` |
+| 9 | Возврат ставок после падения сервера | ✅ | `app.go` → `RefundUnfinished` |
+| 10 | Фронт | ✅ | лобби, стол, `api/wallet.ts` |
 
-| Что | Где | Состояние |
-|---|---|---|
-| Порядок мест | `game.go`, поле `places`, метод `Places()` | **готово**: вышедшие по порядку → дурак → сдавшиеся (последний сдавшийся раньше) |
-| Несколько вышли за один ход | `checkGameOver` идёт по `g.players` | **готово**: порядок по месту за столом |
-| Кошелёк | таблица `user_wallets`, `balance BIGINT CHECK (balance >= 0)`, по умолчанию 2500 | есть, но никто не меняет |
-| Статистика | таблица `user_stats` (wins, losses, total_games) | есть, но никто не меняет |
-| Баланс в API | `GET /api/v1/users/me` → `wallet.balance` | готово |
-| Ставки на фронте | `web/src/constants/economy.ts`: `STAKES`, `TABLE_FEE`, выбор ставки в лобби | UI готов, на бэк не отправляется |
-| Комната ↔ БД | `ws.Room` | **связи нет**, комната ничего не знает о деньгах |
-
-> [!note] Пункт P0 «порядок выхода игроков» из `features.md` фактически сделан. Не хватает только метода, который отдаёт **всех проигравших** (см. шаг 2).
-
-## 1. Решения (по умолчанию так, скажи, если иначе)
+## 2. Решения
 
 | # | Вопрос | Решение | Почему |
 |---|---|---|---|
-| 1 | Когда списывать ставку | **при старте партии**, всем сразу, одной транзакцией | Не нужен возврат при уходе из ожидающего стола или закрытии стола до старта. Минус целый класс багов. |
-| 2 | Кто платит | **дурак и все сдавшиеся** | Сдача и автосдача по таймауту — это проигрыш (так в `features.md`). |
-| 3 | Что делится | пул = сумма ставок всех проигравших, минус комиссия 5% | Формула долей из `features.md` не меняется, просто пул может быть больше одной ставки. |
-| 4 | Округление | комиссия `pool * 5 / 100` (вниз), доли вниз, остаток → 1 месту | Целые числа, деньги не теряются. |
-| 5 | Ничья | всем вернуть ставку, комиссии нет | Как в `features.md`. |
-| 6 | Стартовый баланс | **2500** | Уже стоит в БД по умолчанию и на фронте (`JoinCard.vue`). 1000 из `features.md` устарело. |
-| 7 | Допустимые ставки | только из списка `100, 250, 500, 1000, 2500, 5000` | Тот же список, что `STAKES` на фронте. |
-| 8 | ID партии | **= ID комнаты** | Комната живёт ровно одну партию и закрывается через 30 сек после конца. |
-| 9 | Подачка | до 500, если баланс < 100, не чаще раза в час | Как в `features.md`. |
+| 1 | Когда списывать ставку | **при старте партии**, всем сразу, одной транзакцией | Не нужен возврат, если кто-то ушёл из ожидающего стола или стол закрылся до старта. |
+| 2 | Кто платит | **дурак и все сдавшиеся** | Сдача и автосдача по таймауту — это проигрыш. |
+| 3 | Что делится | пул = сумма ставок проигравших, минус 5% | Формула долей из `features.md` та же, пул бывает больше одной ставки. |
+| 4 | Округление | комиссия вниз, доли вниз, остаток → 1 месту | Целые числа, деньги не теряются. |
+| 5 | Ничья | **только если проигравших нет**: всем вернуть ставку, комиссии нет | См. «Ничья со сдавшимся» ниже. |
+| 6 | Стартовый баланс | **2500** | Стоит в БД и на фронте. 1000 из `features.md` устарело. |
+| 7 | Допустимые ставки | `100, 250, 500, 1000, 2500, 5000` | Тот же список, что `STAKES` на фронте. |
+| 8 | Ставка не указана | **100** (минимальная) | Старые клиенты без поля `stake` не ломаются. |
+| 9 | ID партии | **= ID комнаты** | Комната живёт ровно одну партию. |
+| 10 | Подачка | до 500, если баланс < 100, не чаще раза в час | Как в `features.md`. |
 
-## 2. Шаги
+> [!warning] Ничья со сдавшимся
+> Игра ставит `isDraw`, когда последние двое вышли одновременно. Но если кто-то **сдался раньше**, он всё равно проигравший и платит. Поэтому ничья определяется **расчётом**, а не флагом игры: `Settlement.Draw` true, только если проигравших нет. Флаг `isDraw` в `game_over` тоже берётся из расчёта.
 
-Каждый шаг — отдельный коммит, после каждого `go test ./...` зелёный.
+## 3. Данные
 
-### Шаг 1. Миграция `migrations/000002_economy.sql`
+> [!success] Миграция применена
+> Файл `migrations/000002_economy.sql` — актуальная версия:
+> - `user_id` в `game_players` и `wallet_transactions` с `ON DELETE RESTRICT` (журнал денег нельзя стереть каскадом). Удаление аккаунта мягкое (`deleted_at`), поэтому это ему не мешает;
+> - `CHECK` на `status`, `outcome`, `fee >= 0`, `amount <> 0`, `balance_after >= 0`;
+> - вставка `opening` идемпотентна: повторный запуск не задвоит записи.
+>
+> Инструмента миграций в проекте нет, поэтому применено вручную:
+> `docker exec -i bito_postgres psql -U postgres -d bito_db -v ON_ERROR_STOP=1 -1`
+>
+> `CHECK (balance >= 0)` в `user_wallets` уже есть с первой миграции, повторно не добавлялся.
 
-```sql
--- +migrate Up
-CREATE TABLE IF NOT EXISTS games (
-    id          UUID PRIMARY KEY,
-    mode        VARCHAR(16) NOT NULL,
-    deck        SMALLINT    NOT NULL,
-    stake       BIGINT      NOT NULL CHECK (stake > 0),
-    fee         BIGINT      NOT NULL DEFAULT 0,
-    status      VARCHAR(16) NOT NULL DEFAULT 'playing', -- playing | finished | draw | refunded
-    started_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    finished_at TIMESTAMPTZ
-);
+> [!note] Две суммы, которые легко перепутать
+> `game_players.payout` — **чистый итог партии** (`+475` / `−500`).
+> `wallet_transactions.amount` — **фактическое движение по балансу** (`−500` при `stake_lock`, `+975` при `win_payout`: ставка обратно плюс доля).
+> Сумма `amount` по игроку всегда равна его балансу.
 
-CREATE TABLE IF NOT EXISTS game_players (
-    game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    place   SMALLINT,              -- 1..N, NULL пока идёт партия
-    outcome VARCHAR(8),            -- win | lose | draw
-    payout  BIGINT NOT NULL DEFAULT 0, -- итог для игрока: +выигрыш, -ставка, 0
-    PRIMARY KEY (game_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players(user_id);
+Виды записей журнала (`model.TransactionKind`): `signup_bonus`, `opening`, `stake_lock`, `stake_refund`, `win_payout`, `top_up`.
 
-CREATE TABLE IF NOT EXISTS wallet_transactions (
-    id            BIGSERIAL PRIMARY KEY,
-    user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    amount        BIGINT NOT NULL,          -- со знаком: -100 списание, +237 зачисление
-    kind          VARCHAR(16) NOT NULL,     -- signup_bonus | stake_lock | stake_refund | win_payout | top_up | opening
-    game_id       UUID REFERENCES games(id) ON DELETE SET NULL,
-    balance_after BIGINT NOT NULL,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_wallet_tx_user ON wallet_transactions(user_id, created_at DESC);
+## 4. Как устроен код
 
-ALTER TABLE user_wallets ADD COLUMN IF NOT EXISTS last_top_up_at TIMESTAMPTZ;
-
--- Входящий остаток для уже существующих игроков, чтобы баланс = сумма журнала
-INSERT INTO wallet_transactions (user_id, amount, kind, balance_after)
-SELECT user_id, balance, 'opening', balance FROM user_wallets;
-
--- +migrate Down
-ALTER TABLE user_wallets DROP COLUMN IF EXISTS last_top_up_at;
-DROP TABLE IF EXISTS wallet_transactions;
-DROP TABLE IF EXISTS game_players;
-DROP TABLE IF EXISTS games;
-```
-
-> [!question] Как ты применяешь миграции?
-> В репозитории нет инструмента миграций, в `docker-compose.yml` их тоже нет. Если руками через `psql`, то так же. Если хочешь, добавим `make migrate`.
-
-**Почему `balance_after`:** при разборе «куда делись деньги» сразу видно баланс после каждой операции, не надо суммировать.
-
-### Шаг 2. Чистая логика: пакет `internal/economy`
-
-Без БД и без сети, только математика. Здесь главные тесты.
+### `internal/economy` — математика без БД
 
 ```go
-package economy
-
-const (
-    StartBalance   int64 = 2500
-    MinStake       int64 = 100
-    FeePercent     int64 = 5
-    TopUpThreshold int64 = 100
-    TopUpTo        int64 = 500
-    TopUpCooldown        = time.Hour
-)
-
-var AllowedStakes = []int64{100, 250, 500, 1000, 2500, 5000}
-
-func IsAllowedStake(s int64) bool
-
 type Result struct {
-    Places []string        // из game.Places()
-    Losers map[string]bool // дурак + сдавшиеся
-    IsDraw bool
+    Places []string        // game.Places(): все игроки от 1 места до последнего
+    Losers map[string]bool // game.Losers(): дурак + сдавшиеся
 }
 
-type Payout struct {
-    UserID string
-    Place  int   // 1..N
-    Credit int64 // сколько ВЕРНУТЬ на баланс при расчёте (ставка уже списана)
-    Net    int64 // итог партии для игрока: Credit - stake
-    Win    bool
+type Settlement struct {
+    Payouts []Payout // победители по местам, потом проигравшие
+    Fee     int64
+    Draw    bool
 }
 
-// Settle считает выплаты. Возвращает выплаты по местам и комиссию.
-func Settle(stake int64, r Result) (payouts []Payout, fee int64)
+func Settle(stake int64, r Result) Settlement
 ```
 
-Логика `Settle`:
-1. `IsDraw` → всем `Credit = stake`, `Net = 0`, `fee = 0`.
-2. Победители = `Places` без `Losers`, по порядку. `m = len(winners)`.
-3. `pool = stake * len(Losers)`, `fee = pool * FeePercent / 100`, `dist = pool - fee`.
-4. Доля места `i` (с 1): `dist * (m - i + 1) / (m * (m + 1) / 2)`. Остаток `dist - сумма долей` → первому месту.
-5. Победитель: `Credit = stake + доля`, `Net = доля`. Проигравший: `Credit = 0`, `Net = -stake`.
+`Payout.Credit` — сколько вернуть на баланс (ставка уже списана), `Payout.Net` — итог партии.
 
-В пакет `game` добавить:
+### `game.Losers()`
 
-```go
-// Losers возвращает дурака и всех сдавшихся.
-func (g *Game) Losers() []PlayerID
-```
+Дурак (`loserID`) плюс все сдавшиеся, без дублей. Дубль возможен, когда сдаётся предпоследний игрок: `Surrender` записывает в `loserID` его же.
 
-Дурак — `loserID`, сдавшиеся — `g.surrendered`. Без дублей: при сдаче последнего соперника `loserID` уже равен сдавшемуся.
+### Репозиторий (`postgres.WalletRepository`)
 
-**Тесты (`economy_test.go`):**
-- Пример из `features.md` §3.3: 4 игрока, ставка 500 → `+238 / +158 / +79 / −500`, комиссия 25.
-- 2 игрока, ставка 100 → `+95 / −100`, комиссия 5.
-- Двое проигравших (дурак + сдавшийся), 4 игрока.
-- Ничья → все `Net = 0`, комиссия 0.
-- **Инвариант**: для всех ставок из `AllowedStakes` и от 2 до 6 игроков, при любом числе проигравших от 1 до N−1: `сумма Net == −fee` и `fee >= 0`. Это тест «деньги не появляются и не исчезают».
+| Метод | Что делает |
+|---|---|
+| `Balance` | баланс игрока |
+| `LockStakes(ctx, model.GameRecord, []uuid.UUID)` | одна транзакция: `games` + списание у всех + журнал + `game_players`. Игроки сортируются (нет дедлоков). Кому не хватило — `*model.InsufficientFundsError{UserID}`, всё откатывается. |
+| `Settle(ctx, gameID, economy.Settlement)` | одна транзакция, **идемпотентна**: первым делом `UPDATE games ... WHERE status = 'playing'`, если строк 0 — уже рассчитано. Зачисления, журнал, места, статистика. |
+| `TopUp(ctx, userID, now)` | `SELECT ... FOR UPDATE`, проверки, пополнение до 500, журнал. Ошибки: `model.ErrTopUpNotAllowed` (фишек ≥ 100) или `*model.TopUpCooldownError{NextAt}` (рано). |
+| `Transactions(ctx, userID, limit)` | журнал, новые сверху |
+| `RefundUnfinished(ctx)` | при старте сервера возвращает ставки партий в статусе `playing`, ставит им `refunded` |
 
-### Шаг 3. Репозиторий `internal/repository/postgres/wallet.go`
+`model.GameRecord` лежит в `model`, а не в `postgres`, чтобы сервис не зависел от пакета репозитория.
 
-```go
-var ErrInsufficientFunds = errors.New("insufficient funds") // лучше в model/errors.go
-var ErrTopUpNotAllowed  = errors.New("top-up not allowed")
+### Сервис (`service.EconomyService`)
 
-type WalletRepository struct{ pool *pgxpool.Pool }
+Тонкий слой: переводит строковые ID из `ws` в `uuid`, вызывает `economy.Settle` и репозиторий. Реализует сразу три интерфейса: `ws.Bank`, `http.BalanceReader`, `http.WalletService`.
 
-func (r *WalletRepository) Balance(ctx, userID uuid.UUID) (int64, error)
-
-// LockStakes: одна транзакция на всю партию.
-func (r *WalletRepository) LockStakes(ctx, g GameRecord, userIDs []uuid.UUID) error
-
-// Settle: одна транзакция, идемпотентна.
-func (r *WalletRepository) Settle(ctx, gameID uuid.UUID, fee int64, status string, payouts []economy.Payout) error
-
-func (r *WalletRepository) TopUp(ctx, userID uuid.UUID) (newBalance int64, err error)
-
-// RefundUnfinished: при старте сервера вернуть ставки партий, оборванных падением сервера.
-func (r *WalletRepository) RefundUnfinished(ctx) (int, error)
-```
-
-**`LockStakes`**, всё в одном `tx`:
-1. `INSERT INTO games (id, mode, deck, stake)`.
-2. Отсортировать `userIDs` (одинаковый порядок блокировок → нет дедлоков между столами).
-3. Для каждого игрока:
-   ```sql
-   UPDATE user_wallets SET balance = balance - $2, updated_at = NOW()
-   WHERE user_id = $1 AND balance >= $2
-   RETURNING balance
-   ```
-   Нет строки (`pgx.ErrNoRows`) → откат и `ErrInsufficientFunds` с ID игрока (обернуть: `fmt.Errorf("%w: %s", ErrInsufficientFunds, id)` или свой тип ошибки).
-4. `INSERT INTO wallet_transactions (... kind 'stake_lock', amount -stake, balance_after)`.
-5. `INSERT INTO game_players (game_id, user_id)`.
-
-**`Settle`**, всё в одном `tx`:
-1. Защита от двойной выплаты, первым запросом:
-   ```sql
-   UPDATE games SET status = $2, fee = $3, finished_at = NOW()
-   WHERE id = $1 AND status = 'playing'
-   ```
-   `RowsAffected() == 0` → уже рассчитано, выйти без ошибки.
-2. Для каждой выплаты с `Credit > 0`: `UPDATE user_wallets SET balance = balance + credit RETURNING balance` и строка в журнал (`stake_refund` на ставку, `win_payout` на выигрыш; либо одна строка `win_payout` на всю сумму, выбери сам).
-3. `UPDATE game_players SET place, outcome, payout = Net`.
-4. `UPDATE user_stats SET wins = wins + ..., losses = losses + ..., total_games = total_games + 1`. При ничьей только `total_games`.
-
-**`TopUp`**, атомарно одним запросом:
-```sql
-WITH old AS (SELECT balance FROM user_wallets WHERE user_id = $1 FOR UPDATE)
-UPDATE user_wallets w SET balance = $2, last_top_up_at = NOW(), updated_at = NOW()
-FROM old
-WHERE w.user_id = $1 AND old.balance < $3
-  AND (w.last_top_up_at IS NULL OR w.last_top_up_at < NOW() - INTERVAL '1 hour')
-RETURNING w.balance, $2 - old.balance
-```
-Нет строки → `ErrTopUpNotAllowed`. Есть → строка в журнал `top_up`.
-
-**Регистрация.** В `UserRepository.CreateUser` вставлять кошелёк с явным `economy.StartBalance` и в той же транзакции писать в журнал `signup_bonus`.
-
-### Шаг 4. Сервис `internal/service/economy.go`
-
-Тонкий слой: собирает `economy.Settle` и репозиторий, переводит `string` ID комнаты в `uuid`.
-
-```go
-type EconomyService struct{ repo *postgres.WalletRepository }
-
-func (s *EconomyService) Balance(ctx, userID string) (int64, error)
-func (s *EconomyService) LockStakes(ctx, gameID string, mode string, deck int, stake int64, players []string) error
-func (s *EconomyService) Settle(ctx, gameID string, stake int64, r economy.Result) ([]economy.Payout, error)
-func (s *EconomyService) TopUp(ctx, userID string) (int64, error)
-```
-
-### Шаг 5. Подключить к комнате (`internal/delivery/ws`)
-
-Интерфейс объявляем **в пакете `ws`** (там, где его используют), реализует его `EconomyService`:
+### Комната (`ws.Room`)
 
 ```go
 type Bank interface {
     Balance(ctx context.Context, userID string) (int64, error)
     LockStakes(ctx context.Context, gameID, mode string, deck int, stake int64, players []string) error
-    Settle(ctx context.Context, gameID string, stake int64, r economy.Result) ([]economy.Payout, error)
+    Settle(ctx context.Context, gameID string, stake int64, r economy.Result) (economy.Settlement, error)
 }
+
+func NewRoom(id string, s RoomSettings, bank Bank) *Room  // bank == nil → бесплатный стол (для тестов)
 ```
 
-1. `Hub` получает `bank Bank` в `NewHub`, передаёт в `NewRoom`. `Room` получает поля `bank` и `stake int64`.
-2. `RoomInfo` + поле `Stake int64 \`json:"stake"\`` (фронт уже читает `stake` из списка столов).
-3. **Посадка.** В `Hub.ServeWS` до `Upgrade`: `bank.Balance(playerID) < room.Stake()` → `402` или `400` с текстом «Не хватает фишек на ставку».
-4. **Старт.** В `startGame()` до `game.NewGame`: `ctx` с таймаутом 5 сек, `bank.LockStakes(ctx, r.id, ...)`.
-   - `ErrInsufficientFunds` для игрока X → отправить X ошибку, закрыть его клиента, удалить из `r.clients`, игру **не** стартовать, ждать следующего.
-   - Другая ошибка → лог, ошибка всем, `r.Close()`.
-5. **Конец.** В `onGameStateChanged` при `PhaseFinished` до `broadcastGameOver`: собрать `economy.Result` из `Places()`, `Losers()`, `IsDraw()` и вызвать `bank.Settle`. Ошибку записать в лог (расчёт идемпотентный, можно повторить).
-6. `GameOverPayload` + `Payouts map[string]int64 \`json:"payouts,omitempty"\`` с `Net` каждого игрока, чтобы фронт показал «+238» и «−500».
-7. **Тесты комнаты:** в `room_test.go` все `NewRoom(...)` получат фейковый банк: `fakeBank` с балансом «бесконечность» и записью вызовов. Добавить тест: конец партии → `Settle` вызван один раз с правильными местами.
+1. **Старт.** Сначала `game.NewGame` (чистая логика), потом `LockStakes`, и только при успехе партия становится активной. Списанных ставок без партии не бывает.
+   - Кому-то не хватило фишек → ему ошибка, он встаёт из-за стола, остальные ждут следующего.
+   - БД недоступна → ошибка всем, стол закрывается.
+2. **Конец.** `settle()` вызывается один раз (защита полем `payouts`), затем `finished = true` и `game_over`.
+3. `game_over` теперь содержит `payouts` (`Net` каждого игрока) и `stake`. `game_state` содержит `stake`.
+4. Все запросы к БД с таймаутом 5 сек (`bankTimeout`), чтобы зависшая БД не повесила стол.
 
-> [!warning] БД в цикле комнаты
-> `LockStakes` и `Settle` блокируют горутину `Room.Run` на время запроса (миллисекунды). Для диплома нормально. Обязательно с таймаутом в `ctx`, чтобы зависшая БД не повесила стол навсегда.
+### Один аккаунт — один стол
 
-### Шаг 6. Один аккаунт — один стол
+- `Room.seated` (под `r.mu`): игрок садится при входе, встаёт, если ушёл до старта. Во время партии место держится (переподключение).
+- `Room.Holds(id)`: сидит ли игрок за **ещё идущим** столом. После конца партии — false.
+- `Hub.SeatedElsewhere(id, except)`: проверка по всем столам.
+- **Вход по WebSocket** (`Hub.admit`): своё место → пускаем; сидит за другим столом → отказ; ставка больше баланса → отказ. Отказ — сообщение `error` и закрытие сокета, фронт показывает текст и **не переподключается**.
 
-1. В `Room`: множество `seated` (ID игроков) под `r.mu`. Обновляется в `handleRegister` и `handleUnregister` до старта, после старта фиксируется на игроках партии. Метод `Has(playerID) bool`.
-2. В `Hub.ServeWS`: если игрок сидит в **другой** комнате, которая не закрыта и партия в ней не окончена → `409` «Вы уже за другим столом». Реконнект в свою комнату разрешён.
-
-### Шаг 7. REST
+## 5. API
 
 | Метод | Ответ | Ошибки |
 |---|---|---|
-| `POST /api/v1/tables` + поле `stake` | `RoomInfo` со `stake` | `400` ставка не из списка; `400` баланс меньше ставки |
-| `GET /api/v1/tables` | у каждого стола есть `stake` | |
-| `POST /api/v1/users/me/top-up` | `{ "balance": 500 }` | `409` «Подачка доступна при балансе меньше 100 и раз в час» |
-| `GET /api/v1/users/me/transactions?limit=50` | журнал (необязательно, но полезно для защиты) | |
+| `POST /api/v1/tables` `{mode, deck, maxPlayers, stake}` | `201` `RoomInfo` со `stake` | `400` ставка не из списка; `402` не хватает фишек; `409` уже за другим столом |
+| `POST /api/v1/tables/quick` (то же тело) | `200` найденный стол или `201` новый | как выше |
+| `GET /api/v1/tables` | у каждого стола `stake` | |
+| `POST /api/v1/wallet/top-up` | `{ "balance": 500 }` | `409` `{error}` или `{error, nextAt}` |
+| `GET /api/v1/wallet/transactions?limit=50` | журнал, максимум 100 | `400` кривой `limit` |
 
-### Шаг 8. Запуск
+> [!note] Отличие от плана
+> Подачка и журнал живут в `/api/v1/wallet/...`, а не в `/users/me/...`: это отдельный обработчик `WalletHandler`, а `UserHandler` не трогали.
 
-В `app.go`:
-1. `walletRepo := postgres.NewWalletRepository(pool)`, `economySvc := service.NewEconomyService(walletRepo)`.
-2. **До** старта сервера: `walletRepo.RefundUnfinished(ctx)` возвращает ставки партий в статусе `playing` (сервер упал посреди игры), ставит им `refunded`.
-3. `ws.NewHub(tokenManager, cfg.AllowedOrigins, economySvc)`, `NewTableHandler(hub, economySvc)`, `NewUserHandler(..., economySvc)`.
+WebSocket-ошибки (текст сервера → фронт показывает перевод из `ERRORS` в `TableView.vue`):
+`не хватает фишек на ставку`, `вы уже играете за другим столом`, `не удалось начать партию, попробуйте ещё раз`, `касса недоступна, попробуйте позже`.
 
-## 3. Как проверить руками
+## 6. Тесты
+
+| Что | Где | Запуск |
+|---|---|---|
+| Примеры из `features.md`, ничья, инвариант на 150 комбинациях | `economy/settle_test.go` | `go test ./...` |
+| `Losers()`: дурак, последняя сдача без дубля, ранняя сдача, сдача перед одновременным выходом | `game/game_test.go` | `go test ./...` |
+| Комната с фейковым банком: списание на старте, нет фишек, БД упала, расчёт один раз, места за столом, быстрая игра | `ws/economy_test.go` | `go test ./...` |
+| HTTP: ставка по умолчанию, правила ставки, 402/409, быстрая игра, подачка, журнал | `http/economy_handler_test.go` | `go test ./...` |
+| **SQL на настоящем Postgres**: полный цикл партии, «всё или ничего» при списании, подачка, возврат после падения, сверка баланса с журналом | `postgres/wallet_integration_test.go` | см. ниже |
+
+Интеграционные тесты создают отдельную базу `bito_test` и удаляют её после себя, рабочую `bito_db` не трогают. Без Docker они пропускаются.
+
+```bash
+docker compose up -d postgres
+go test -tags integration ./internal/repository/postgres/ -v
+```
+
+## 7. Как проверить руками
 
 1. Два аккаунта по 2500. Стол на 2 игрока, ставка 500.
 2. После старта: у обоих 2000, в `wallet_transactions` две строки `stake_lock`.
-3. Доиграть. Победитель 2975 (2000 + 500 + 475), проигравший 2000.
-4. Проверка суммы:
+3. Доиграть. Победитель 2975 (2000 + 500 + 475), проигравший 2000. В окне результата `+475` и `−500`.
+4. Сверка баланса с журналом:
    ```sql
    SELECT w.user_id, w.balance, SUM(t.amount) AS journal
    FROM user_wallets w JOIN wallet_transactions t USING (user_id)
@@ -289,22 +177,12 @@ type Bank interface {
    HAVING w.balance <> SUM(t.amount);  -- должно вернуть 0 строк
    ```
 5. Сдаться посреди партии → сдавшийся платит. Закрыть вкладку на 30 сек → то же самое.
-6. Убить сервер посреди партии и поднять → ставки вернулись, `games.status = 'refunded'`.
+6. Убить сервер посреди партии и поднять → ставки вернулись, `games.status = 'refunded'`, в логе `refunded stakes of 1 unfinished games`.
+7. Сесть за стол и попробовать создать второй → «Вы уже играете за другим столом».
 
-## 4. Фронт (сделаю я, когда бэк будет готов)
+## 8. Что осталось на потом
 
-- Отправлять `stake` в `createTable` и `quickMatch`.
-- Показывать ставку стола в списке, прятать или блокировать столы дороже баланса.
-- В окне результата партии: `+238` / `−500` из `payouts`.
-- Обновлять баланс после партии и после подачки.
-- Кнопка «Подачка» при балансе меньше 100.
-
-## 5. Порядок коммитов
-
-1. `feat(db): economy tables and wallet journal`
-2. `feat(economy): settlement math with money invariant tests`
-3. `feat(game): expose all losers`
-4. `feat(repo): wallet repository — lock, settle, top-up, refund`
-5. `feat(ws): lock stakes on start, settle on game over`
-6. `feat(ws): one account, one active table`
-7. `feat(http): stake on tables, top-up and transactions endpoints`
+- **Сбой расчёта.** Если `Settle` упал (БД отвалилась ровно в конце партии), партия остаётся `playing`, и ставки вернутся только при следующем перезапуске сервера через `RefundUnfinished`. Для диплома нормально; в проде нужен повтор.
+- **Гонка двух вкладок.** Один игрок может одновременно открыть два стола в двух вкладках в одну миллисекунду: проверка «другого стола» не атомарна. Деньги при этом не пострадают: `LockStakes` не спишет больше баланса.
+- **История партий** (`features.md` п. 8) теперь почти бесплатна: данные уже лежат в `games` и `game_players`, нужен только `GET`.
+- **Журнал на фронте.** `getTransactions()` в `api/wallet.ts` готов, экрана пока нет.
