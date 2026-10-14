@@ -101,13 +101,18 @@ func (s *Server) setupRoutes() {
 		})
 	}
 
-	if s.userHandler != nil {
+	if s.userHandler != nil || s.tableHandler != nil {
 		s.router.Route("/api/v1/users/me", func(r chi.Router) {
 			r.Use(AuthMiddleware(s.tokens))
-			r.Get("/", s.userHandler.Profile)
-			r.Patch("/", s.userHandler.ChangeUsername)
-			r.Delete("/", s.userHandler.DeleteAccount)
-			r.Post("/password", s.userHandler.ChangePassword)
+			if s.userHandler != nil {
+				r.Get("/", s.userHandler.Profile)
+				r.Patch("/", s.userHandler.ChangeUsername)
+				r.Delete("/", s.userHandler.DeleteAccount)
+				r.Post("/password", s.userHandler.ChangePassword)
+			}
+			if s.tableHandler != nil {
+				r.Get("/active-table", s.tableHandler.Active)
+			}
 		})
 	}
 

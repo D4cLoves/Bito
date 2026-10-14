@@ -202,3 +202,48 @@ func TestWallet_TransactionsLimit(t *testing.T) {
 		t.Errorf("bad limit status = %d, want 400", w.Code)
 	}
 }
+
+func TestUsers_ActiveTable(t *testing.T) {
+	router, hub, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
+	bobToken, err := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour).GenerateAccessToken(uuid.New(), "Bob")
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+
+	if w := doRequest(router, http.MethodGet, "/api/v1/users/me/active-table", token, ""); w.Code != http.StatusNoContent {
+		t.Fatalf("no table: status = %d, want 204", w.Code)
+	}
+
+	room := hub.CreateRoom(ws.RoomSettings{Mode: 2, Deck: 36, MaxPlayers: 2, Stake: 500})
+	defer room.Close()
+	alice := dialRoom(t, router, room.ID(), token)
+	defer alice.Close()
+	time.Sleep(30 * time.Millisecond)
+
+	if w := doRequest(router, http.MethodGet, "/api/v1/users/me/active-table", token, ""); w.Code != http.StatusNoContent {
+		t.Fatalf("waiting table: status = %d, want 204 until the game starts", w.Code)
+	}
+
+	bob := dialRoom(t, router, room.ID(), bobToken)
+	defer bob.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	w := doRequest(router, http.MethodGet, "/api/v1/users/me/active-table", token, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("running game: status = %d, want 200", w.Code)
+	}
+	var info ws.RoomInfo
+	_ = json.Unmarshal(w.Body.Bytes(), &info)
+	if info.ID != room.ID() || info.Mode != "perevodnoy" || info.Stake != 500 || info.MaxPlayers != 2 {
+		t.Errorf("active table = %+v, want the running room", info)
+	}
+
+	if err := bob.WriteJSON(map[string]string{"type": "surrender"}); err != nil {
+		t.Fatalf("surrender: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	if w := doRequest(router, http.MethodGet, "/api/v1/users/me/active-table", token, ""); w.Code != http.StatusNoContent {
+		t.Errorf("finished game: status = %d, want 204", w.Code)
+	}
+}

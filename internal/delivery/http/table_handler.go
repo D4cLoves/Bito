@@ -113,6 +113,21 @@ func (th *TableHandler) Quick(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, room.Info())
 }
 
+func (th *TableHandler) Active(w http.ResponseWriter, r *http.Request) {
+	userID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	room, found := th.hub.ActiveRoomOf(userID.String())
+	if !found {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	respondJSON(w, http.StatusOK, room.Info())
+}
+
 func (th *TableHandler) List(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, th.hub.ListOpenRooms())
 }

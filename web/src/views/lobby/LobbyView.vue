@@ -14,7 +14,7 @@ import ProfilePanel from '../../components/panels/ProfilePanel.vue'
 import SettingsPanel from '../../components/panels/SettingsPanel.vue'
 import ShopPanel from '../../components/panels/ShopPanel.vue'
 import Leaderboard from '../../components/lobby/Leaderboard.vue'
-import { createTable, listTables, quickMatch } from '../../api/tables'
+import { createTable, getActiveTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
 import { topUp as requestTopUp } from '../../api/wallet'
 import { useAuthStore } from '../../stores/auth'
@@ -25,9 +25,9 @@ import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_ACTIVE_TABLE, MOCK_FRIENDS, MOCK_HISTORY, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
+import { MOCK_FRIENDS, MOCK_HISTORY, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { DeckSize, GameMode, TableInfo } from '../../types/game'
-import type { Friend, FriendRequest, ChatEntry } from '../../types/social'
+import type { ActiveTable, Friend, FriendRequest, ChatEntry } from '../../types/social'
 
 const POLL_MS = 3000
 
@@ -57,7 +57,8 @@ const now = ref(Date.now())
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
 const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
-const activeTable = ref(MOCK_ACTIVE_TABLE)
+const activeTable = ref<ActiveTable | null>(null)
+const dismissedTable = ref<string | null>(null)
 
 let pollTimer: number | null = null
 
@@ -187,15 +188,41 @@ const PANEL_TITLES = {
   social: 'Друзья и чат',
 } as const
 
+async function refreshActiveTable() {
+  try {
+    const t = await getActiveTable()
+    activeTable.value =
+      t && t.id !== dismissedTable.value ? { id: t.id, mode: t.mode, stake: t.stake ?? MIN_STAKE, players: t.maxPlayers } : null
+  } catch {
+    return
+  }
+}
+
+function refreshAll() {
+  refreshTables()
+  refreshActiveTable()
+}
+
+function returnToTable() {
+  if (!activeTable.value) return
+  sound.playClick()
+  router.push({ name: 'table', params: { id: activeTable.value.id } })
+}
+
+function dismissActiveTable() {
+  dismissedTable.value = activeTable.value?.id ?? null
+  activeTable.value = null
+}
+
 function onVisibility() {
-  if (document.visibilityState === 'visible') refreshTables()
+  if (document.visibilityState === 'visible') refreshAll()
 }
 
 onMounted(() => {
   profileStore.load(true)
-  refreshTables()
+  refreshAll()
   pollTimer = window.setInterval(() => {
-    if (document.visibilityState === 'visible') refreshTables()
+    if (document.visibilityState === 'visible') refreshAll()
   }, POLL_MS)
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -237,8 +264,8 @@ onUnmounted(() => {
           class="rise"
           style="--d: 1"
           :table="activeTable"
-          @return="soon('Возврат за стол скоро заработает')"
-          @dismiss="activeTable = null"
+          @return="returnToTable"
+          @dismiss="dismissActiveTable"
         />
 
         <PlayPanel

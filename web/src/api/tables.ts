@@ -12,6 +12,10 @@ export function createTable(req: CreateTableRequest): Promise<TableInfo> {
   })
 }
 
+export async function getActiveTable(): Promise<TableInfo | null> {
+  return (await authedFetch<TableInfo | null>('/api/v1/users/me/active-table')) ?? null
+}
+
 export function quickMatch(req: CreateTableRequest): Promise<TableInfo> {
   return authedFetch<TableInfo>('/api/v1/tables/quick', {
     method: 'POST',

@@ -113,6 +113,18 @@ func (h *Hub) FindOpenRoom(s RoomSettings, playerID string) (*Room, bool) {
 	return best, best != nil
 }
 
+func (h *Hub) ActiveRoomOf(playerID string) (*Room, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, room := range h.rooms {
+		if room.Started() && room.Holds(playerID) {
+			return room, true
+		}
+	}
+	return nil, false
+}
+
 func (h *Hub) SeatedElsewhere(playerID, exceptRoomID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

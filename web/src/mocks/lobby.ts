@@ -1,15 +1,8 @@
-import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, ChatEntry } from '../types/social'
+import type { Friend, FriendRequest, GameHistoryEntry, ChatEntry } from '../types/social'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
 export const MOCK_ONLINE = 128
-
-export const MOCK_ACTIVE_TABLE: ActiveTable | null = {
-  id: 'demo',
-  mode: 'perevodnoy',
-  stake: 500,
-  players: 3,
-}
 
 export const MOCK_FRIENDS: Friend[] = [
   { id: 'f1', username: 'Миша', status: 'playing' },
