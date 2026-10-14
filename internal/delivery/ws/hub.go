@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"bito/internal/game"
 	"bito/internal/pkg/jwt"
 
 	"github.com/google/uuid"
@@ -51,7 +52,10 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 func (h *Hub) CreateRoom(s RoomSettings) *Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.createRoomLocked(s)
+}
 
+func (h *Hub) createRoomLocked(s RoomSettings) *Room {
 	roomID := uuid.NewString()
 
 	room := NewRoom(roomID, s, h.bank)
@@ -77,7 +81,7 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	h.mu.RLock()
 	rooms := make([]RoomInfo, 0, len(h.rooms))
 	for _, room := range h.rooms {
-		if !room.Started() {
+		if !room.Started() && !room.matchmaking {
 			rooms = append(rooms, room.Info())
 		}
 	}
@@ -89,28 +93,65 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	return rooms
 }
 
-func (h *Hub) FindOpenRoom(s RoomSettings, playerID string) (*Room, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+type MatchQuery struct {
+	Mode  game.GameMode
+	Deck  game.DeckType
+	Stake int64
+}
 
+func (q MatchQuery) fits(room *Room) bool {
+	return room.matchmaking && !room.Started() &&
+		room.stake == q.Stake &&
+		(q.Mode == 0 || room.gameMode == q.Mode) &&
+		(q.Deck == 0 || room.deckType == q.Deck)
+}
+
+func (q MatchQuery) settings(createdBy string) RoomSettings {
+	s := RoomSettings{
+		Mode:        q.Mode,
+		Deck:        q.Deck,
+		MaxPlayers:  duelPlayers,
+		Stake:       q.Stake,
+		CreatedBy:   createdBy,
+		Matchmaking: true,
+	}
+	if s.Mode == 0 {
+		s.Mode = defaultDuelMode
+	}
+	if s.Deck == 0 {
+		s.Deck = defaultDuelDeck
+	}
+	return s
+}
+
+func (h *Hub) MatchOrCreate(q MatchQuery, playerID string) (room *Room, created bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if room = h.findMatchLocked(q, playerID); room == nil {
+		room, created = h.createRoomLocked(q.settings(playerID)), true
+	}
+	room.Reserve(playerID)
+	return room, created
+}
+
+func (h *Hub) findMatchLocked(q MatchQuery, playerID string) *Room {
 	var best *Room
 	for _, room := range h.rooms {
-		if room.Started() || room.gameMode != s.Mode || room.deckType != s.Deck ||
-			room.maxUsers != s.MaxPlayers || room.stake != s.Stake {
+		if !q.fits(room) {
 			continue
 		}
-		if room.Holds(playerID) {
-			return room, true
+		if room.Holds(playerID) || room.Reserved(playerID) {
+			return room
 		}
-		if room.PlayersCount() >= room.maxUsers {
+		if room.Occupancy() >= room.maxUsers {
 			continue
 		}
-		if best == nil || room.PlayersCount() > best.PlayersCount() ||
-			(room.PlayersCount() == best.PlayersCount() && room.createdAt.Before(best.createdAt)) {
+		if best == nil || room.createdAt.Before(best.createdAt) {
 			best = room
 		}
 	}
-	return best, best != nil
+	return best
 }
 
 func (h *Hub) ActiveRoomOf(playerID string) (*Room, bool) {

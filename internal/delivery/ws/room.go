@@ -15,6 +15,13 @@ import (
 )
 
 const (
+	duelPlayers     = 2
+	defaultDuelMode = game.ModePodkidnoy
+	defaultDuelDeck = game.Deck36
+	reservationTTL  = 15 * time.Second
+)
+
+const (
 	turnDuration       = 20 * time.Second
 	disconnectGraceDur = 30 * time.Second
 	// emptyRoomTTL closes a table created via REST that nobody joined.
@@ -25,22 +32,24 @@ const (
 
 // RoomInfo is the lobby view of a table; safe to build from any goroutine.
 type RoomInfo struct {
-	ID         string    `json:"id"`
-	Mode       string    `json:"mode"`
-	Deck       int       `json:"deck"`
-	MaxPlayers int       `json:"maxPlayers"`
-	Players    int       `json:"players"`
-	Stake      int64     `json:"stake"`
-	CreatedBy  string    `json:"createdBy"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID          string    `json:"id"`
+	Mode        string    `json:"mode"`
+	Deck        int       `json:"deck"`
+	MaxPlayers  int       `json:"maxPlayers"`
+	Players     int       `json:"players"`
+	Stake       int64     `json:"stake"`
+	Matchmaking bool      `json:"matchmaking"`
+	CreatedBy   string    `json:"createdBy"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type RoomSettings struct {
-	Mode       game.GameMode
-	Deck       game.DeckType
-	MaxPlayers int
-	Stake      int64
-	CreatedBy  string
+	Mode        game.GameMode
+	Deck        game.DeckType
+	MaxPlayers  int
+	Stake       int64
+	CreatedBy   string
+	Matchmaking bool
 }
 
 type IncomingMessage struct {
@@ -54,9 +63,11 @@ type Room struct {
 	deckType          game.DeckType
 	maxUsers          int
 	stake             int64
+	matchmaking       bool
 	bank              Bank
 	clients           map[string]*Client
 	seated            map[string]bool
+	reservations      map[string]time.Time
 	game              *game.Game
 	payouts           map[string]int64
 	draw              bool
@@ -89,11 +100,13 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		deckType:          s.Deck,
 		maxUsers:          s.MaxPlayers,
 		stake:             s.Stake,
+		matchmaking:       s.Matchmaking,
 		bank:              bank,
 		createdBy:         s.CreatedBy,
 		createdAt:         time.Now(),
 		clients:           make(map[string]*Client),
 		seated:            make(map[string]bool),
+		reservations:      make(map[string]time.Time),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
 		incoming:          make(chan IncomingMessage, 100),
@@ -146,9 +159,37 @@ func (r *Room) Holds(playerID string) bool {
 	return !r.closed && r.seated[playerID]
 }
 
+func (r *Room) Reserve(playerID string) {
+	r.mu.Lock()
+	r.reservations[playerID] = time.Now().Add(reservationTTL)
+	r.mu.Unlock()
+}
+
+func (r *Room) Reserved(playerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	until, ok := r.reservations[playerID]
+	return ok && time.Now().Before(until)
+}
+
+func (r *Room) Occupancy() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	now := time.Now()
+	n := len(r.seated)
+	for id, until := range r.reservations {
+		if !r.seated[id] && now.Before(until) {
+			n++
+		}
+	}
+	return n
+}
+
 func (r *Room) seat(playerID string) {
 	r.mu.Lock()
 	r.seated[playerID] = true
+	delete(r.reservations, playerID)
 	r.mu.Unlock()
 }
 
@@ -161,14 +202,15 @@ func (r *Room) unseat(playerID string) {
 // Info reads only immutable fields and atomics, so the hub may call it concurrently with Run.
 func (r *Room) Info() RoomInfo {
 	return RoomInfo{
-		ID:         r.id,
-		Mode:       r.gameMode.String(),
-		Deck:       int(r.deckType),
-		MaxPlayers: r.maxUsers,
-		Players:    r.PlayersCount(),
-		Stake:      r.stake,
-		CreatedBy:  r.createdBy,
-		CreatedAt:  r.createdAt,
+		ID:          r.id,
+		Mode:        r.gameMode.String(),
+		Deck:        int(r.deckType),
+		MaxPlayers:  r.maxUsers,
+		Players:     r.PlayersCount(),
+		Stake:       r.stake,
+		Matchmaking: r.matchmaking,
+		CreatedBy:   r.createdBy,
+		CreatedAt:   r.createdAt,
 	}
 }
 

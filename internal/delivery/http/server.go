@@ -21,6 +21,7 @@ type Server struct {
 	tableHandler  *TableHandler
 	userHandler   *UserHandler
 	walletHandler *WalletHandler
+	gameHandler   *GameHandler
 	tokens        TokenValidator
 }
 
@@ -29,6 +30,7 @@ type Handlers struct {
 	Table  *TableHandler
 	User   *UserHandler
 	Wallet *WalletHandler
+	Game   *GameHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -39,6 +41,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		tableHandler:  h.Table,
 		userHandler:   h.User,
 		walletHandler: h.Wallet,
+		gameHandler:   h.Game,
 		tokens:        tokens,
 	}
 
@@ -98,10 +101,11 @@ func (s *Server) setupRoutes() {
 			r.Post("/", s.tableHandler.Create)
 			r.Post("/quick", s.tableHandler.Quick)
 			r.Get("/", s.tableHandler.List)
+			r.Get("/{id}", s.tableHandler.Get)
 		})
 	}
 
-	if s.userHandler != nil || s.tableHandler != nil {
+	if s.userHandler != nil || s.tableHandler != nil || s.gameHandler != nil {
 		s.router.Route("/api/v1/users/me", func(r chi.Router) {
 			r.Use(AuthMiddleware(s.tokens))
 			if s.userHandler != nil {
@@ -112,6 +116,9 @@ func (s *Server) setupRoutes() {
 			}
 			if s.tableHandler != nil {
 				r.Get("/active-table", s.tableHandler.Active)
+			}
+			if s.gameHandler != nil {
+				r.Get("/games", s.gameHandler.History)
 			}
 		})
 	}

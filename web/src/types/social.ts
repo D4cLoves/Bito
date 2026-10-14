@@ -23,6 +23,8 @@ export interface ChatEntry {
   system?: boolean
 }
 
+export type GameOutcome = 'win' | 'lose' | 'draw'
+
 export interface GameHistoryEntry {
   id: string
   finishedAt: string
@@ -32,6 +34,7 @@ export interface GameHistoryEntry {
   stake: number
   place: number
   payout: number
+  outcome?: GameOutcome
 }
 
 export interface ActiveTable {

@@ -81,7 +81,7 @@ func dialRoom(t *testing.T, router http.Handler, roomID, token string) *websocke
 func TestTables_StakeDefaultsToMinimum(t *testing.T) {
 	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
 
-	w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":2}`)
+	w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201 (%s)", w.Code, w.Body.String())
 	}
@@ -99,11 +99,11 @@ func TestTables_StakeRules(t *testing.T) {
 		body    string
 		want    int
 	}{
-		{"allowed stake", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":2,"stake":500}`, http.StatusCreated},
-		{"stake not in the list", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":2,"stake":300}`, http.StatusBadRequest},
-		{"negative stake", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":2,"stake":-100}`, http.StatusBadRequest},
-		{"balance below stake", 400, `{"mode":"podkidnoy","deck":36,"maxPlayers":2,"stake":500}`, http.StatusPaymentRequired},
-		{"balance equals stake", 500, `{"mode":"podkidnoy","deck":36,"maxPlayers":2,"stake":500}`, http.StatusCreated},
+		{"allowed stake", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"stake":500}`, http.StatusCreated},
+		{"stake not in the list", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"stake":300}`, http.StatusBadRequest},
+		{"negative stake", 2500, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"stake":-100}`, http.StatusBadRequest},
+		{"balance below stake", 400, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"stake":500}`, http.StatusPaymentRequired},
+		{"balance equals stake", 500, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"stake":500}`, http.StatusCreated},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -129,30 +129,67 @@ func TestTables_RefusesPlayerSeatedElsewhere(t *testing.T) {
 		t.Fatal("player must be seated after joining over websocket")
 	}
 
-	w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":2}`)
+	w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`)
 	if w.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409 (%s)", w.Code, w.Body.String())
 	}
 }
 
-func TestTables_QuickJoinsMatchingTable(t *testing.T) {
-	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
-	body := `{"mode":"perevodnoy","deck":36,"maxPlayers":3,"stake":250}`
+func TestTables_QuickMatch(t *testing.T) {
+	router, hub, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
 
-	first := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, body)
+	first := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, `{"mode":"any","deck":0,"stake":250}`)
 	if first.Code != http.StatusCreated {
 		t.Fatalf("first quick status = %d, want 201 (%s)", first.Code, first.Body.String())
 	}
-	second := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, body)
-	if second.Code != http.StatusOK {
-		t.Fatalf("second quick status = %d, want 200 (%s)", second.Code, second.Body.String())
+	var created ws.RoomInfo
+	_ = json.Unmarshal(first.Body.Bytes(), &created)
+	if created.MaxPlayers != 2 || created.Mode != "podkidnoy" || created.Deck != 36 || created.Stake != 250 {
+		t.Errorf("created duel = %+v, want 2 players, podkidnoy, 36, stake 250", created)
+	}
+	if list := hub.ListOpenRooms(); len(list) != 0 {
+		t.Errorf("duel tables must stay out of the public list, got %+v", list)
 	}
 
-	var a, b ws.RoomInfo
-	_ = json.Unmarshal(first.Body.Bytes(), &a)
-	_ = json.Unmarshal(second.Body.Bytes(), &b)
-	if a.ID == "" || a.ID != b.ID {
-		t.Errorf("quick match created %s, then returned %s; want the same open table", a.ID, b.ID)
+	for _, body := range []string{
+		`{"mode":"podkidnoy","deck":36,"stake":250}`,
+		`{"mode":"any","deck":36,"stake":250}`,
+		`{"stake":250}`,
+	} {
+		w := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, body)
+		var got ws.RoomInfo
+		_ = json.Unmarshal(w.Body.Bytes(), &got)
+		if w.Code != http.StatusOK || got.ID != created.ID {
+			t.Errorf("%s: status %d table %s, want the waiting duel %s", body, w.Code, got.ID, created.ID)
+		}
+	}
+
+	other := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, `{"mode":"perevodnoy","stake":250}`)
+	var otherInfo ws.RoomInfo
+	_ = json.Unmarshal(other.Body.Bytes(), &otherInfo)
+	if other.Code != http.StatusCreated || otherInfo.ID == created.ID || otherInfo.Mode != "perevodnoy" {
+		t.Errorf("another mode must open a new duel, got %d %+v", other.Code, otherInfo)
+	}
+}
+
+func TestTables_QuickValidation(t *testing.T) {
+	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
+	for _, body := range []string{
+		`{"mode":"chess","stake":100}`,
+		`{"mode":"any","deck":40,"stake":100}`,
+		`{"mode":"any","stake":300}`,
+		`{"mode":"any","maxPlayers":4}`,
+	} {
+		if w := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", body, w.Code)
+		}
+	}
+}
+
+func TestTables_CreateIsForCompaniesOnly(t *testing.T) {
+	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
+	if w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":2}`); w.Code != http.StatusBadRequest {
+		t.Errorf("two-player table via create: status = %d, want 400", w.Code)
 	}
 }
 
@@ -245,5 +282,58 @@ func TestUsers_ActiveTable(t *testing.T) {
 
 	if w := doRequest(router, http.MethodGet, "/api/v1/users/me/active-table", token, ""); w.Code != http.StatusNoContent {
 		t.Errorf("finished game: status = %d, want 204", w.Code)
+	}
+}
+
+type stubGames struct {
+	limit int
+	list  []model.GameHistoryEntry
+}
+
+func (s *stubGames) History(_ context.Context, _ uuid.UUID, limit int) ([]model.GameHistoryEntry, error) {
+	s.limit = limit
+	return s.list, nil
+}
+
+func TestUsers_GameHistory(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	games := &stubGames{list: []model.GameHistoryEntry{{ID: uuid.New(), Mode: "podkidnoy", Deck: 24, Players: 2, Stake: 500, Place: 1, Payout: 475}}}
+	server := NewServer(":0", ws.NewHub(tokenManager, nil, nil), Handlers{Game: NewGameHandler(games)}, tokenManager)
+	token, _ := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
+
+	w := doRequest(server.httpServer.Handler, http.MethodGet, "/api/v1/users/me/games?limit=1", token, "")
+	if w.Code != http.StatusOK || games.limit != 1 {
+		t.Fatalf("status = %d limit = %d, want 200 and limit 1", w.Code, games.limit)
+	}
+	var list []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	if len(list) != 1 || list[0]["payout"] != float64(475) || list[0]["players"] != float64(2) || list[0]["finishedAt"] == nil {
+		t.Errorf("body = %s, want one entry in the frontend format", w.Body.String())
+	}
+
+	if w = doRequest(server.httpServer.Handler, http.MethodGet, "/api/v1/users/me/games?limit=0", token, ""); w.Code != http.StatusBadRequest {
+		t.Errorf("limit=0 status = %d, want 400", w.Code)
+	}
+}
+
+func TestTables_GetByID(t *testing.T) {
+	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
+
+	w := doRequest(router, http.MethodPost, "/api/v1/tables/quick", token, `{"mode":"perevodnoy","deck":52,"stake":1000}`)
+	var duel ws.RoomInfo
+	_ = json.Unmarshal(w.Body.Bytes(), &duel)
+
+	w = doRequest(router, http.MethodGet, "/api/v1/tables/"+duel.ID, token, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+	var got ws.RoomInfo
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	if got.ID != duel.ID || !got.Matchmaking || got.Stake != 1000 || got.Mode != "perevodnoy" || got.Deck != 52 {
+		t.Errorf("table = %+v, want the hidden duel with its settings", got)
+	}
+
+	if w = doRequest(router, http.MethodGet, "/api/v1/tables/"+uuid.NewString(), token, ""); w.Code != http.StatusNotFound {
+		t.Errorf("unknown table: status = %d, want 404", w.Code)
 	}
 }

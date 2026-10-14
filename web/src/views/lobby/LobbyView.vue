@@ -110,7 +110,7 @@ async function find() {
   sound.playClick()
   busy.value = 'find'
   try {
-    const table = await quickMatch({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
+    const table = await quickMatch({ mode: mode.value, deck: deck.value, stake: stake.value })
     goToTable(table.id)
   } catch (err) {
     sound.playError()

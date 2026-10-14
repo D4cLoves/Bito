@@ -238,12 +238,9 @@ func TestRoom_SeatIsKeptWhileGameRuns(t *testing.T) {
 	}
 }
 
-func TestHub_SeatedElsewhereAndQuickMatch(t *testing.T) {
+func TestHub_SeatedElsewhere(t *testing.T) {
 	hub := NewHub(nil, nil, nil)
-	settings := testSettings(2)
-	settings.Stake = 250
-
-	first := hub.CreateRoom(settings)
+	first := hub.CreateRoom(testSettings(3))
 	defer first.Close()
 	first.RegisterClient(createTestClient("p1", "Alice", first))
 	time.Sleep(20 * time.Millisecond)
@@ -254,22 +251,113 @@ func TestHub_SeatedElsewhereAndQuickMatch(t *testing.T) {
 	if hub.SeatedElsewhere("p1", first.ID()) {
 		t.Error("the player's own table does not count as elsewhere")
 	}
+}
 
-	if room, ok := hub.FindOpenRoom(settings, "p2"); !ok || room != first {
-		t.Error("quick match must find the open table with the same settings")
+func duelSettings(mode game.GameMode, deck game.DeckType, stake int64) RoomSettings {
+	return RoomSettings{Mode: mode, Deck: deck, MaxPlayers: 2, Stake: stake, Matchmaking: true}
+}
+
+func TestHub_MatchOrCreate(t *testing.T) {
+	cases := []struct {
+		name  string
+		query MatchQuery
+		reuse bool
+	}{
+		{"exact settings", MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, true},
+		{"any mode and deck", MatchQuery{Stake: 500}, true},
+		{"any deck", MatchQuery{Mode: game.ModePerevodnoy, Stake: 500}, true},
+		{"other mode", MatchQuery{Mode: game.ModePodkidnoy, Stake: 500}, false},
+		{"other deck", MatchQuery{Deck: game.Deck36, Stake: 500}, false},
+		{"other stake", MatchQuery{Stake: 250}, false},
 	}
-	if room, ok := hub.FindOpenRoom(settings, "p1"); !ok || room != first {
-		t.Error("quick match must return the table the player already sits at")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := NewHub(nil, nil, nil)
+			duel, created := hub.MatchOrCreate(MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, "p1")
+			defer duel.Close()
+			if !created {
+				t.Fatal("the first search must open a table")
+			}
+			company := hub.CreateRoom(RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 3, Stake: 500})
+			defer company.Close()
+
+			room, created := hub.MatchOrCreate(tc.query, "p2")
+			defer room.Close()
+			if tc.reuse && (created || room != duel) {
+				t.Errorf("want the waiting duel, got created=%v", created)
+			}
+			if !tc.reuse && (!created || room == duel) {
+				t.Errorf("want a new duel, got created=%v", created)
+			}
+			if room == company {
+				t.Error("quick play must never seat a player at a company table")
+			}
+		})
+	}
+}
+
+func TestHub_MatchOrCreateFillsMissingSettings(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	room, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
+	defer room.Close()
+
+	info := room.Info()
+	if info.Mode != "podkidnoy" || info.Deck != 36 || info.MaxPlayers != 2 || !info.Matchmaking || info.CreatedBy != "p1" {
+		t.Errorf("created duel = %+v, want podkidnoy, 36, 2 players, matchmaking", info)
+	}
+}
+
+func TestHub_ReservationKeepsDuelForTwo(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	query := MatchQuery{Stake: 100}
+
+	first, _ := hub.MatchOrCreate(query, "p1")
+	defer first.Close()
+	second, created := hub.MatchOrCreate(query, "p2")
+	if created || second != first {
+		t.Fatal("the second player must get the waiting duel")
+	}
+	third, created := hub.MatchOrCreate(query, "p3")
+	defer third.Close()
+	if !created || third == first {
+		t.Error("two reserved seats fill a duel even before anyone connects; the third player needs a new table")
 	}
 
-	other := settings
-	other.Stake = 500
-	if _, ok := hub.FindOpenRoom(other, "p2"); ok {
-		t.Error("a table with another stake must not match")
+	again, created := hub.MatchOrCreate(query, "p1")
+	if created || again != first {
+		t.Error("a repeated search must return the table the player already reserved")
 	}
-	other = settings
-	other.Mode = game.ModePerevodnoy
-	if _, ok := hub.FindOpenRoom(other, "p2"); ok {
-		t.Error("a table with another mode must not match")
+}
+
+func TestHub_SimultaneousSearchesMeet(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		hub := NewHub(nil, nil, nil)
+		rooms := make([]*Room, 2)
+		var wg sync.WaitGroup
+		for p := range rooms {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rooms[p], _ = hub.MatchOrCreate(MatchQuery{Stake: 250}, string(rune('a'+p)))
+			}()
+		}
+		wg.Wait()
+		if rooms[0] != rooms[1] {
+			t.Fatalf("run %d: two players searching at once ended up at different tables", i)
+		}
+		rooms[0].Close()
+	}
+}
+
+func TestHub_DuelTablesAreHiddenFromList(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	duel := hub.CreateRoom(duelSettings(game.ModePodkidnoy, game.Deck36, 100))
+	defer duel.Close()
+	company := hub.CreateRoom(testSettings(3))
+	defer company.Close()
+
+	list := hub.ListOpenRooms()
+	if len(list) != 1 || list[0].ID != company.ID() {
+		t.Errorf("open rooms = %+v, want only the company table", list)
 	}
 }

@@ -14,7 +14,7 @@ import BattleArea from '../../components/game/BattleArea.vue'
 import QuickChat from '../../components/game/QuickChat.vue'
 import PostGameChat from '../../components/game/PostGameChat.vue'
 import FlightLayer from '../../components/game/FlightLayer.vue'
-import { listTables } from '../../api/tables'
+import { getTable } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
@@ -498,8 +498,7 @@ function showBubble(entry: ChatEntry) {
 async function pollWaiting() {
   if (state.value && waitingInfo.value) return
   try {
-    const list = await listTables()
-    waitingInfo.value = list.find((t) => t.id === roomId) ?? waitingInfo.value
+    waitingInfo.value = await getTable(roomId)
   } catch {
     return
   }

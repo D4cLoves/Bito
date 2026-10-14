@@ -282,3 +282,46 @@ func TestWallet_RefundUnfinished(t *testing.T) {
 		t.Errorf("journal = %+v, %v; want refund on top of 3 records", list, err)
 	}
 }
+
+func TestGames_History(t *testing.T) {
+	pool := setupTestDB(t)
+	wallet := NewWalletRepository(pool)
+	games := NewGameRepository(pool)
+	ctx := context.Background()
+	users := createUsers(t, pool, 3)
+
+	finished := uuid.New()
+	if err := wallet.LockStakes(ctx, model.GameRecord{ID: finished, Mode: "perevodnoy", Deck: 36, Stake: 250}, users); err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+	places := []string{users[1].String(), users[0].String(), users[2].String()}
+	s := economy.Settle(250, economy.Result{Places: places, Losers: map[string]bool{users[2].String(): true}})
+	if err := wallet.Settle(ctx, finished, s); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+
+	running := uuid.New()
+	if err := wallet.LockStakes(ctx, model.GameRecord{ID: running, Mode: "podkidnoy", Deck: 24, Stake: 100}, users[:2]); err != nil {
+		t.Fatalf("lock running: %v", err)
+	}
+
+	list, err := games.History(ctx, users[0], 10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("history = %+v, want only the finished game", list)
+	}
+	g := list[0]
+	if g.ID != finished || g.Mode != "perevodnoy" || g.Deck != 36 || g.Players != 3 || g.Stake != 250 || g.Place != 2 || g.Payout != 79 {
+		t.Errorf("entry = %+v, want perevodnoy/36/3 players/250/2nd place/+79", g)
+	}
+	if g.FinishedAt.IsZero() || g.Outcome != "win" {
+		t.Errorf("finishedAt = %v outcome = %q, want a time and win", g.FinishedAt, g.Outcome)
+	}
+
+	loser, _ := games.History(ctx, users[2], 10)
+	if len(loser) != 1 || loser[0].Payout != -250 || loser[0].Place != 3 || loser[0].Outcome != "lose" {
+		t.Errorf("loser entry = %+v, want 3rd place and -250", loser)
+	}
+}

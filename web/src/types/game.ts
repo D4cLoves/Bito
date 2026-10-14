@@ -77,12 +77,22 @@ export interface TableInfo {
   createdBy: string
   createdAt: string
   stake?: number
+  matchmaking?: boolean
 }
 
 export interface CreateTableRequest {
   mode: GameMode
   deck: DeckSize
   maxPlayers: number
+  stake: number
+}
+
+export type AnyMode = GameMode | 'any'
+export type AnyDeck = DeckSize | 0
+
+export interface QuickMatchRequest {
+  mode: AnyMode
+  deck: AnyDeck
   stake: number
 }
 
