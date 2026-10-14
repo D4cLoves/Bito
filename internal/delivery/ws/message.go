@@ -62,10 +62,12 @@ type TimerTickPayload struct {
 }
 
 type GameOverPayload struct {
-	WinnerID string   `json:"winnerId,omitempty"`
-	LoserID  string   `json:"loserId,omitempty"`
-	Places   []string `json:"places,omitempty"`
-	IsDraw   bool     `json:"isDraw"`
+	WinnerID string           `json:"winnerId,omitempty"`
+	LoserID  string           `json:"loserId,omitempty"`
+	Places   []string         `json:"places,omitempty"`
+	Payouts  map[string]int64 `json:"payouts,omitempty"`
+	Stake    int64            `json:"stake"`
+	IsDraw   bool             `json:"isDraw"`
 }
 
 type PlayerView struct {
@@ -89,6 +91,7 @@ type GameStatePayload struct {
 	Mode        string          `json:"mode"`
 	TurnLeftMs  int64           `json:"turnLeftMs"`
 	YouPassed   bool            `json:"youPassed"`
+	Stake       int64           `json:"stake"`
 }
 
 func NewMessage(msgType string, payload any) ([]byte, error) {

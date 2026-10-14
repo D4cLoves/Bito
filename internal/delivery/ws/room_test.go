@@ -9,6 +9,10 @@ import (
 	"bito/internal/game"
 )
 
+func testSettings(maxPlayers int) RoomSettings {
+	return RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: maxPlayers, CreatedBy: "creator"}
+}
+
 // Helper to create a test client with a monitored send channel.
 func createTestClient(id, name string, room *Room) *Client {
 	return &Client{
@@ -20,7 +24,7 @@ func createTestClient(id, name string, room *Room) *Client {
 }
 
 func TestRoom_StartGameAndPersonalizedState(t *testing.T) {
-	room := NewRoom("room-1", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-1", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -72,7 +76,7 @@ func TestRoom_StartGameAndPersonalizedState(t *testing.T) {
 }
 
 func TestRoom_HandleIncomingAction(t *testing.T) {
-	room := NewRoom("room-2", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-2", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -128,7 +132,7 @@ func TestRoom_HandleIncomingAction(t *testing.T) {
 }
 
 func TestRoom_ChatBroadcast(t *testing.T) {
-	room := NewRoom("room-chat", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-chat", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -171,7 +175,7 @@ func TestRoom_ChatBroadcast(t *testing.T) {
 }
 
 func TestRoom_GracePeriodReconnect(t *testing.T) {
-	room := NewRoom("room-grace", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-grace", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -235,7 +239,7 @@ func TestRoom_GracePeriodReconnect(t *testing.T) {
 }
 
 func TestRoom_ChatBeforeGameStart(t *testing.T) {
-	room := NewRoom("room-lobby-chat", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-lobby-chat", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -264,7 +268,7 @@ func TestRoom_ChatBeforeGameStart(t *testing.T) {
 }
 
 func TestRoom_LobbyCapacityLimit(t *testing.T) {
-	room := NewRoom("room-cap", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-cap", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -313,7 +317,7 @@ func TestClient_SendOnClosedDoesNotPanic(t *testing.T) {
 }
 
 func TestRoom_ChatValidation(t *testing.T) {
-	room := NewRoom("room-chat-limits", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-chat-limits", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 
@@ -356,7 +360,7 @@ func TestRoom_ChatValidation(t *testing.T) {
 }
 
 func TestRoom_GameOverIncludesPlaces(t *testing.T) {
-	room := NewRoom("room-places", game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := NewRoom("room-places", testSettings(2), nil)
 	go room.Run()
 	defer room.Close()
 

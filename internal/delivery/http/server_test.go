@@ -22,8 +22,8 @@ const testAllowedOrigin = "http://localhost:5173"
 func newTestWSServer(t *testing.T) (*jwt.TokenManager, *ws.Hub, string) {
 	t.Helper()
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
-	hub := ws.NewHub(tokenManager, []string{testAllowedOrigin})
-	server := NewServer(":0", hub, nil, NewTableHandler(hub), nil, tokenManager)
+	hub := ws.NewHub(tokenManager, []string{testAllowedOrigin}, nil)
+	server := NewServer(":0", hub, Handlers{Table: NewTableHandler(hub, nil)}, tokenManager)
 	ts := httptest.NewServer(server.httpServer.Handler)
 	t.Cleanup(ts.Close)
 
@@ -64,7 +64,7 @@ func TestWS_RejectsUnauthenticated(t *testing.T) {
 
 func TestWS_OriginCheck(t *testing.T) {
 	tokenManager, hub, wsURL := newTestWSServer(t)
-	room := hub.CreateRoom(game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := hub.CreateRoom(ws.RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 2, CreatedBy: "creator"})
 	accessToken, err := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
 	if err != nil {
 		t.Fatalf("failed to generate access token: %v", err)
@@ -90,7 +90,7 @@ func TestWS_OriginCheck(t *testing.T) {
 func TestE2E_DurakWebSocketGame(t *testing.T) {
 	// 1. Поднимаем тестовый сервер и выпускаем access-токены игрокам
 	tokenManager, hub, wsURL := newTestWSServer(t)
-	room := hub.CreateRoom(game.ModePodkidnoy, game.Deck36, 2, "creator")
+	room := hub.CreateRoom(ws.RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 2, CreatedBy: "creator"})
 
 	aliceID := uuid.New()
 	aliceToken, err := tokenManager.GenerateAccessToken(aliceID, "Alice")
@@ -206,7 +206,7 @@ func TestWS_UnknownRoomReturns404(t *testing.T) {
 
 func TestHub_ListOpenRooms(t *testing.T) {
 	tokenManager, hub, wsURL := newTestWSServer(t)
-	room := hub.CreateRoom(game.ModePerevodnoy, game.Deck24, 2, "creator")
+	room := hub.CreateRoom(ws.RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 2, CreatedBy: "creator"})
 
 	open := hub.ListOpenRooms()
 	if len(open) != 1 || open[0].ID != room.ID() {

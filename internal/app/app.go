@@ -63,12 +63,25 @@ func Run() {
 	// 9. HTTP Хендлер
 	authHandler := deliveryHTTP.NewAuthHandler(authService)
 
-	// 8. WebSocket Hub
-	hub := ws.NewHub(tokenManager, cfg.AllowedOrigins)
+	// 10. Экономика: возвращаем ставки партий, оборванных прошлым падением сервера
+	economyService := service.NewEconomyService(postgres.NewWalletRepository(pool))
+	if refunded, err := economyService.RefundUnfinished(ctx); err != nil {
+		log.Fatalf("failed to refund unfinished games: %v", err)
+	} else if refunded > 0 {
+		log.Printf("refunded stakes of %d unfinished games", refunded)
+	}
+
+	// 11. WebSocket Hub
+	hub := ws.NewHub(tokenManager, cfg.AllowedOrigins, economyService)
 
 	// 9. HTTP Сервер (твой конструктор с настроенными роутами /api/v1/auth)
 	serverAddr := fmt.Sprintf(":%s", cfg.ServerPort)
-	server := deliveryHTTP.NewServer(serverAddr, hub, authHandler, deliveryHTTP.NewTableHandler(hub), deliveryHTTP.NewUserHandler(service.NewUserService(userRepo)), tokenManager)
+	server := deliveryHTTP.NewServer(serverAddr, hub, deliveryHTTP.Handlers{
+		Auth:   authHandler,
+		Table:  deliveryHTTP.NewTableHandler(hub, economyService),
+		User:   deliveryHTTP.NewUserHandler(service.NewUserService(userRepo)),
+		Wallet: deliveryHTTP.NewWalletHandler(economyService),
+	}, tokenManager)
 
 	// Запуск сервера в отдельной горутине
 	go func() {

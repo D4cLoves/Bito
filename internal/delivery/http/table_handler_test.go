@@ -17,8 +17,8 @@ import (
 func newTestTablesRouter(t *testing.T) (http.Handler, string, uuid.UUID) {
 	t.Helper()
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
-	hub := ws.NewHub(tokenManager, nil)
-	server := NewServer(":0", hub, nil, NewTableHandler(hub), nil, tokenManager)
+	hub := ws.NewHub(tokenManager, nil, nil)
+	server := NewServer(":0", hub, Handlers{Table: NewTableHandler(hub, nil)}, tokenManager)
 
 	userID := uuid.New()
 	token, err := tokenManager.GenerateAccessToken(userID, "Alice")

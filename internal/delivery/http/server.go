@@ -14,23 +14,32 @@ import (
 )
 
 type Server struct {
-	httpServer   *http.Server
-	hub          *ws.Hub
-	router       *chi.Mux
-	authHandler  *AuthHandler
-	tableHandler *TableHandler
-	userHandler  *UserHandler
-	tokens       TokenValidator
+	httpServer    *http.Server
+	hub           *ws.Hub
+	router        *chi.Mux
+	authHandler   *AuthHandler
+	tableHandler  *TableHandler
+	userHandler   *UserHandler
+	walletHandler *WalletHandler
+	tokens        TokenValidator
 }
 
-func NewServer(addr string, hub *ws.Hub, authHandler *AuthHandler, tableHandler *TableHandler, userHandler *UserHandler, tokens TokenValidator) *Server {
+type Handlers struct {
+	Auth   *AuthHandler
+	Table  *TableHandler
+	User   *UserHandler
+	Wallet *WalletHandler
+}
+
+func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
 	s := &Server{
-		hub:          hub,
-		router:       chi.NewRouter(),
-		authHandler:  authHandler,
-		tableHandler: tableHandler,
-		userHandler:  userHandler,
-		tokens:       tokens,
+		hub:           hub,
+		router:        chi.NewRouter(),
+		authHandler:   h.Auth,
+		tableHandler:  h.Table,
+		userHandler:   h.User,
+		walletHandler: h.Wallet,
+		tokens:        tokens,
 	}
 
 	s.setupMiddlewares()
@@ -87,6 +96,7 @@ func (s *Server) setupRoutes() {
 		s.router.Route("/api/v1/tables", func(r chi.Router) {
 			r.Use(AuthMiddleware(s.tokens))
 			r.Post("/", s.tableHandler.Create)
+			r.Post("/quick", s.tableHandler.Quick)
 			r.Get("/", s.tableHandler.List)
 		})
 	}
@@ -98,6 +108,14 @@ func (s *Server) setupRoutes() {
 			r.Patch("/", s.userHandler.ChangeUsername)
 			r.Delete("/", s.userHandler.DeleteAccount)
 			r.Post("/password", s.userHandler.ChangePassword)
+		})
+	}
+
+	if s.walletHandler != nil {
+		s.router.Route("/api/v1/wallet", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Post("/top-up", s.walletHandler.TopUp)
+			r.Get("/transactions", s.walletHandler.Transactions)
 		})
 	}
 }

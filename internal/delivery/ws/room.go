@@ -9,7 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"bito/internal/economy"
 	"bito/internal/game"
+	"bito/internal/model"
 )
 
 const (
@@ -28,8 +30,17 @@ type RoomInfo struct {
 	Deck       int       `json:"deck"`
 	MaxPlayers int       `json:"maxPlayers"`
 	Players    int       `json:"players"`
+	Stake      int64     `json:"stake"`
 	CreatedBy  string    `json:"createdBy"`
 	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type RoomSettings struct {
+	Mode       game.GameMode
+	Deck       game.DeckType
+	MaxPlayers int
+	Stake      int64
+	CreatedBy  string
 }
 
 type IncomingMessage struct {
@@ -42,8 +53,13 @@ type Room struct {
 	gameMode          game.GameMode
 	deckType          game.DeckType
 	maxUsers          int
+	stake             int64
+	bank              Bank
 	clients           map[string]*Client
+	seated            map[string]bool
 	game              *game.Game
+	payouts           map[string]int64
+	draw              bool
 	register          chan *Client
 	unregister        chan *Client
 	incoming          chan IncomingMessage
@@ -60,17 +76,24 @@ type Room struct {
 	createdAt         time.Time
 	playersCount      atomic.Int32
 	started           atomic.Bool
+	finished          atomic.Bool
 }
 
-func NewRoom(id string, mode game.GameMode, deckType game.DeckType, maxUsers int, createdBy string) *Room {
+func NewRoom(id string, s RoomSettings, bank Bank) *Room {
+	if bank == nil {
+		bank = freeBank{}
+	}
 	return &Room{
 		id:                id,
-		gameMode:          mode,
-		deckType:          deckType,
-		maxUsers:          maxUsers,
-		createdBy:         createdBy,
+		gameMode:          s.Mode,
+		deckType:          s.Deck,
+		maxUsers:          s.MaxPlayers,
+		stake:             s.Stake,
+		bank:              bank,
+		createdBy:         s.CreatedBy,
 		createdAt:         time.Now(),
 		clients:           make(map[string]*Client),
+		seated:            make(map[string]bool),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
 		incoming:          make(chan IncomingMessage, 100),
@@ -110,6 +133,31 @@ func (r *Room) PlayersCount() int {
 	return int(r.playersCount.Load())
 }
 
+func (r *Room) Stake() int64 {
+	return r.stake
+}
+
+func (r *Room) Holds(playerID string) bool {
+	if r.finished.Load() {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return !r.closed && r.seated[playerID]
+}
+
+func (r *Room) seat(playerID string) {
+	r.mu.Lock()
+	r.seated[playerID] = true
+	r.mu.Unlock()
+}
+
+func (r *Room) unseat(playerID string) {
+	r.mu.Lock()
+	delete(r.seated, playerID)
+	r.mu.Unlock()
+}
+
 // Info reads only immutable fields and atomics, so the hub may call it concurrently with Run.
 func (r *Room) Info() RoomInfo {
 	return RoomInfo{
@@ -118,6 +166,7 @@ func (r *Room) Info() RoomInfo {
 		Deck:       int(r.deckType),
 		MaxPlayers: r.maxUsers,
 		Players:    r.PlayersCount(),
+		Stake:      r.stake,
 		CreatedBy:  r.createdBy,
 		CreatedAt:  r.createdAt,
 	}
@@ -222,6 +271,7 @@ func (r *Room) handleRegister(client *Client) {
 	}
 
 	r.clients[playerID] = client
+	r.seat(playerID)
 
 	if len(r.clients) == r.maxUsers {
 		r.startGame()
@@ -237,6 +287,10 @@ func (r *Room) handleUnregister(client *Client) {
 
 	delete(r.clients, playerID)
 	client.Close()
+
+	if r.game == nil {
+		r.unseat(playerID)
+	}
 
 	if r.game == nil || r.game.Phase() == game.PhaseFinished {
 		if len(r.clients) == 0 {
@@ -284,13 +338,23 @@ func (r *Room) handleDisconnectTimeout(playerID string) {
 
 func (r *Room) startGame() {
 	players := make([]*game.Player, 0, len(r.clients))
+	ids := make([]string, 0, len(r.clients))
 	for _, c := range r.clients {
 		players = append(players, game.NewPlayer(c.ID(), c.Name()))
+		ids = append(ids, c.ID())
 	}
 
 	newGame, err := game.NewGame(r.gameMode, r.deckType, players)
 	if err != nil {
 		log.Printf("[Room %s] ошибка создания игры: %v", r.id, err)
+		return
+	}
+
+	ctx, cancel := bankContext()
+	err = r.bank.LockStakes(ctx, r.id, r.gameMode.String(), int(r.deckType), r.stake, ids)
+	cancel()
+	if err != nil {
+		r.handleLockFailure(err)
 		return
 	}
 
@@ -300,6 +364,59 @@ func (r *Room) startGame() {
 
 	r.resetTurnTimer()
 	r.broadcastGameState()
+}
+
+func (r *Room) handleLockFailure(err error) {
+	var noFunds *model.InsufficientFundsError
+	if errors.As(err, &noFunds) {
+		playerID := noFunds.UserID.String()
+		log.Printf("[Room %s] у игрока %s не хватает фишек, ждём другого", r.id, playerID)
+		if c, ok := r.clients[playerID]; ok {
+			r.sendError(c, errNoFunds)
+			delete(r.clients, playerID)
+			c.Close()
+		}
+		r.unseat(playerID)
+		return
+	}
+
+	log.Printf("[Room %s] не удалось списать ставки: %v", r.id, err)
+	for _, c := range r.clients {
+		r.sendError(c, errStartFailed)
+	}
+	r.Close()
+}
+
+func (r *Room) settle() {
+	if r.payouts != nil {
+		return
+	}
+
+	losers := make(map[string]bool)
+	for _, id := range r.game.Losers() {
+		losers[string(id)] = true
+	}
+	places := make([]string, 0, len(r.game.Places()))
+	for _, id := range r.game.Places() {
+		places = append(places, string(id))
+	}
+
+	ctx, cancel := bankContext()
+	defer cancel()
+	s, err := r.bank.Settle(ctx, r.id, r.stake, economy.Result{Places: places, Losers: losers})
+	if err != nil {
+		log.Printf("[Room %s] ошибка расчёта партии: %v", r.id, err)
+		r.payouts = map[string]int64{}
+		r.draw = r.game.IsDraw()
+		return
+	}
+
+	r.draw = s.Draw
+
+	r.payouts = make(map[string]int64, len(s.Payouts))
+	for _, p := range s.Payouts {
+		r.payouts[p.UserID] = p.Net
+	}
 }
 
 func (r *Room) handleIncoming(msg IncomingMessage) {
@@ -367,6 +484,8 @@ func (r *Room) handleIncoming(msg IncomingMessage) {
 func (r *Room) onGameStateChanged() {
 	if r.game.Phase() == game.PhaseFinished {
 		r.stopTurnTimer()
+		r.settle()
+		r.finished.Store(true)
 		r.broadcastGameOver()
 		time.AfterFunc(30*time.Second, func() {
 			r.Close()
@@ -483,6 +602,7 @@ func (r *Room) sendGameStateTo(client *Client) {
 		Mode:        r.game.Mode().String(),
 		TurnLeftMs:  turnLeftMs(r.turnEndsAt),
 		YouPassed:   r.game.HasPassed(game.PlayerID(client.ID())),
+		Stake:       r.stake,
 	}
 
 	data, err := NewMessage(TypeGameState, payload)
@@ -500,7 +620,9 @@ func (r *Room) broadcastGameOver() {
 		WinnerID: string(r.game.WinnerID()),
 		LoserID:  string(r.game.LoserID()),
 		Places:   places,
-		IsDraw:   r.game.IsDraw(),
+		Payouts:  r.payouts,
+		Stake:    r.stake,
+		IsDraw:   r.draw,
 	}
 
 	data, err := NewMessage(TypeGameOver, payload)

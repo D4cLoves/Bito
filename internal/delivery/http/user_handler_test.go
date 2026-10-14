@@ -84,8 +84,8 @@ func newTestUsersRouter(t *testing.T) (http.Handler, string, *model.User) {
 	bob := &model.User{ID: uuid.New(), Name: "Bob", CreatedAt: time.Now()}
 	repo := &memUserRepo{users: map[uuid.UUID]*model.User{alice.ID: alice, bob.ID: bob}}
 
-	hub := ws.NewHub(tokenManager, nil)
-	server := NewServer(":0", hub, nil, nil, NewUserHandler(service.NewUserService(repo)), tokenManager)
+	hub := ws.NewHub(tokenManager, nil, nil)
+	server := NewServer(":0", hub, Handlers{User: NewUserHandler(service.NewUserService(repo))}, tokenManager)
 
 	token, err := tokenManager.GenerateAccessToken(alice.ID, alice.Name)
 	if err != nil {
