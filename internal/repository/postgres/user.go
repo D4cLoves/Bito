@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"bito/internal/economy"
 	"bito/internal/model"
 
 	"github.com/google/uuid"
@@ -67,14 +68,22 @@ func (r *UserRepository) CreateUser(
 	}
 
 	const insertWalletSQL = `
-		INSERT INTO user_wallets (user_id)
-		VALUES ($1)
+		INSERT INTO user_wallets (user_id, balance)
+		VALUES ($1, $2)
 		RETURNING balance, updated_at
 	`
-	err = tx.QueryRow(ctx, insertWalletSQL, user.ID).
+	err = tx.QueryRow(ctx, insertWalletSQL, user.ID, economy.StartBalance).
 		Scan(&wallet.Balance, &wallet.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("user repo: insert user_wallets: %w", err)
+	}
+
+	const insertSignupBonusSQL = `
+		INSERT INTO wallet_transactions (user_id, amount, kind, balance_after)
+		VALUES ($1, $2, $3, $2)
+	`
+	if _, err = tx.Exec(ctx, insertSignupBonusSQL, user.ID, wallet.Balance, model.TxSignupBonus); err != nil {
+		return fmt.Errorf("user repo: insert signup bonus: %w", err)
 	}
 
 	user.Stats = stats
