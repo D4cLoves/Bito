@@ -7,7 +7,7 @@ import ToastStack from '../../components/app/ToastStack.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
 import ReturnBanner from '../../components/client/ReturnBanner.vue'
-import PlayPanel from '../../components/client/PlayPanel.vue'
+import QuickPlay from '../../components/client/QuickPlay.vue'
 import TablesBoard from '../../components/client/TablesBoard.vue'
 import SocialPanel from '../../components/client/SocialPanel.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
@@ -29,9 +29,10 @@ import { usePanel } from '../../composables/usePanel'
 import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
+import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
 import { MOCK_FRIENDS, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
-import type { DeckSize, GameMode, TableInfo } from '../../types/game'
+import type { TableInfo } from '../../types/game'
 import type { ActiveTable, Friend, FriendRequest, ChatEntry, GameHistoryEntry } from '../../types/social'
 
 const POLL_MS = 3000
@@ -48,10 +49,8 @@ const sideColumn = useMediaQuery('(min-width: 1024px)')
 
 useSmoothScroll(mainEl)
 
-const mode = ref<GameMode>('podkidnoy')
-const deck = ref<DeckSize>(36)
-const players = ref(3)
-const stake = ref(MIN_STAKE)
+const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
+const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
 
 const tables = ref<TableInfo[]>([])
@@ -74,7 +73,8 @@ const username = computed(() => profile.value?.username ?? auth.user?.username ?
 const balance = computed(() => profile.value?.wallet.balance ?? null)
 
 watch(balance, (b) => {
-  if (b !== null && stake.value > b) stake.value = MIN_STAKE
+  quickStake.value = bestAffordable(b, quickStake.value)
+  createPrefs.stake.value = bestAffordable(b, createPrefs.stake.value)
 })
 
 async function refreshTables(manual = false) {
@@ -92,9 +92,9 @@ async function refreshTables(manual = false) {
   }
 }
 
-function goToTable(id: string) {
+function goToTable(id: string, search = false) {
   sound.playChips()
-  router.push({ name: 'table', params: { id } })
+  router.push({ name: 'table', params: { id }, query: search ? { search: '1' } : undefined })
 }
 
 async function create() {
@@ -102,7 +102,12 @@ async function create() {
   sound.playClick()
   busy.value = 'create'
   try {
-    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: Math.max(3, players.value), stake: stake.value })
+    const table = await createTable({
+      mode: createPrefs.mode.value,
+      deck: createPrefs.deck.value,
+      maxPlayers: createPrefs.players.value,
+      stake: createPrefs.stake.value,
+    })
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -117,8 +122,8 @@ async function find() {
   sound.playClick()
   busy.value = 'find'
   try {
-    const table = await quickMatch({ mode: mode.value, deck: deck.value, stake: stake.value })
-    goToTable(table.id)
+    const table = await quickMatch({ mode: quickMode.value, deck: quickDeck.value, stake: quickStake.value })
+    goToTable(table.id, true)
   } catch (err) {
     sound.playError()
     if (isNotImplemented(err)) toast.show('Быстрый поиск скоро заработает — пока соберите свой стол')
@@ -285,19 +290,17 @@ onUnmounted(() => {
           @dismiss="dismissActiveTable"
         />
 
-        <PlayPanel
-          v-model:mode="mode"
-          v-model:deck="deck"
-          v-model:players="players"
-          v-model:stake="stake"
+        <QuickPlay
+          v-model:stake="quickStake"
+          v-model:mode="quickMode"
+          v-model:deck="quickDeck"
           class="rise"
           style="--d: 2"
-          :busy="busy"
+          :busy="busy === 'find'"
           :balance="balance"
           :card-back="settings.cardBack"
-          @find="find"
-          @create="create"
-          @private="soon('Приватные столы по ссылке скоро появятся')"
+          @play="find"
+          @top-up="topUp"
         />
 
         <TablesBoard
@@ -309,7 +312,7 @@ onUnmounted(() => {
           :error="tablesError"
           :my-id="auth.user?.id"
           :now="now"
-          :stake="stake"
+          :stake="quickStake"
           :balance="balance"
           @join="(t) => goToTable(t.id)"
           @refresh="refreshTables(true)"

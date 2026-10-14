@@ -282,6 +282,23 @@ const result = computed(() => {
 
 const modeLabel = computed(() => (mode.value === 'perevodnoy' ? 'Переводной' : mode.value === 'podkidnoy' ? 'Подкидной' : 'Стол'))
 const deckSize = computed(() => waitingInfo.value?.deck ?? null)
+
+const searching = computed(
+  () => !state.value && status.value !== 'closed' && (waitingInfo.value?.matchmaking ?? route.query.search === '1'),
+)
+
+const searchStartedAt = Date.now()
+
+const elapsedText = computed(() => {
+  const since = waitingInfo.value ? Math.min(new Date(waitingInfo.value.createdAt).getTime(), searchStartedAt) : searchStartedAt
+  const sec = Math.max(0, Math.floor((tick.value - since) / 1000))
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+})
+
+function cancelSearch() {
+  sound.playClick()
+  router.push('/lobby')
+}
 const stake = computed(() => gameOver.value?.stake ?? state.value?.stake ?? waitingInfo.value?.stake ?? MIN_STAKE)
 
 const battleHint = computed(() => {
@@ -575,6 +592,20 @@ onUnmounted(() => {
               :hint="battleHint"
               @pair="onPairClick"
             />
+
+            <div v-else-if="searching" class="waiting searching" role="status">
+              <div class="radar" aria-hidden="true">
+                <span class="pulse p1"></span>
+                <span class="pulse p2"></span>
+                <span class="pulse p3"></span>
+                <GameCard face-down size="sm" class="radar-card" />
+              </div>
+              <h1>Ищем соперника</h1>
+              <p v-if="waitingInfo">{{ modeLabel }} · {{ waitingInfo.deck }} карт · ставка {{ stake.toLocaleString('ru-RU') }}</p>
+              <p v-else>Подбираем стол с вашими настройками</p>
+              <span class="elapsed" aria-hidden="true">{{ elapsedText }}</span>
+              <button type="button" class="felt-btn ghost" @click="cancelSearch">Отменить поиск</button>
+            </div>
 
             <div v-else class="waiting">
               <div class="waiting-cards" aria-hidden="true">
@@ -874,6 +905,79 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.45;
   color: var(--color-on-felt-muted);
+}
+
+.radar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  margin-bottom: 8px;
+}
+
+.pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--color-on-felt-faint);
+  opacity: 0;
+  animation: radar 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.p2 {
+  animation-delay: 0.8s;
+}
+
+.p3 {
+  animation-delay: 1.6s;
+}
+
+@keyframes radar {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.radar-card {
+  position: relative;
+  rotate: -6deg;
+  animation: shuffle 2.4s ease-in-out infinite;
+}
+
+.elapsed {
+  margin-top: 10px;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.felt-btn.ghost {
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
+  color: var(--color-on-felt);
+}
+
+.felt-btn.ghost:hover {
+  box-shadow: inset 0 0 0 1.5px var(--color-on-felt-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .radar-card {
+    animation: none;
+  }
+
+  .pulse.p1 {
+    opacity: 0.5;
+    transform: scale(0.7);
+  }
 }
 
 .felt-btn {
