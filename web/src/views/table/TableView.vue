@@ -223,6 +223,7 @@ interface Standing {
   place: number
   kind: StandingKind
   me: boolean
+  payout: number | null
 }
 
 const standings = computed<Standing[]>(() => {
@@ -230,11 +231,12 @@ const standings = computed<Standing[]>(() => {
   if (!g?.places?.length) return []
   const loserIdx = g.loserId ? g.places.indexOf(g.loserId) : -1
   return g.places.map((id, i) => {
+    const payout = g.payouts?.[id] ?? null
     let kind: StandingKind = 'place'
     if (g.isDraw) kind = 'draw'
     else if (i === loserIdx) kind = 'fool'
-    else if (loserIdx >= 0 && i > loserIdx) kind = 'surrendered'
-    return { id, name: nameOf(id), place: i + 1, kind, me: id === me.value }
+    else if ((loserIdx >= 0 && i > loserIdx) || (payout !== null && payout < 0)) kind = 'surrendered'
+    return { id, name: nameOf(id), place: i + 1, kind, me: id === me.value, payout }
   })
 })
 
@@ -244,6 +246,21 @@ const STANDING_LABEL: Record<StandingKind, (s: Standing) => string> = {
   surrendered: () => 'сдался',
   draw: () => 'ничья',
 }
+
+function chips(n: number): string {
+  const abs = Math.abs(n).toLocaleString('ru-RU')
+  return n > 0 ? `+${abs}` : n < 0 ? `−${abs}` : '0'
+}
+
+const myPayout = computed(() => standings.value.find((s) => s.me)?.payout ?? null)
+
+const payoutLine = computed(() => {
+  const p = myPayout.value
+  if (p === null) return ''
+  if (p > 0) return `Выигрыш ${chips(p)} фишек`
+  if (p < 0) return `Ставка ${Math.abs(p).toLocaleString('ru-RU')} ушла в банк`
+  return 'Ставка вернулась'
+})
 
 const result = computed(() => {
   const g = gameOver.value
@@ -265,7 +282,7 @@ const result = computed(() => {
 
 const modeLabel = computed(() => (mode.value === 'perevodnoy' ? 'Переводной' : mode.value === 'podkidnoy' ? 'Подкидной' : 'Стол'))
 const deckSize = computed(() => waitingInfo.value?.deck ?? null)
-const stake = computed(() => waitingInfo.value?.stake ?? MIN_STAKE)
+const stake = computed(() => gameOver.value?.stake ?? state.value?.stake ?? waitingInfo.value?.stake ?? MIN_STAKE)
 
 const battleHint = computed(() => {
   if (!state.value) return ''
@@ -404,6 +421,10 @@ const ERRORS: Record<string, string> = {
   'стол уже заполнен': 'Стол заполнен',
   'партия уже завершена': 'Партия уже завершена',
   'слишком часто, подождите секунду': 'Не так быстро — подождите секунду',
+  'не хватает фишек на ставку': 'Не хватает фишек на ставку этого стола',
+  'вы уже играете за другим столом': 'Вы уже играете за другим столом',
+  'не удалось начать партию, попробуйте ещё раз': 'Не удалось начать партию, попробуйте ещё раз',
+  'касса недоступна, попробуйте позже': 'Касса недоступна, попробуйте позже',
 }
 
 watch(lastError, (e) => {
@@ -674,6 +695,7 @@ onUnmounted(() => {
           </div>
           <h2 id="result-title">{{ result.title }}</h2>
           <p>{{ result.text }}</p>
+          <p v-if="payoutLine" class="payout-line" :class="{ plus: (myPayout ?? 0) > 0, minus: (myPayout ?? 0) < 0 }">{{ payoutLine }}</p>
           <ol v-if="standings.length" class="standings" aria-label="Итоги партии">
             <li v-for="(s, i) in standings" :key="s.id" class="standing" :class="[s.kind, { me: s.me }]" :style="{ '--i': i }">
               <span class="medal" :class="s.kind === 'place' && s.place <= 3 ? `m${s.place}` : ''">
@@ -681,6 +703,7 @@ onUnmounted(() => {
               </span>
               <span class="standing-name">{{ s.name }}<small v-if="s.me"> · вы</small></span>
               <span class="standing-label">{{ STANDING_LABEL[s.kind](s) }}</span>
+              <span v-if="s.payout !== null" class="standing-payout" :class="{ plus: s.payout > 0, minus: s.payout < 0 }">{{ chips(s.payout) }}</span>
             </li>
           </ol>
           <PostGameChat :messages="chat" :my-id="me" @send="say" />
@@ -1311,6 +1334,31 @@ onUnmounted(() => {
 
 .fool .standing-label {
   color: var(--color-red);
+}
+
+.standing-payout {
+  min-width: 56px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+}
+
+.standing-payout.plus,
+.payout-line.plus {
+  color: var(--color-green);
+}
+
+.standing-payout.minus,
+.payout-line.minus {
+  color: var(--color-red);
+}
+
+.payout-line {
+  margin-top: 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .surrendered .standing-name,

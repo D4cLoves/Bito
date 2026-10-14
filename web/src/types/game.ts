@@ -83,6 +83,7 @@ export interface CreateTableRequest {
   mode: GameMode
   deck: DeckSize
   maxPlayers: number
+  stake: number
 }
 
 export type GamePhase = 'dealing' | 'battle' | 'giving_more' | 'finished'
@@ -108,12 +109,15 @@ export interface GameState {
   mode: GameMode
   turnLeftMs: number
   youPassed: boolean
+  stake?: number
 }
 
 export interface GameOver {
   winnerId?: string
   loserId?: string
   places?: string[]
+  payouts?: Record<string, number>
+  stake?: number
   isDraw: boolean
 }
 

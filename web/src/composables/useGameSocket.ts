@@ -7,6 +7,15 @@ export type SocketStatus = 'connecting' | 'open' | 'reconnecting' | 'closed'
 
 const MAX_RETRIES = 8
 const CHAT_HISTORY = 100
+const FATAL_ERRORS = new Set([
+  'не хватает фишек на ставку',
+  'вы уже играете за другим столом',
+  'не удалось начать партию, попробуйте ещё раз',
+  'касса недоступна, попробуйте позже',
+  'партия уже идет, стол заполнен',
+  'стол уже заполнен',
+  'партия уже завершена',
+])
 
 interface ServerMessage {
   type: string
@@ -101,6 +110,10 @@ export function useGameSocket(roomId: string) {
       case 'error': {
         const text = (msg.payload as { message?: string })?.message ?? 'Ошибка'
         lastError.value = { text, at: Date.now() }
+        if (FATAL_ERRORS.has(text)) {
+          stopped = true
+          status.value = 'closed'
+        }
         break
       }
       case 'player_disconnected': {

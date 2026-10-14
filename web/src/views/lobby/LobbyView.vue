@@ -15,7 +15,8 @@ import SettingsPanel from '../../components/panels/SettingsPanel.vue'
 import ShopPanel from '../../components/panels/ShopPanel.vue'
 import Leaderboard from '../../components/lobby/Leaderboard.vue'
 import { createTable, listTables, quickMatch } from '../../api/tables'
-import { isNotImplemented } from '../../api/http'
+import { ApiError, isNotImplemented } from '../../api/http'
+import { topUp as requestTopUp } from '../../api/wallet'
 import { useAuthStore } from '../../stores/auth'
 import { useProfileStore } from '../../stores/profile'
 import { useSettingsStore } from '../../stores/settings'
@@ -93,7 +94,7 @@ async function create() {
   sound.playClick()
   busy.value = 'create'
   try {
-    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: players.value })
+    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -108,7 +109,7 @@ async function find() {
   sound.playClick()
   busy.value = 'find'
   try {
-    const table = await quickMatch({ mode: mode.value, deck: deck.value, maxPlayers: players.value })
+    const table = await quickMatch({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -124,9 +125,26 @@ function soon(text: string) {
   toast.show(text)
 }
 
-function topUp() {
-  if (balance.value !== null && balance.value < TOP_UP_THRESHOLD) soon(`Скоро здесь можно будет пополнить баланс до ${TOP_UP_TO} фишек`)
-  else soon(`Пополнение доступно, когда фишек меньше ${TOP_UP_THRESHOLD}`)
+const toppingUp = ref(false)
+
+async function topUp() {
+  if (toppingUp.value) return
+  if (balance.value !== null && balance.value >= TOP_UP_THRESHOLD) {
+    soon(`Пополнение доступно, когда фишек меньше ${TOP_UP_THRESHOLD}`)
+    return
+  }
+  toppingUp.value = true
+  try {
+    await requestTopUp()
+    await profileStore.load(true)
+    sound.playChipsWin()
+    toast.show(`Баланс пополнен до ${TOP_UP_TO} фишек`)
+  } catch (err) {
+    sound.playError()
+    toast.show(err instanceof ApiError ? err.message : 'Не удалось пополнить баланс', 'error')
+  } finally {
+    toppingUp.value = false
+  }
 }
 
 function sendMessage(text: string) {
