@@ -255,6 +255,15 @@ h1 {
   .social-btn {
     display: grid;
   }
+
+  .online,
+  .name {
+    display: none;
+  }
+
+  .me {
+    padding: 0 5px;
+  }
 }
 
 @media (max-width: 767px) {
@@ -264,6 +273,10 @@ h1 {
 
   h1 {
     font-size: 22px;
+  }
+
+  .hello {
+    display: none;
   }
 
   .online,

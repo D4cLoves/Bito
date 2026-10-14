@@ -148,7 +148,7 @@ function onPlay() {
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) 250px;
   gap: 20px;
   padding: 28px 32px 30px;
   border-radius: 32px;
@@ -398,7 +398,7 @@ h2 {
   z-index: var(--i);
 }
 
-@container (max-width: 640px) {
+@container (max-width: 780px) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -419,6 +419,10 @@ h2 {
 
   .field-stake {
     grid-column: 1 / -1;
+  }
+
+  .fields :deep(.value .suit) {
+    display: none;
   }
 
   .go {

@@ -125,12 +125,14 @@ h2 {
   font-size: 20px;
   font-weight: 500;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .count {
   font-size: 13px;
   color: var(--color-ink-faint);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .arrows {
@@ -174,6 +176,7 @@ h2 {
   font: inherit;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.2s;
 }
@@ -302,7 +305,22 @@ h2 {
   color: var(--color-ink-faint);
 }
 
+@media (max-width: 767px), (hover: none) {
+  .arrows {
+    display: none;
+  }
+
+  .head > .count + .all,
+  .arrows + .all {
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 767px) {
+  h2 {
+    font-size: 18px;
+  }
+
   .slot,
   .skeleton {
     flex-basis: 210px;

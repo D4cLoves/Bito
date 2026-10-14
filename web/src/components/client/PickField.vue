@@ -156,7 +156,7 @@ function onKey(e: KeyboardEvent) {
   gap: 3px;
   width: 100%;
   min-height: 60px;
-  padding: 9px 14px 10px;
+  padding: 9px 12px 10px;
   box-sizing: border-box;
   border: 0;
   border-radius: 18px;
