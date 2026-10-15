@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"bito/internal/economy"
 	"bito/internal/model"
+	"bito/migrations"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -64,19 +63,8 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 		}
 	})
 
-	files, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("migrations not found: %v", err)
-	}
-	for _, f := range files {
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		up, _, _ := strings.Cut(string(raw), "-- +migrate Down")
-		if _, err = pool.Exec(ctx, up); err != nil {
-			t.Fatalf("apply %s: %v", filepath.Base(f), err)
-		}
+	if _, err = Migrate(ctx, pool, migrations.FS); err != nil {
+		t.Fatalf("apply migrations: %v", err)
 	}
 	return pool
 }

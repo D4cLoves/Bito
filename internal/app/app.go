@@ -19,6 +19,7 @@ import (
 	"bito/internal/repository/postgres"
 	redisRepo "bito/internal/repository/redis"
 	"bito/internal/service"
+	"bito/migrations"
 )
 
 func Run() {
@@ -38,6 +39,12 @@ func Run() {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}
 	defer pool.Close()
+
+	if applied, err := postgres.Migrate(ctx, pool, migrations.FS); err != nil {
+		log.Fatalf("failed to apply migrations: %v", err)
+	} else if applied > 0 {
+		log.Printf("applied %d database migrations", applied)
+	}
 
 	// 4. Клиент и репозиторий Redis
 	redisClient, err := redisRepo.New(ctx, cfg)
