@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+var ErrSeatedElsewhere = errors.New("player already sits at another table")
 
 type TokenValidator interface {
 	ValidateAccessToken(token string) (*jwt.Claims, error)
@@ -55,6 +58,19 @@ func (h *Hub) CreateRoom(s RoomSettings) *Room {
 	return h.createRoomLocked(s)
 }
 
+func (h *Hub) CreateTable(s RoomSettings) (*Room, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.busyLocked(s.CreatedBy, nil) {
+		return nil, ErrSeatedElsewhere
+	}
+	h.releaseLocked(s.CreatedBy, nil)
+	room := h.createRoomLocked(s)
+	room.Reserve(s.CreatedBy)
+	return room, nil
+}
+
 func (h *Hub) createRoomLocked(s RoomSettings) *Room {
 	roomID := uuid.NewString()
 
@@ -81,7 +97,7 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	h.mu.RLock()
 	rooms := make([]RoomInfo, 0, len(h.rooms))
 	for _, room := range h.rooms {
-		if !room.Started() && !room.matchmaking {
+		if !room.Started() && !room.matchmaking && room.Occupancy() > 0 {
 			rooms = append(rooms, room.Info())
 		}
 	}
@@ -124,15 +140,20 @@ func (q MatchQuery) settings(createdBy string) RoomSettings {
 	return s
 }
 
-func (h *Hub) MatchOrCreate(q MatchQuery, playerID string) (room *Room, created bool) {
+func (h *Hub) MatchOrCreate(q MatchQuery, playerID string) (room *Room, created bool, err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if room = h.findMatchLocked(q, playerID); room == nil {
+	room = h.findMatchLocked(q, playerID)
+	if h.busyLocked(playerID, room) {
+		return nil, false, ErrSeatedElsewhere
+	}
+	h.releaseLocked(playerID, room)
+	if room == nil {
 		room, created = h.createRoomLocked(q.settings(playerID)), true
 	}
 	room.Reserve(playerID)
-	return room, created
+	return room, created, nil
 }
 
 func (h *Hub) findMatchLocked(q MatchQuery, playerID string) *Room {
@@ -171,11 +192,39 @@ func (h *Hub) SeatedElsewhere(playerID, exceptRoomID string) bool {
 	defer h.mu.RUnlock()
 
 	for id, room := range h.rooms {
-		if id != exceptRoomID && room.Holds(playerID) {
+		if id != exceptRoomID && room.Claims(playerID) {
 			return true
 		}
 	}
 	return false
+}
+
+func (h *Hub) claimSeat(room *Room, playerID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.busyLocked(playerID, room) {
+		return false
+	}
+	h.releaseLocked(playerID, room)
+	return true
+}
+
+func (h *Hub) busyLocked(playerID string, except *Room) bool {
+	for _, room := range h.rooms {
+		if room != except && room.Claims(playerID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hub) releaseLocked(playerID string, except *Room) {
+	for _, room := range h.rooms {
+		if room != except && room.matchmaking {
+			room.Unreserve(playerID)
+		}
+	}
 }
 
 func (h *Hub) RemoveRoom(id string) {
@@ -243,7 +292,7 @@ func (h *Hub) admit(room *Room, playerID string) string {
 	if room.Holds(playerID) {
 		return ""
 	}
-	if h.SeatedElsewhere(playerID, room.ID()) {
+	if !h.claimSeat(room, playerID) {
 		return errOtherTable
 	}
 	if room.Stake() <= 0 {

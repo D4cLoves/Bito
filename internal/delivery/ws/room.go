@@ -25,7 +25,7 @@ const (
 	turnDuration       = 20 * time.Second
 	disconnectGraceDur = 30 * time.Second
 	// emptyRoomTTL closes a table created via REST that nobody joined.
-	emptyRoomTTL = 5 * time.Minute
+	emptyRoomTTL = reservationTTL
 	chatMaxRunes = 200
 	chatCooldown = 700 * time.Millisecond
 )
@@ -165,6 +165,16 @@ func (r *Room) Reserve(playerID string) {
 	r.mu.Unlock()
 }
 
+func (r *Room) Unreserve(playerID string) {
+	r.mu.Lock()
+	delete(r.reservations, playerID)
+	r.mu.Unlock()
+}
+
+func (r *Room) Claims(playerID string) bool {
+	return r.Holds(playerID) || (!r.matchmaking && r.Reserved(playerID))
+}
+
 func (r *Room) Reserved(playerID string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -199,14 +209,14 @@ func (r *Room) unseat(playerID string) {
 	r.mu.Unlock()
 }
 
-// Info reads only immutable fields and atomics, so the hub may call it concurrently with Run.
+// Info reads only immutable fields, atomics and mutex-guarded seats, so the hub may call it concurrently with Run.
 func (r *Room) Info() RoomInfo {
 	return RoomInfo{
 		ID:          r.id,
 		Mode:        r.gameMode.String(),
 		Deck:        int(r.deckType),
 		MaxPlayers:  r.maxUsers,
-		Players:     r.PlayersCount(),
+		Players:     r.Occupancy(),
 		Stake:       r.stake,
 		Matchmaking: r.matchmaking,
 		CreatedBy:   r.createdBy,
@@ -229,10 +239,11 @@ func (r *Room) Run() {
 			return
 
 		case <-idle.C:
-			if len(r.clients) == 0 && r.game == nil {
+			if len(r.clients) == 0 && r.game == nil && r.Occupancy() == 0 {
 				log.Printf("[Room %s] за столом никого нет, закрываем", r.id)
 				return
 			}
+			idle.Reset(emptyRoomTTL)
 
 		case client := <-r.register:
 			r.handleRegister(client)

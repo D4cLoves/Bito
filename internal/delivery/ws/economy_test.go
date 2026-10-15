@@ -253,6 +253,86 @@ func TestHub_SeatedElsewhere(t *testing.T) {
 	}
 }
 
+func TestHub_CreatorReservesSeat(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	defer table.Close()
+
+	if !hub.SeatedElsewhere("p1", "") {
+		t.Error("the creator's reservation must count as a seat")
+	}
+	if info := table.Info(); info.Players != 1 {
+		t.Errorf("players = %d, want the creator's reserved seat", info.Players)
+	}
+	if _, err = hub.CreateTable(s); !errors.Is(err, ErrSeatedElsewhere) {
+		t.Errorf("second table err = %v, want ErrSeatedElsewhere", err)
+	}
+	if _, _, err = hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1"); !errors.Is(err, ErrSeatedElsewhere) {
+		t.Errorf("quick play err = %v, want ErrSeatedElsewhere", err)
+	}
+
+	other := hub.CreateRoom(testSettings(3))
+	defer other.Close()
+	if reason := hub.admit(other, "p1"); reason != errOtherTable {
+		t.Errorf("joining another table: reason = %q, want %q", reason, errOtherTable)
+	}
+	if reason := hub.admit(table, "p1"); reason != "" {
+		t.Errorf("joining own table: reason = %q, want none", reason)
+	}
+}
+
+func TestHub_NewSearchReleasesOldDuelReservation(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	cheap, _, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
+	defer cheap.Close()
+
+	rich, _, err := hub.MatchOrCreate(MatchQuery{Stake: 500}, "p1")
+	if err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	defer rich.Close()
+	if cheap.Reserved("p1") {
+		t.Error("a new search must release the previous duel reservation")
+	}
+	if !rich.Reserved("p1") {
+		t.Error("the new duel must hold the reservation")
+	}
+
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("a pending duel search must not block creating a table: %v", err)
+	}
+	defer table.Close()
+	if rich.Reserved("p1") {
+		t.Error("creating a table must release the duel reservation")
+	}
+}
+
+func TestHub_TableWithoutPlayersLeavesList(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if len(hub.ListOpenRooms()) != 1 {
+		t.Fatal("a reserved table must be listed")
+	}
+
+	table.Unreserve("p1")
+	if list := hub.ListOpenRooms(); len(list) != 0 {
+		t.Errorf("open rooms = %+v, want none without players or reservations", list)
+	}
+}
+
 func duelSettings(mode game.GameMode, deck game.DeckType, stake int64) RoomSettings {
 	return RoomSettings{Mode: mode, Deck: deck, MaxPlayers: 2, Stake: stake, Matchmaking: true}
 }
@@ -273,7 +353,7 @@ func TestHub_MatchOrCreate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			hub := NewHub(nil, nil, nil)
-			duel, created := hub.MatchOrCreate(MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, "p1")
+			duel, created, _ := hub.MatchOrCreate(MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, "p1")
 			defer duel.Close()
 			if !created {
 				t.Fatal("the first search must open a table")
@@ -281,7 +361,7 @@ func TestHub_MatchOrCreate(t *testing.T) {
 			company := hub.CreateRoom(RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 3, Stake: 500})
 			defer company.Close()
 
-			room, created := hub.MatchOrCreate(tc.query, "p2")
+			room, created, _ := hub.MatchOrCreate(tc.query, "p2")
 			defer room.Close()
 			if tc.reuse && (created || room != duel) {
 				t.Errorf("want the waiting duel, got created=%v", created)
@@ -298,7 +378,7 @@ func TestHub_MatchOrCreate(t *testing.T) {
 
 func TestHub_MatchOrCreateFillsMissingSettings(t *testing.T) {
 	hub := NewHub(nil, nil, nil)
-	room, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
+	room, _, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
 	defer room.Close()
 
 	info := room.Info()
@@ -311,19 +391,19 @@ func TestHub_ReservationKeepsDuelForTwo(t *testing.T) {
 	hub := NewHub(nil, nil, nil)
 	query := MatchQuery{Stake: 100}
 
-	first, _ := hub.MatchOrCreate(query, "p1")
+	first, _, _ := hub.MatchOrCreate(query, "p1")
 	defer first.Close()
-	second, created := hub.MatchOrCreate(query, "p2")
+	second, created, _ := hub.MatchOrCreate(query, "p2")
 	if created || second != first {
 		t.Fatal("the second player must get the waiting duel")
 	}
-	third, created := hub.MatchOrCreate(query, "p3")
+	third, created, _ := hub.MatchOrCreate(query, "p3")
 	defer third.Close()
 	if !created || third == first {
 		t.Error("two reserved seats fill a duel even before anyone connects; the third player needs a new table")
 	}
 
-	again, created := hub.MatchOrCreate(query, "p1")
+	again, created, _ := hub.MatchOrCreate(query, "p1")
 	if created || again != first {
 		t.Error("a repeated search must return the table the player already reserved")
 	}
@@ -338,7 +418,7 @@ func TestHub_SimultaneousSearchesMeet(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				rooms[p], _ = hub.MatchOrCreate(MatchQuery{Stake: 250}, string(rune('a'+p)))
+				rooms[p], _, _ = hub.MatchOrCreate(MatchQuery{Stake: 250}, string(rune('a'+p)))
 			}()
 		}
 		wg.Wait()
@@ -355,6 +435,7 @@ func TestHub_DuelTablesAreHiddenFromList(t *testing.T) {
 	defer duel.Close()
 	company := hub.CreateRoom(testSettings(3))
 	defer company.Close()
+	company.Reserve("creator")
 
 	list := hub.ListOpenRooms()
 	if len(list) != 1 || list[0].ID != company.ID() {

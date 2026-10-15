@@ -206,18 +206,26 @@ func TestWS_UnknownRoomReturns404(t *testing.T) {
 
 func TestHub_ListOpenRooms(t *testing.T) {
 	tokenManager, hub, wsURL := newTestWSServer(t)
-	room := hub.CreateRoom(ws.RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 2, CreatedBy: "creator"})
+	creator := uuid.New()
+	room, err := hub.CreateTable(ws.RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 2, CreatedBy: creator.String()})
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
 
 	open := hub.ListOpenRooms()
 	if len(open) != 1 || open[0].ID != room.ID() {
 		t.Fatalf("expected the new room in open list, got %+v", open)
 	}
-	if open[0].Mode != "perevodnoy" || open[0].Deck != 24 || open[0].MaxPlayers != 2 || open[0].Players != 0 {
+	if open[0].Mode != "perevodnoy" || open[0].Deck != 24 || open[0].MaxPlayers != 2 || open[0].Players != 1 {
 		t.Errorf("unexpected room info: %+v", open[0])
 	}
 
-	for _, name := range []string{"Alice", "Bob"} {
-		token, err := tokenManager.GenerateAccessToken(uuid.New(), name)
+	for i, name := range []string{"Alice", "Bob"} {
+		id := uuid.New()
+		if i == 0 {
+			id = creator
+		}
+		token, err := tokenManager.GenerateAccessToken(id, name)
 		if err != nil {
 			t.Fatalf("failed to generate token: %v", err)
 		}

@@ -159,7 +159,11 @@ func (th *TableHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings.CreatedBy = userID
-	room := th.hub.CreateRoom(settings)
+	room, err := th.hub.CreateTable(settings)
+	if err != nil {
+		respondError(w, http.StatusConflict, msgOtherTable)
+		return
+	}
 	respondJSON(w, http.StatusCreated, room.Info())
 }
 
@@ -182,7 +186,11 @@ func (th *TableHandler) Quick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	room, created := th.hub.MatchOrCreate(query, userID)
+	room, created, err := th.hub.MatchOrCreate(query, userID)
+	if err != nil {
+		respondError(w, http.StatusConflict, msgOtherTable)
+		return
+	}
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated

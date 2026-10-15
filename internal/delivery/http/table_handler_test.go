@@ -107,3 +107,27 @@ func TestTables_CreateAndList(t *testing.T) {
 		t.Errorf("list = %+v, want only %s", tables, created.ID)
 	}
 }
+
+func TestTables_OneOpenTablePerPlayer(t *testing.T) {
+	router, token, _ := newTestTablesRouter(t)
+	body := `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`
+
+	if w := doTablesRequest(router, http.MethodPost, token, body); w.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201 (%s)", w.Code, w.Body.String())
+	}
+
+	w := doTablesRequest(router, http.MethodPost, token, body)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("second create status = %d, want 409 (%s)", w.Code, w.Body.String())
+	}
+	var resp ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil || resp.Error != msgOtherTable {
+		t.Errorf("error = %q, want %q", resp.Error, msgOtherTable)
+	}
+
+	var tables []ws.RoomInfo
+	_ = json.Unmarshal(doTablesRequest(router, http.MethodGet, token, "").Body.Bytes(), &tables)
+	if len(tables) != 1 || tables[0].Players != 1 {
+		t.Errorf("list = %+v, want one table with the creator's reserved seat", tables)
+	}
+}
