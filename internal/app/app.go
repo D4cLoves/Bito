@@ -69,6 +69,7 @@ func Run() {
 
 	// 9. HTTP Хендлер
 	authHandler := deliveryHTTP.NewAuthHandler(authService, redisRepo.NewRateLimiter(redisClient), deliveryHTTP.CookieConfig{
+		Secure:     cfg.IsProduction(),
 		AccessTTL:  cfg.JWTAccessTTL,
 		RefreshTTL: cfg.JWTRefreshTTL,
 	})

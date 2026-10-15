@@ -1,10 +1,23 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
+)
+
+const (
+	EnvProduction    = "production"
+	defaultJWTSecret = "secretkeysecretkeysecretkey"
+	minJWTSecretLen  = 32
+)
+
+var (
+	ErrDefaultJWTSecret = errors.New("JWT_SECRET must be set to a non-default value in production")
+	ErrShortJWTSecret   = errors.New("JWT_SECRET must be at least 32 bytes in production")
 )
 
 type Config struct {
@@ -54,5 +67,25 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+func (c *Config) IsProduction() bool {
+	return strings.EqualFold(strings.TrimSpace(c.ServerEnv), EnvProduction)
+}
+
+func (c *Config) Validate() error {
+	if !c.IsProduction() {
+		return nil
+	}
+	if c.JWTSecret == defaultJWTSecret {
+		return ErrDefaultJWTSecret
+	}
+	if len(c.JWTSecret) < minJWTSecretLen {
+		return ErrShortJWTSecret
+	}
+	return nil
 }

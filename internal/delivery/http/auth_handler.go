@@ -76,6 +76,7 @@ const (
 )
 
 type CookieConfig struct {
+	Secure     bool
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
 }
@@ -269,6 +270,7 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   ah.cookies.Secure,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refreshToken",
@@ -276,6 +278,7 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/api/v1/auth",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   ah.cookies.Secure,
 	})
 
 	respondJSON(w, http.StatusOK, map[string]string{
@@ -299,7 +302,7 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Path:     "/",
 		MaxAge:   int(ah.cookies.AccessTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   ah.cookies.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -309,7 +312,7 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Path:     "/api/v1/auth",
 		MaxAge:   int(ah.cookies.RefreshTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   ah.cookies.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }

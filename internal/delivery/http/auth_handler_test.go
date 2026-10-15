@@ -298,3 +298,33 @@ func TestAuthHandler_CookiesOutliveBrowserSession(t *testing.T) {
 		t.Errorf("missing cookies: %v", want)
 	}
 }
+
+func TestAuthHandler_SecureCookies(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	user := &model.User{ID: uuid.New(), Email: "player@bito.local", Name: "Player777", CreatedAt: time.Now()}
+	redis := &fakeRedis{activeTokens: map[string]bool{}}
+	authService := service.NewAuthService(&fakeUserRepo{user: user}, nil, nil, redis, tokenManager, time.Hour)
+
+	for _, secure := range []bool{false, true} {
+		handler := NewAuthHandler(authService, nil, CookieConfig{Secure: secure, AccessTTL: time.Minute, RefreshTTL: time.Hour})
+
+		pair, _ := tokenManager.GenerateTokenPair(user.ID, user.Name)
+		_ = redis.SaveRefreshToken(context.Background(), user.ID, pair.TokenID, time.Hour)
+		body, _ := json.Marshal(RefreshRequest{RefreshToken: pair.RefreshToken})
+		session := httptest.NewRecorder()
+		handler.RefreshToken(session, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body)))
+
+		logout := httptest.NewRecorder()
+		handler.Logout(logout, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
+
+		cookies := append(session.Result().Cookies(), logout.Result().Cookies()...)
+		if len(cookies) != 4 {
+			t.Fatalf("secure=%v: got %d cookies, want 4", secure, len(cookies))
+		}
+		for _, c := range cookies {
+			if c.Secure != secure {
+				t.Errorf("secure=%v: cookie %s has Secure=%v", secure, c.Name, c.Secure)
+			}
+		}
+	}
+}
