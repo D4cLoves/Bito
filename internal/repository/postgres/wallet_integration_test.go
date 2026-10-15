@@ -313,3 +313,48 @@ func TestGames_History(t *testing.T) {
 		t.Errorf("loser entry = %+v, want 3rd place and -250", loser)
 	}
 }
+
+func TestWallet_RefundGameTouchesOnlyThatGame(t *testing.T) {
+	pool := setupTestDB(t)
+	repo := NewWalletRepository(pool)
+	ctx := context.Background()
+	users := createUsers(t, pool, 4)
+
+	failed, other := uuid.New(), uuid.New()
+	if err := repo.LockStakes(ctx, model.GameRecord{ID: failed, Mode: "podkidnoy", Deck: 36, Stake: 100}, users[:2]); err != nil {
+		t.Fatalf("lock failed game: %v", err)
+	}
+	if err := repo.LockStakes(ctx, model.GameRecord{ID: other, Mode: "podkidnoy", Deck: 36, Stake: 100}, users[2:]); err != nil {
+		t.Fatalf("lock other game: %v", err)
+	}
+
+	refunded, err := repo.RefundGame(ctx, failed)
+	if err != nil || !refunded {
+		t.Fatalf("refund = %v, %v; want the game refunded", refunded, err)
+	}
+	for _, id := range users[:2] {
+		if b := balanceOf(t, repo, id); b != economy.StartBalance {
+			t.Errorf("refunded player balance = %d, want %d", b, economy.StartBalance)
+		}
+	}
+	for _, id := range users[2:] {
+		if b := balanceOf(t, repo, id); b != economy.StartBalance-100 {
+			t.Errorf("other game's stake must stay locked, balance = %d", b)
+		}
+	}
+	assertJournalMatchesBalances(t, pool)
+
+	if refunded, err = repo.RefundGame(ctx, failed); err != nil || refunded {
+		t.Errorf("second refund = %v, %v; want a no-op", refunded, err)
+	}
+
+	places := []string{users[2].String(), users[3].String()}
+	s := economy.Settle(100, economy.Result{Places: places, Losers: map[string]bool{users[3].String(): true}})
+	if err = repo.Settle(ctx, other, s); err != nil {
+		t.Fatalf("settle other: %v", err)
+	}
+	if refunded, err = repo.RefundGame(ctx, other); err != nil || refunded {
+		t.Errorf("refund of a settled game = %v, %v; want a no-op", refunded, err)
+	}
+	assertJournalMatchesBalances(t, pool)
+}

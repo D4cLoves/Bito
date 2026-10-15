@@ -15,12 +15,14 @@ const (
 	errOtherTable      = "вы уже играете за другим столом"
 	errStartFailed     = "не удалось начать партию, попробуйте ещё раз"
 	errBankUnavailable = "касса недоступна, попробуйте позже"
+	errStakesRefunded  = "не удалось провести расчёт, ставки возвращены"
 )
 
 type Bank interface {
 	Balance(ctx context.Context, userID string) (int64, error)
 	LockStakes(ctx context.Context, gameID, mode string, deck int, stake int64, players []string) error
 	Settle(ctx context.Context, gameID string, stake int64, r economy.Result) (economy.Settlement, error)
+	RefundGame(ctx context.Context, gameID string) (bool, error)
 }
 
 type freeBank struct{}
@@ -39,4 +41,8 @@ func (freeBank) Settle(_ context.Context, _ string, stake int64, r economy.Resul
 
 func bankContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), bankTimeout)
+}
+
+func (freeBank) RefundGame(context.Context, string) (bool, error) {
+	return true, nil
 }

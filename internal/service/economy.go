@@ -20,6 +20,7 @@ type WalletRepository interface {
 	TopUp(ctx context.Context, userID uuid.UUID, now time.Time) (int64, error)
 	Transactions(ctx context.Context, userID uuid.UUID, limit int) ([]model.WalletTransaction, error)
 	RefundUnfinished(ctx context.Context) (int, error)
+	RefundGame(ctx context.Context, gameID uuid.UUID) (bool, error)
 }
 
 type EconomyService struct {
@@ -80,4 +81,12 @@ func (s *EconomyService) Transactions(ctx context.Context, userID uuid.UUID, lim
 
 func (s *EconomyService) RefundUnfinished(ctx context.Context) (int, error) {
 	return s.repo.RefundUnfinished(ctx)
+}
+
+func (s *EconomyService) RefundGame(ctx context.Context, gameID string) (bool, error) {
+	gid, err := uuid.Parse(gameID)
+	if err != nil {
+		return false, fmt.Errorf("economy: parse game id: %w", err)
+	}
+	return s.repo.RefundGame(ctx, gid)
 }

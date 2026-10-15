@@ -23,12 +23,15 @@ type lockCall struct {
 }
 
 type fakeBank struct {
-	mu        sync.Mutex
-	balances  map[string]int64
-	lockErr   error
-	settleErr error
-	locks     []lockCall
-	settles   []economy.Result
+	mu             sync.Mutex
+	balances       map[string]int64
+	lockErr        error
+	settleErr      error
+	settleFailures int
+	refundErr      error
+	locks          []lockCall
+	settles        []economy.Result
+	refunds        []string
 }
 
 func (b *fakeBank) Balance(_ context.Context, userID string) (int64, error) {
@@ -55,10 +58,24 @@ func (b *fakeBank) Settle(_ context.Context, _ string, stake int64, r economy.Re
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.settles = append(b.settles, r)
+	if b.settleFailures > 0 {
+		b.settleFailures--
+		return economy.Settlement{}, errors.New("db is busy")
+	}
 	if b.settleErr != nil {
 		return economy.Settlement{}, b.settleErr
 	}
 	return economy.Settle(stake, r), nil
+}
+
+func (b *fakeBank) RefundGame(_ context.Context, gameID string) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.refundErr != nil {
+		return false, b.refundErr
+	}
+	b.refunds = append(b.refunds, gameID)
+	return true, nil
 }
 
 func (b *fakeBank) counts() (locks, settles int) {
@@ -440,5 +457,86 @@ func TestHub_DuelTablesAreHiddenFromList(t *testing.T) {
 	list := hub.ListOpenRooms()
 	if len(list) != 1 || list[0].ID != company.ID() {
 		t.Errorf("open rooms = %+v, want only the company table", list)
+	}
+}
+
+func finishBySurrender(t *testing.T, bank *fakeBank, id string) (*Room, *Client) {
+	t.Helper()
+	room := NewRoom(id, stakedSettings(100), bank)
+	room.settleRetryDelay = time.Millisecond
+	go room.Run()
+	t.Cleanup(room.Close)
+
+	c1 := createTestClient("p1", "Alice", room)
+	c2 := createTestClient("p2", "Bob", room)
+	room.RegisterClient(c1)
+	room.RegisterClient(c2)
+	time.Sleep(50 * time.Millisecond)
+
+	surrender, _ := json.Marshal(map[string]string{"type": TypeSurrender})
+	room.incoming <- IncomingMessage{Client: c1, Data: surrender}
+	time.Sleep(50 * time.Millisecond)
+	return room, c2
+}
+
+func TestRoom_SettleRetriesTransientFailure(t *testing.T) {
+	bank := &fakeBank{settleFailures: 2}
+	_, c2 := finishBySurrender(t, bank, "room-retry")
+
+	if _, settles := bank.counts(); settles != settleAttempts {
+		t.Fatalf("settle calls = %d, want %d", settles, settleAttempts)
+	}
+	if len(bank.refunds) != 0 {
+		t.Errorf("refunds = %v, want none after a successful retry", bank.refunds)
+	}
+	over, ok := lastOfType[GameOverPayload](t, c2, TypeGameOver)
+	if !ok || over.Payload.Payouts["p2"] != 95 || over.Payload.Payouts["p1"] != -100 {
+		t.Errorf("payouts = %v, want the settled result", over.Payload.Payouts)
+	}
+}
+
+func TestRoom_RefundsStakesWhenSettleKeepsFailing(t *testing.T) {
+	bank := &fakeBank{settleErr: errors.New("db is down")}
+	_, c2 := finishBySurrender(t, bank, "room-refund")
+
+	if _, settles := bank.counts(); settles != settleAttempts {
+		t.Fatalf("settle calls = %d, want %d", settles, settleAttempts)
+	}
+	if len(bank.refunds) != 1 || bank.refunds[0] != "room-refund" {
+		t.Fatalf("refunds = %v, want exactly this game", bank.refunds)
+	}
+
+	var gotNotice bool
+	var over Message[GameOverPayload]
+	for len(c2.send) > 0 {
+		raw := <-c2.send
+		var probe Message[json.RawMessage]
+		_ = json.Unmarshal(raw, &probe)
+		switch probe.Type {
+		case TypeError:
+			var msg Message[ErrorPayload]
+			_ = json.Unmarshal(raw, &msg)
+			gotNotice = gotNotice || msg.Payload.Message == errStakesRefunded
+		case TypeGameOver:
+			_ = json.Unmarshal(raw, &over)
+		}
+	}
+	if !gotNotice {
+		t.Error("players must be told that stakes were returned")
+	}
+	if len(over.Payload.Payouts) != 2 || over.Payload.Payouts["p1"] != 0 || over.Payload.Payouts["p2"] != 0 {
+		t.Errorf("payouts = %v, want zero for both players", over.Payload.Payouts)
+	}
+}
+
+func TestRoom_FailedRefundStillFinishesGame(t *testing.T) {
+	bank := &fakeBank{settleErr: errors.New("db is down"), refundErr: errors.New("still down")}
+	room, c2 := finishBySurrender(t, bank, "room-refund-down")
+
+	if _, ok := lastOfType[GameOverPayload](t, c2, TypeGameOver); !ok {
+		t.Fatal("game_over must be sent even when the bank is unreachable")
+	}
+	if room.Holds("p1") {
+		t.Error("a finished table must release seats")
 	}
 }

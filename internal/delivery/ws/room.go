@@ -19,6 +19,8 @@ const (
 	defaultDuelMode = game.ModePodkidnoy
 	defaultDuelDeck = game.Deck36
 	reservationTTL  = 15 * time.Second
+	settleAttempts  = 3
+	settleRetryWait = time.Second
 )
 
 const (
@@ -81,6 +83,7 @@ type Room struct {
 	turnEndsAt        time.Time
 	disconnectTimers  map[string]*time.Timer
 	lastChatAt        map[string]time.Time
+	settleRetryDelay  time.Duration
 	mu                sync.RWMutex
 	closed            bool
 	createdBy         string
@@ -115,6 +118,7 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		stop:              make(chan struct{}),
 		disconnectTimers:  make(map[string]*time.Timer),
 		lastChatAt:        make(map[string]time.Time),
+		settleRetryDelay:  settleRetryWait,
 	}
 }
 
@@ -454,13 +458,10 @@ func (r *Room) settle() {
 		places = append(places, string(id))
 	}
 
-	ctx, cancel := bankContext()
-	defer cancel()
-	s, err := r.bank.Settle(ctx, r.id, r.stake, economy.Result{Places: places, Losers: losers})
+	s, err := r.settleWithRetry(economy.Result{Places: places, Losers: losers})
 	if err != nil {
-		log.Printf("[Room %s] ошибка расчёта партии: %v", r.id, err)
-		r.payouts = map[string]int64{}
-		r.draw = r.game.IsDraw()
+		log.Printf("[Room %s] расчёт партии не удался после %d попыток: %v", r.id, settleAttempts, err)
+		r.refundStakes()
 		return
 	}
 
@@ -469,6 +470,49 @@ func (r *Room) settle() {
 	r.payouts = make(map[string]int64, len(s.Payouts))
 	for _, p := range s.Payouts {
 		r.payouts[p.UserID] = p.Net
+	}
+}
+
+func (r *Room) settleWithRetry(result economy.Result) (economy.Settlement, error) {
+	var err error
+	for attempt := 1; attempt <= settleAttempts; attempt++ {
+		if attempt > 1 {
+			time.Sleep(r.settleRetryDelay)
+		}
+		ctx, cancel := bankContext()
+		var s economy.Settlement
+		s, err = r.bank.Settle(ctx, r.id, r.stake, result)
+		cancel()
+		if err == nil {
+			return s, nil
+		}
+		log.Printf("[Room %s] ошибка расчёта партии (попытка %d из %d): %v", r.id, attempt, settleAttempts, err)
+	}
+	return economy.Settlement{}, err
+}
+
+func (r *Room) refundStakes() {
+	r.payouts = map[string]int64{}
+	r.draw = r.game.IsDraw()
+
+	ctx, cancel := bankContext()
+	refunded, err := r.bank.RefundGame(ctx, r.id)
+	cancel()
+	if err != nil {
+		log.Printf("[Room %s] не удалось вернуть ставки, вернём при перезапуске: %v", r.id, err)
+		return
+	}
+	if !refunded {
+		log.Printf("[Room %s] партия уже закрыта в кассе, возврат не нужен", r.id)
+		return
+	}
+
+	log.Printf("[Room %s] ставки партии возвращены игрокам", r.id)
+	for _, p := range r.game.Players() {
+		r.payouts[string(p.ID())] = 0
+	}
+	for _, c := range r.clients {
+		r.sendError(c, errStakesRefunded)
 	}
 }
 
