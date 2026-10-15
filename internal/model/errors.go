@@ -13,6 +13,7 @@ var (
 	ErrUserAlreadyExists = errors.New("user already exists")
 	ErrPendingNotFound   = errors.New("registration request not found or expired")
 	ErrCodeMismatch      = errors.New("invalid verification code")
+	ErrCodeAttempts      = errors.New("too many invalid verification codes")
 	ErrSessionExpired    = errors.New("session expired or revoked")
 	ErrInsufficientFunds = errors.New("insufficient funds")
 	ErrTopUpNotAllowed   = errors.New("top-up not allowed")

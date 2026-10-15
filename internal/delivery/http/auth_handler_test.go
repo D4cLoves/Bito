@@ -44,6 +44,7 @@ func (f *fakeUserRepo) Delete(ctx context.Context, id uuid.UUID) error { return 
 // fakeRedis keeps refresh sessions in memory, mirroring the Redis repository semantics.
 type fakeRedis struct {
 	activeTokens map[string]bool
+	verifyErr    error
 }
 
 func (f *fakeRedis) SavePending(ctx context.Context, data *model.PendingRegistration, ttl time.Duration) error {
@@ -51,6 +52,9 @@ func (f *fakeRedis) SavePending(ctx context.Context, data *model.PendingRegistra
 }
 
 func (f *fakeRedis) VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error) {
+	if f.verifyErr != nil {
+		return nil, f.verifyErr
+	}
 	return nil, model.ErrPendingNotFound
 }
 
@@ -75,7 +79,7 @@ func (f *fakeRedis) RevokeRefreshToken(ctx context.Context, userID uuid.UUID, to
 func newTestAuthHandler(user *model.User, tokenManager *jwt.TokenManager, refreshTTL time.Duration) (*AuthHandler, *fakeRedis) {
 	redis := &fakeRedis{activeTokens: make(map[string]bool)}
 	authService := service.NewAuthService(&fakeUserRepo{user: user}, nil, nil, redis, tokenManager, refreshTTL)
-	return NewAuthHandler(authService), redis
+	return NewAuthHandler(authService, nil), redis
 }
 
 func TestAuthHandler_RefreshToken(t *testing.T) {
@@ -196,5 +200,77 @@ func TestAuthHandler_Logout(t *testing.T) {
 	// Verify token was revoked
 	if redis.activeTokens[pair.TokenID] {
 		t.Errorf("token should have been revoked from active sessions")
+	}
+}
+
+type memoryLimiter struct {
+	hits map[string]int
+}
+
+func (m *memoryLimiter) Allow(_ context.Context, key string, limit int, window time.Duration) (bool, time.Duration, error) {
+	m.hits[key]++
+	if m.hits[key] > limit {
+		return false, window, nil
+	}
+	return true, 0, nil
+}
+
+func TestAuthHandler_LoginRateLimit(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	authService := service.NewAuthService(&fakeUserRepo{}, nil, nil, &fakeRedis{activeTokens: map[string]bool{}}, tokenManager, time.Hour)
+	limiter := &memoryLimiter{hits: map[string]int{}}
+	handler := NewAuthHandler(authService, limiter)
+
+	login := func(email, ip string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(LoginRequest{Email: email, Password: "wrong-password"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+		req.RemoteAddr = ip + ":40000"
+		w := httptest.NewRecorder()
+		handler.Login(w, req)
+		return w
+	}
+
+	for i := range authLimitPerEmail {
+		if w := login("Victim@bito.local", "10.0.0.1"); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status = %d, want 401", i+1, w.Code)
+		}
+	}
+
+	w := login("victim@bito.local", "10.0.0.2")
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("attempt over the email limit: status = %d, want 429", w.Code)
+	}
+	var resp ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error != "Слишком много попыток. Попробуйте снова через 15 мин." {
+		t.Errorf("message = %q", resp.Error)
+	}
+	if w.Header().Get("Retry-After") != "900" {
+		t.Errorf("Retry-After = %q, want 900", w.Header().Get("Retry-After"))
+	}
+
+	if w := login("other@bito.local", "10.0.0.1"); w.Code != http.StatusUnauthorized {
+		t.Errorf("another email from the same address: status = %d, want 401", w.Code)
+	}
+
+	for range authLimitPerIP {
+		login("spray-"+uuid.NewString()+"@bito.local", "10.0.0.3")
+	}
+	if w := login("fresh@bito.local", "10.0.0.3"); w.Code != http.StatusTooManyRequests {
+		t.Errorf("attempt over the address limit: status = %d, want 429", w.Code)
+	}
+}
+
+func TestAuthHandler_VerifyCodeAttemptsExhausted(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	redis := &fakeRedis{activeTokens: map[string]bool{}, verifyErr: model.ErrCodeAttempts}
+	handler := NewAuthHandler(service.NewAuthService(&fakeUserRepo{}, nil, nil, redis, tokenManager, time.Hour), nil)
+
+	body, _ := json.Marshal(VerifyCodeRequest{Email: "player@bito.local", Code: "123456"})
+	w := httptest.NewRecorder()
+	handler.VerifyCode(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-code", bytes.NewReader(body)))
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429 (%s)", w.Code, w.Body.String())
 	}
 }
