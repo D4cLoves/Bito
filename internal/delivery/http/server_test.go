@@ -248,3 +248,23 @@ func TestHub_ListOpenRooms(t *testing.T) {
 		t.Errorf("started room must leave the open list, got %+v", open)
 	}
 }
+
+func TestWS_AuthenticatesWithCookieOnly(t *testing.T) {
+	tokenManager, hub, wsURL := newTestWSServer(t)
+	room := hub.CreateRoom(ws.RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 2, CreatedBy: "creator"})
+	defer room.Close()
+
+	token, err := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+	header := http.Header{}
+	header.Set("Origin", testAllowedOrigin)
+	header.Set("Cookie", "accessToken="+token)
+
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL+"?room_id="+room.ID(), header)
+	if err != nil {
+		t.Fatalf("cookie-only handshake failed: %v (%v)", err, resp)
+	}
+	conn.Close()
+}
