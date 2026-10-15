@@ -79,7 +79,7 @@ func (f *fakeRedis) RevokeRefreshToken(ctx context.Context, userID uuid.UUID, to
 func newTestAuthHandler(user *model.User, tokenManager *jwt.TokenManager, refreshTTL time.Duration) (*AuthHandler, *fakeRedis) {
 	redis := &fakeRedis{activeTokens: make(map[string]bool)}
 	authService := service.NewAuthService(&fakeUserRepo{user: user}, nil, nil, redis, tokenManager, refreshTTL)
-	return NewAuthHandler(authService, nil), redis
+	return NewAuthHandler(authService, nil, CookieConfig{AccessTTL: 15 * time.Minute, RefreshTTL: refreshTTL}), redis
 }
 
 func TestAuthHandler_RefreshToken(t *testing.T) {
@@ -219,7 +219,7 @@ func TestAuthHandler_LoginRateLimit(t *testing.T) {
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
 	authService := service.NewAuthService(&fakeUserRepo{}, nil, nil, &fakeRedis{activeTokens: map[string]bool{}}, tokenManager, time.Hour)
 	limiter := &memoryLimiter{hits: map[string]int{}}
-	handler := NewAuthHandler(authService, limiter)
+	handler := NewAuthHandler(authService, limiter, CookieConfig{})
 
 	login := func(email, ip string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(LoginRequest{Email: email, Password: "wrong-password"})
@@ -264,7 +264,7 @@ func TestAuthHandler_LoginRateLimit(t *testing.T) {
 func TestAuthHandler_VerifyCodeAttemptsExhausted(t *testing.T) {
 	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
 	redis := &fakeRedis{activeTokens: map[string]bool{}, verifyErr: model.ErrCodeAttempts}
-	handler := NewAuthHandler(service.NewAuthService(&fakeUserRepo{}, nil, nil, redis, tokenManager, time.Hour), nil)
+	handler := NewAuthHandler(service.NewAuthService(&fakeUserRepo{}, nil, nil, redis, tokenManager, time.Hour), nil, CookieConfig{})
 
 	body, _ := json.Marshal(VerifyCodeRequest{Email: "player@bito.local", Code: "123456"})
 	w := httptest.NewRecorder()
@@ -272,5 +272,29 @@ func TestAuthHandler_VerifyCodeAttemptsExhausted(t *testing.T) {
 
 	if w.Code != http.StatusTooManyRequests {
 		t.Errorf("status = %d, want 429 (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthHandler_CookiesOutliveBrowserSession(t *testing.T) {
+	refreshTTL := 7 * 24 * time.Hour
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, refreshTTL)
+	user := &model.User{ID: uuid.New(), Email: "player@bito.local", Name: "Player777", CreatedAt: time.Now()}
+	handler, redis := newTestAuthHandler(user, tokenManager, refreshTTL)
+
+	pair, _ := tokenManager.GenerateTokenPair(user.ID, user.Name)
+	_ = redis.SaveRefreshToken(context.Background(), user.ID, pair.TokenID, refreshTTL)
+	body, _ := json.Marshal(RefreshRequest{RefreshToken: pair.RefreshToken})
+	w := httptest.NewRecorder()
+	handler.RefreshToken(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body)))
+
+	want := map[string]int{"accessToken": 15 * 60, "refreshToken": int(refreshTTL.Seconds())}
+	for _, c := range w.Result().Cookies() {
+		if c.MaxAge != want[c.Name] {
+			t.Errorf("%s MaxAge = %d, want %d", c.Name, c.MaxAge, want[c.Name])
+		}
+		delete(want, c.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing cookies: %v", want)
 	}
 }

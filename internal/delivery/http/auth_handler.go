@@ -75,15 +75,22 @@ const (
 	authLimitPerIP    = 50
 )
 
+type CookieConfig struct {
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
+}
+
 type AuthHandler struct {
 	authService AuthService
 	limiter     RateLimiter
+	cookies     CookieConfig
 }
 
-func NewAuthHandler(authService AuthService, limiter RateLimiter) *AuthHandler {
+func NewAuthHandler(authService AuthService, limiter RateLimiter, cookies CookieConfig) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		limiter:     limiter,
+		cookies:     cookies,
 	}
 }
 
@@ -290,6 +297,7 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Name:     "accessToken",
 		Value:    tokens.AccessToken,
 		Path:     "/",
+		MaxAge:   int(ah.cookies.AccessTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
@@ -299,6 +307,7 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Name:     "refreshToken",
 		Value:    tokens.RefreshToken,
 		Path:     "/api/v1/auth",
+		MaxAge:   int(ah.cookies.RefreshTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   false,
 		SameSite: http.SameSiteLaxMode,

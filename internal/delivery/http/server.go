@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"bito/internal/delivery/ws"
@@ -62,7 +63,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 func (s *Server) setupMiddlewares() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(middleware.RealIP)
-	s.router.Use(middleware.Logger)
+	s.router.Use(RedactingLogger(log.New(os.Stdout, "", log.LstdFlags)))
 	s.router.Use(middleware.Recoverer)
 
 	s.router.Use(cors.Handler(cors.Options{

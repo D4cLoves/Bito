@@ -50,16 +50,16 @@ export function useGameSocket(roomId: string) {
   }
 
   async function connect() {
-    const token = await freshAccessToken()
+    const hasSession = await freshAccessToken()
     if (stopped) return
-    if (!token) {
+    if (!hasSession) {
       status.value = 'closed'
       lastError.value = { text: 'Сессия истекла. Войдите заново.', at: Date.now() }
       return
     }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`
+    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}`
     const socket = new WebSocket(url)
     ws = socket
 

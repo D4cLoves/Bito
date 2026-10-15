@@ -61,7 +61,10 @@ func Run() {
 	authService := service.NewAuthService(userRepo, otpService, mailerClient, authRedisRepo, tokenManager, cfg.JWTRefreshTTL)
 
 	// 9. HTTP Хендлер
-	authHandler := deliveryHTTP.NewAuthHandler(authService, redisRepo.NewRateLimiter(redisClient))
+	authHandler := deliveryHTTP.NewAuthHandler(authService, redisRepo.NewRateLimiter(redisClient), deliveryHTTP.CookieConfig{
+		AccessTTL:  cfg.JWTAccessTTL,
+		RefreshTTL: cfg.JWTRefreshTTL,
+	})
 
 	// 10. Экономика: возвращаем ставки партий, оборванных прошлым падением сервера
 	economyService := service.NewEconomyService(postgres.NewWalletRepository(pool))
