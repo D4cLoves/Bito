@@ -599,37 +599,42 @@ func (r *Room) handleTurnTimeout() {
 		return
 	}
 
+	if !r.autoMove() {
+		log.Printf("[Room %s] таймаут хода: автоматический ход не удался, перезапускаем таймер", r.id)
+	}
+	r.onGameStateChanged()
+}
+
+func (r *Room) autoMove() bool {
 	defender := r.game.Defender()
 	attacker := r.game.Attacker()
 
 	if r.game.Phase() == game.PhaseBattle && r.game.Table().HasUnbeaten() && defender != nil {
 		log.Printf("[Room %s] таймаут хода: защитник %s автоматически берет карты", r.id, defender.ID())
-		_ = r.game.Take(defender.ID())
-		r.onGameStateChanged()
-		return
+		return r.game.Take(defender.ID()) == nil
 	}
 
 	if r.game.Phase() == game.PhaseBattle && r.game.Table().PairsCount() == 0 && attacker != nil {
 		card, err := r.game.AutoAttack(attacker.ID())
 		if err == nil {
 			log.Printf("[Room %s] таймаут хода: авто-ход картой %s", r.id, card)
-			r.onGameStateChanged()
-			return
+			return true
 		}
 	}
 
 	if (r.game.Table().IsAllBeaten() && r.game.Phase() == game.PhaseBattle) || r.game.Phase() == game.PhaseGivingMore {
+		passed := false
 		for _, p := range r.game.Players() {
 			if defender != nil && p.ID() == defender.ID() {
 				continue
 			}
-			if p.IsActive() {
-				_ = r.game.Pass(p.ID())
+			if p.IsActive() && r.game.Pass(p.ID()) == nil {
+				passed = true
 			}
 		}
-		r.onGameStateChanged()
-		return
+		return passed
 	}
+	return false
 }
 
 func (r *Room) resetTurnTimer() {

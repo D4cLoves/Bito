@@ -393,3 +393,39 @@ func TestRoom_GameOverIncludesPlaces(t *testing.T) {
 		t.Errorf("Places = %v, want [p2 p1]", over.Payload.Places)
 	}
 }
+
+func TestRoom_TurnTimerRestartsWhenAutoMoveFails(t *testing.T) {
+	room := NewRoom("room-stuck", testSettings(2), nil)
+	g, err := game.NewGame(game.ModePodkidnoy, game.Deck36, []*game.Player{game.NewPlayer("p1", "Alice"), game.NewPlayer("p2", "Bob")})
+	if err != nil {
+		t.Fatalf("new game: %v", err)
+	}
+	room.game = g
+	g.Attacker().ClearHand()
+
+	room.handleTurnTimeout()
+	defer room.stopTurnTimer()
+
+	if room.turnTimer == nil || !room.turnEndsAt.After(time.Now()) {
+		t.Error("the turn timer must run again even when no automatic move was possible")
+	}
+}
+
+func TestRoom_TurnTimeoutAutoAttacks(t *testing.T) {
+	room := NewRoom("room-auto", testSettings(2), nil)
+	g, err := game.NewGame(game.ModePodkidnoy, game.Deck36, []*game.Player{game.NewPlayer("p1", "Alice"), game.NewPlayer("p2", "Bob")})
+	if err != nil {
+		t.Fatalf("new game: %v", err)
+	}
+	room.game = g
+
+	room.handleTurnTimeout()
+	defer room.stopTurnTimer()
+
+	if g.Table().PairsCount() != 1 {
+		t.Errorf("pairs on table = %d, want the automatic attack", g.Table().PairsCount())
+	}
+	if room.turnTimer == nil {
+		t.Error("the turn timer must run for the defender")
+	}
+}
