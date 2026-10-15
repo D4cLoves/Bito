@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { PhUserPlus, PhPaperPlaneTilt, PhCheck, PhX } from '@phosphor-icons/vue'
-import type { Friend, FriendRequest } from '../../types/social'
+import { computed, ref } from 'vue'
+import { PhUserPlus, PhPaperPlaneTilt, PhCheck, PhX, PhMagnifyingGlass } from '@phosphor-icons/vue'
+import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
+import { avatarHue, avatarInitial } from '../../composables/avatar'
 
 const props = defineProps<{ friends: Friend[]; requests: FriendRequest[] }>()
 defineEmits<{
@@ -11,9 +12,28 @@ defineEmits<{
   (e: 'decline', req: FriendRequest): void
 }>()
 
-const ORDER = { online: 0, playing: 1, offline: 2 } as const
-const sorted = computed(() => [...props.friends].sort((a, b) => ORDER[a.status] - ORDER[b.status]))
+type Filter = 'online' | 'all'
+
+const ORDER: Record<FriendStatus, number> = { playing: 0, online: 1, offline: 2 }
+
+const query = ref('')
+const filter = ref<Filter>('all')
+
 const onlineCount = computed(() => props.friends.filter((f) => f.status !== 'offline').length)
+
+const shown = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  return props.friends
+    .filter((f) => filter.value === 'all' || f.status !== 'offline')
+    .filter((f) => !q || f.username.toLowerCase().includes(q))
+    .sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.username.localeCompare(b.username, 'ru'))
+})
+
+const emptyText = computed(() => {
+  if (!props.friends.length) return 'Пока никого. Добавьте друга по имени.'
+  if (query.value.trim()) return 'Никого не нашли'
+  return 'Сейчас никого нет в сети'
+})
 
 function statusText(f: Friend) {
   if (f.status === 'online') return 'в лобби'
@@ -27,49 +47,85 @@ function statusText(f: Friend) {
 </script>
 
 <template>
-  <section class="friends" aria-labelledby="friends-title">
-    <div class="head">
-      <h2 id="friends-title">Друзья</h2>
-      <span class="count">{{ onlineCount }} в сети</span>
-      <button type="button" class="add" aria-label="Добавить друга" title="Добавить друга" @click="$emit('add')">
-        <PhUserPlus :size="18" />
-      </button>
+  <section class="friends" aria-label="Друзья">
+    <div class="tools">
+      <label class="search">
+        <PhMagnifyingGlass :size="17" aria-hidden="true" />
+        <input v-model="query" type="search" placeholder="Найти среди друзей" aria-label="Найти среди друзей" />
+      </label>
+
+      <div class="filters" role="radiogroup" aria-label="Показать">
+        <button
+          type="button"
+          role="radio"
+          :aria-checked="filter === 'online'"
+          :class="{ on: filter === 'online' }"
+          @click="filter = 'online'"
+        >
+          В сети <span>{{ onlineCount }}</span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          :aria-checked="filter === 'all'"
+          :class="{ on: filter === 'all' }"
+          @click="filter = 'all'"
+        >
+          Все <span>{{ friends.length }}</span>
+        </button>
+      </div>
     </div>
 
-    <ul v-if="requests.length" class="requests">
-      <li v-for="r in requests" :key="r.id" class="request">
-        <span class="avatar">{{ r.username[0].toUpperCase() }}</span>
-        <span class="who">
-          <b>{{ r.username }}</b>
-          <small>хочет дружить</small>
-        </span>
-        <button type="button" class="mini ok" aria-label="Принять" @click="$emit('accept', r)"><PhCheck :size="15" weight="bold" /></button>
-        <button type="button" class="mini" aria-label="Отклонить" @click="$emit('decline', r)"><PhX :size="15" weight="bold" /></button>
-      </li>
-    </ul>
+    <section v-if="requests.length" class="group" aria-labelledby="requests-title">
+      <h3 id="requests-title">Заявки <span>{{ requests.length }}</span></h3>
+      <ul class="rows requests">
+        <li v-for="r in requests" :key="r.id" class="row">
+          <span class="avatar request" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
+          <span class="who">
+            <b>{{ r.username }}</b>
+            <small>хочет дружить</small>
+          </span>
+          <button type="button" class="mini ok" :aria-label="`Принять ${r.username}`" title="Принять" @click="$emit('accept', r)">
+            <PhCheck :size="15" weight="bold" />
+          </button>
+          <button type="button" class="mini" :aria-label="`Отклонить ${r.username}`" title="Отклонить" @click="$emit('decline', r)">
+            <PhX :size="15" weight="bold" />
+          </button>
+        </li>
+      </ul>
+    </section>
 
-    <ul class="list">
-      <li v-for="f in sorted" :key="f.id" class="friend" :class="f.status">
-        <span class="avatar">
-          {{ f.username[0].toUpperCase() }}
-          <i class="dot" aria-hidden="true"></i>
-        </span>
-        <span class="who">
-          <b>{{ f.username }}</b>
-          <small>{{ statusText(f) }}</small>
-        </span>
-        <button
-          v-if="f.status === 'online'"
-          type="button"
-          class="mini invite"
-          :aria-label="`Позвать ${f.username} за стол`"
-          title="Позвать за стол"
-          @click="$emit('invite', f)"
-        >
-          <PhPaperPlaneTilt :size="15" />
-        </button>
-      </li>
-    </ul>
+    <section class="group" aria-labelledby="list-title">
+      <h3 id="list-title">{{ filter === 'online' ? 'В сети' : 'Все друзья' }}</h3>
+      <ul v-if="shown.length" class="rows">
+        <li v-for="f in shown" :key="f.id" class="row friend" :class="f.status">
+          <span class="avatar" :style="{ '--h': avatarHue(f.username) }">
+            {{ avatarInitial(f.username) }}
+            <i v-if="f.status !== 'offline'" class="dot" aria-hidden="true"></i>
+          </span>
+          <span class="who">
+            <b>{{ f.username }}</b>
+            <small>{{ statusText(f) }}</small>
+          </span>
+          <button
+            v-if="f.status === 'online'"
+            type="button"
+            class="mini invite"
+            :aria-label="`Позвать ${f.username} за стол`"
+            title="Позвать за стол"
+            @click="$emit('invite', f)"
+          >
+            <PhPaperPlaneTilt :size="15" />
+          </button>
+        </li>
+      </ul>
+      <p v-else class="empty">{{ emptyText }}</p>
+    </section>
+
+    <button type="button" class="add" @click="$emit('add')">
+      <PhUserPlus :size="18" aria-hidden="true" />
+      Добавить друга
+    </button>
   </section>
 </template>
 
@@ -77,46 +133,112 @@ function statusText(f: Friend) {
 .friends {
   display: flex;
   flex-direction: column;
+  gap: 18px;
   min-height: 0;
 }
 
-.head {
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 4px 10px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.count {
-  font-size: 12px;
+  gap: 8px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
   color: var(--color-ink-faint);
+  transition: box-shadow 0.2s;
 }
 
-.add {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  margin-left: auto;
+.search:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--color-gold);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--color-paper-hover);
-  color: var(--color-ink-muted);
-  cursor: pointer;
+  outline: 0;
+  background: none;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 14px;
 }
 
-.add:hover {
+.search input::placeholder {
+  color: var(--color-ink-ghost);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.filters button {
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.filters button span {
+  margin-left: 2px;
+  color: var(--color-ink-ghost);
+  font-variant-numeric: tabular-nums;
+}
+
+.filters button:hover {
   color: var(--color-ink);
 }
 
-.requests,
-.list {
+.filters button.on {
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0 0 1px var(--color-line);
+}
+
+.filters button.on span {
+  color: var(--color-ink-faint);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+h3 {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--color-ink-faint);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+h3 span {
+  margin-left: 4px;
+  color: var(--color-gold-ink);
+}
+
+.rows {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -126,22 +248,16 @@ h2 {
 }
 
 .requests {
-  margin-bottom: 8px;
-  padding: 6px;
-  border-radius: 16px;
+  padding: 4px;
+  border-radius: 18px;
   background: var(--color-gold-tint);
 }
 
-.list {
-  overflow-y: auto;
-}
-
-.request,
-.friend {
+.row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
+  gap: 12px;
+  padding: 8px;
   border-radius: 14px;
 }
 
@@ -154,35 +270,43 @@ h2 {
   display: grid;
   place-items: center;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: var(--color-paper-hover);
-  color: var(--color-ink-muted);
-  font-size: 14px;
+  background: hsl(var(--h) 46% 50%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.avatar.request {
+  box-shadow:
+    0 0 0 2px var(--color-gold-tint),
+    0 0 0 3.5px var(--color-gold);
 }
 
 .dot {
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  background: var(--color-ink-ghost);
-  box-shadow: 0 0 0 2.5px var(--color-paper-raised);
-}
-
-.online .dot {
   background: var(--color-green);
+  box-shadow: 0 0 0 2.5px var(--color-paper);
 }
 
 .playing .dot {
-  background: var(--color-gold);
+  background: var(--color-red);
 }
 
-.offline {
-  opacity: 0.6;
+.friend:hover .dot {
+  box-shadow: 0 0 0 2.5px var(--color-paper-hover);
+}
+
+.offline .avatar {
+  filter: grayscale(0.85);
+  opacity: 0.45;
 }
 
 .who {
@@ -200,30 +324,40 @@ h2 {
   font-weight: 500;
 }
 
+.offline .who b {
+  color: var(--color-ink-muted);
+}
+
 .who small {
   font-size: 12px;
   color: var(--color-ink-faint);
 }
 
+.online .who small {
+  color: var(--color-green);
+}
+
 .playing .who small {
-  color: var(--color-gold-ink);
+  color: var(--color-red);
 }
 
 .mini {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: 50%;
-  background: var(--color-paper-hover);
+  background: var(--color-paper-raised);
   color: var(--color-ink-muted);
   cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
 }
 
 .mini:hover {
   color: var(--color-ink);
+  transform: scale(1.06);
 }
 
 .mini.ok {
@@ -232,8 +366,9 @@ h2 {
 }
 
 .invite {
+  background: var(--color-paper-sunken);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, color 0.2s;
 }
 
 .friend:hover .invite,
@@ -245,5 +380,34 @@ h2 {
   .invite {
     opacity: 1;
   }
+}
+
+.empty {
+  margin: 0;
+  padding: 20px 8px;
+  color: var(--color-ink-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border: 1.5px dashed var(--color-line-heavy);
+  border-radius: 999px;
+  background: none;
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.add:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold-ink);
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PhChatsCircle, PhPlus } from '@phosphor-icons/vue'
+import { PhUsersThree, PhPlus } from '@phosphor-icons/vue'
 import ChipIcon from './ChipIcon.vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { TOP_UP_THRESHOLD } from '../../constants/economy'
@@ -9,10 +9,10 @@ const props = defineProps<{
   username: string
   balance: number | null
   online: number
-  socialBadge: number
+  friendsBadge: number
 }>()
 
-defineEmits<{ (e: 'profile'): void; (e: 'social'): void; (e: 'top-up'): void }>()
+defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'top-up'): void }>()
 
 const shown = useCountUp(computed(() => props.balance ?? undefined), 900)
 const canTopUp = computed(() => props.balance !== null && props.balance < TOP_UP_THRESHOLD)
@@ -36,9 +36,9 @@ const greeting = greetingFor(new Date().getHours())
     </div>
 
     <div class="right">
-      <button type="button" class="round social-btn" aria-label="Друзья и чат" title="Друзья и чат" @click="$emit('social')">
-        <PhChatsCircle :size="22" />
-        <span v-if="socialBadge" class="badge">{{ socialBadge }}</span>
+      <button type="button" class="round friends-btn" aria-label="Друзья" title="Друзья" @click="$emit('friends')">
+        <PhUsersThree :size="22" />
+        <span v-if="friendsBadge" class="badge">{{ friendsBadge }}</span>
       </button>
 
       <div class="wallet" :title="balance === null ? '' : `${balance.toLocaleString('ru-RU')} фишек`">
@@ -144,7 +144,7 @@ h1 {
   color: var(--color-ink);
 }
 
-.social-btn {
+.friends-btn {
   display: none;
 }
 
@@ -252,7 +252,7 @@ h1 {
 }
 
 @media (max-width: 1279px) {
-  .social-btn {
+  .friends-btn {
     display: grid;
   }
 

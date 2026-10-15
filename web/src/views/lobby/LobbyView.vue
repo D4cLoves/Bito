@@ -13,7 +13,7 @@ import TablesCarousel from '../../components/client/TablesCarousel.vue'
 import AllTables from '../../components/client/AllTables.vue'
 import CreateTableDialog from '../../components/client/CreateTableDialog.vue'
 import LastGame from '../../components/client/LastGame.vue'
-import SocialPanel from '../../components/client/SocialPanel.vue'
+import FriendsList from '../../components/client/FriendsList.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
 import StatsCard from '../../components/client/StatsCard.vue'
 import LobbyChat from '../../components/client/LobbyChat.vue'
@@ -210,7 +210,7 @@ const PANEL_TITLES = {
   settings: 'Настройки',
   leaderboard: 'Рейтинг',
   shop: 'Магазин',
-  social: 'Друзья и чат',
+  friends: 'Друзья',
   tables: 'Все столы',
 } as const
 
@@ -305,9 +305,9 @@ onUnmounted(() => {
           :username="username"
           :balance="balance"
           :online="MOCK_ONLINE"
-          :social-badge="requests.length"
+          :friends-badge="requests.length"
           @profile="panels.open('profile')"
-          @social="panels.open('social')"
+          @friends="panels.open('friends')"
           @top-up="topUp"
         />
 
@@ -386,18 +386,18 @@ onUnmounted(() => {
     </aside>
 
     <FriendsRail
-      class="friends"
+      class="friends-slot"
       :username="username"
       :friends="friends"
       :requests="requests"
       @profile="panels.open('profile')"
-      @social="panels.open('social')"
+      @friends="panels.open('friends')"
       @add="soon('Поиск друзей по имени скоро появится')"
     />
 
     <AnimatePresence>
       <OverlayPanel
-        v-if="panels.panel.value && panels.panel.value !== 'social' && panels.panel.value !== 'tables'"
+        v-if="panels.panel.value && panels.panel.value !== 'friends' && panels.panel.value !== 'tables'"
         :key="panels.panel.value"
         :title="PANEL_TITLES[panels.panel.value]"
         :width="panels.panel.value === 'leaderboard' ? 520 : 880"
@@ -451,25 +451,21 @@ onUnmounted(() => {
       </OverlayPanel>
 
       <OverlayPanel
-        v-if="panels.panel.value === 'social'"
-        key="social"
+        v-if="panels.panel.value === 'friends'"
+        key="friends"
         side="right"
         :width="380"
-        :title="PANEL_TITLES.social"
+        :title="PANEL_TITLES.friends"
         @close="panels.close()"
       >
-        <SocialPanel
-          class="social-sheet"
+        <FriendsList
+          class="friends-sheet"
           :friends="friends"
           :requests="requests"
-          :messages="messages"
-          :my-id="auth.user?.id"
-          :show-chat="settings.showChat"
-          @add-friend="soon('Поиск друзей по имени скоро появится')"
+          @add="soon('Поиск друзей по имени скоро появится')"
           @invite="invite"
           @accept="acceptRequest"
           @decline="declineRequest"
-          @send="sendMessage"
         />
       </OverlayPanel>
     </AnimatePresence>
@@ -521,7 +517,7 @@ onUnmounted(() => {
 .rail,
 .main,
 .side,
-.friends {
+.friends-slot {
   position: relative;
   min-height: 0;
 }
@@ -565,7 +561,7 @@ onUnmounted(() => {
   height: 420px;
 }
 
-.social-sheet {
+.friends-sheet {
   height: 100%;
   padding: 0;
 }
@@ -607,7 +603,7 @@ onUnmounted(() => {
     padding-right: 14px;
   }
 
-  .friends {
+  .friends-slot {
     display: none;
   }
 }

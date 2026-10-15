@@ -1,9 +1,9 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-export type PanelId = 'profile' | 'settings' | 'leaderboard' | 'shop' | 'social' | 'tables'
+export type PanelId = 'profile' | 'settings' | 'leaderboard' | 'shop' | 'friends' | 'tables'
 
-const PANELS: PanelId[] = ['profile', 'settings', 'leaderboard', 'shop', 'social', 'tables']
+const PANELS: PanelId[] = ['profile', 'settings', 'leaderboard', 'shop', 'friends', 'tables']
 
 export function usePanel() {
   const route = useRoute()

@@ -29,7 +29,7 @@ const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree; s
   { id: 'settings', label: 'Настройки', icon: PhGearSix },
 ]
 
-const OVER_LOBBY: (PanelId | null)[] = [null, 'social', 'tables']
+const OVER_LOBBY: (PanelId | null)[] = [null, 'friends', 'tables']
 const current = computed(() => (OVER_LOBBY.includes(props.active) ? 'home' : props.active))
 
 function pick(id: PanelId | 'home') {
