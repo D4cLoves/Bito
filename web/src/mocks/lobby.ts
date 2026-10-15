@@ -1,4 +1,4 @@
-import type { Friend, FriendRequest, GameHistoryEntry, ChatEntry } from '../types/social'
+import type { Friend, FriendRequest, GameHistoryEntry } from '../types/social'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
@@ -13,14 +13,6 @@ export const MOCK_FRIENDS: Friend[] = [
 ]
 
 export const MOCK_REQUESTS: FriendRequest[] = [{ id: 'r1', username: 'Козырь77' }]
-
-export const MOCK_MESSAGES: ChatEntry[] = [
-  { id: 'm0', userId: 'sys', username: 'Bito', text: 'Добро пожаловать в общий чат. Будьте вежливы.', at: ago(30), system: true },
-  { id: 'm1', userId: 'u1', username: 'Тузовый', text: 'кто на переводного по 500?', at: ago(12) },
-  { id: 'm2', userId: 'u2', username: 'Оля_К', text: 'я, создавай', at: ago(11) },
-  { id: 'm3', userId: 'u3', username: 'Козырь77', text: 'вчера трижды подряд погоны получил 😅', at: ago(6) },
-  { id: 'm4', userId: 'u4', username: 'Миша', text: 'ищу третьего на 36 карт, ставка 250', at: ago(2) },
-]
 
 export const MOCK_HISTORY: GameHistoryEntry[] = [
   { id: 'g1', finishedAt: ago(35), mode: 'perevodnoy', deck: 36, players: 4, stake: 500, place: 1, payout: 238 },

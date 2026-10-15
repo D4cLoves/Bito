@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { PhPlus } from '@phosphor-icons/vue'
-import { useMediaQuery } from '@vueuse/core'
 import ToastStack from '../../components/app/ToastStack.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
@@ -12,11 +11,9 @@ import QuickPlay from '../../components/client/QuickPlay.vue'
 import TablesCarousel from '../../components/client/TablesCarousel.vue'
 import AllTables from '../../components/client/AllTables.vue'
 import CreateTableDialog from '../../components/client/CreateTableDialog.vue'
-import LastGame from '../../components/client/LastGame.vue'
 import FriendsList from '../../components/client/FriendsList.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
-import StatsCard from '../../components/client/StatsCard.vue'
-import LobbyChat from '../../components/client/LobbyChat.vue'
+import LobbyPlayerCard from '../../components/client/LobbyPlayerCard.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ProfilePanel from '../../components/panels/ProfilePanel.vue'
 import SettingsPanel from '../../components/panels/SettingsPanel.vue'
@@ -35,9 +32,10 @@ import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_FRIENDS, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
+import { MOCK_FRIENDS, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { TableInfo } from '../../types/game'
-import type { ActiveTable, Friend, FriendRequest, ChatEntry, GameHistoryEntry } from '../../types/social'
+import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry } from '../../types/social'
+import type { TablePreset } from '../../composables/tableList'
 
 const POLL_MS = 3000
 
@@ -49,7 +47,6 @@ const panels = usePanel()
 const sound = useGameSound()
 const toast = useToast()
 const mainEl = ref<HTMLElement | null>(null)
-const sideColumn = useMediaQuery('(min-width: 1024px)')
 
 useSmoothScroll(mainEl)
 
@@ -65,7 +62,6 @@ const now = ref(Date.now())
 
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
-const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
 const history = ref<GameHistoryEntry[]>([])
 const historyLoaded = ref(false)
 const activeTable = ref<ActiveTable | null>(null)
@@ -130,6 +126,14 @@ async function create() {
   }
 }
 
+function createFromPreset(p: TablePreset) {
+  createPrefs.mode.value = p.mode
+  createPrefs.deck.value = p.deck
+  createPrefs.players.value = p.players
+  createPrefs.stake.value = p.stake
+  create()
+}
+
 async function find() {
   if (busy.value) return
   sound.playClick()
@@ -171,13 +175,6 @@ async function topUp() {
   } finally {
     toppingUp.value = false
   }
-}
-
-function sendMessage(text: string) {
-  messages.value = [
-    ...messages.value,
-    { id: `local-${Date.now()}`, userId: auth.user?.id ?? 'me', username: username.value, text, at: new Date().toISOString() },
-  ]
 }
 
 function acceptRequest(req: FriendRequest) {
@@ -320,70 +317,51 @@ onUnmounted(() => {
           @dismiss="dismissActiveTable"
         />
 
-        <QuickPlay
-          v-model:stake="quickStake"
-          v-model:mode="quickMode"
-          v-model:deck="quickDeck"
-          class="rise"
-          style="--d: 2"
-          :busy="busy === 'find'"
-          :balance="balance"
-          :card-back="settings.cardBack"
-          @play="find"
-          @top-up="topUp"
-        />
+        <div class="duo">
+          <QuickPlay
+            v-model:stake="quickStake"
+            v-model:mode="quickMode"
+            v-model:deck="quickDeck"
+            class="rise"
+            style="--d: 2"
+            :busy="busy === 'find'"
+            :balance="balance"
+            :card-back="settings.cardBack"
+            @play="find"
+            @top-up="topUp"
+          />
+
+          <LobbyPlayerCard
+            class="rise"
+            style="--d: 3"
+            :username="username"
+            :profile="profile"
+            :history="history"
+            :loaded="historyLoaded"
+            :now="now"
+            @profile="panels.open('profile')"
+            @again="playAgain"
+          />
+        </div>
 
         <TablesCarousel
           class="rise"
-          style="--d: 3"
+          style="--d: 4"
           :tables="tables"
           :loaded="tablesLoaded"
           :error="tablesError"
           :my-id="auth.user?.id"
+          :me="username"
           :now="now"
           :balance="balance"
+          :busy="busy === 'create'"
           @join="joinFromList"
           @create="openCreate"
+          @preset="createFromPreset"
           @all="panels.open('tables')"
         />
-
-        <LastGame
-          class="rise"
-          style="--d: 4"
-          :entry="history[0] ?? null"
-          :loaded="historyLoaded"
-          :now="now"
-          @again="playAgain"
-          @history="panels.open('profile')"
-        />
-
-        <div v-if="!sideColumn" class="side-inline">
-          <StatsCard class="rise" style="--d: 5" :profile="profile" :history="history" @profile="panels.open('profile')" />
-          <LobbyChat
-            v-if="settings.showChat"
-            class="rise chat-inline"
-            style="--d: 6"
-            :messages="messages"
-            :my-id="auth.user?.id"
-            :online="MOCK_ONLINE"
-            @send="sendMessage"
-          />
-        </div>
       </div>
     </main>
-
-    <aside v-if="sideColumn" class="side" aria-label="Статистика и чат">
-      <StatsCard class="rise" style="--d: 2" :profile="profile" :history="history" @profile="panels.open('profile')" />
-      <LobbyChat
-        v-if="settings.showChat"
-        class="rise side-chat"
-        style="--d: 3"
-        :messages="messages"
-        :my-id="auth.user?.id"
-        :online="MOCK_ONLINE"
-        @send="sendMessage"
-      />
-    </aside>
 
     <FriendsRail
       class="friends-slot"
@@ -491,13 +469,12 @@ onUnmounted(() => {
 <style scoped>
 .client {
   --rail-w: 98px;
-  --side-w: 340px;
   --friends-w: 100px;
   --rail-h: 0px;
 
   position: relative;
   display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--side-w) var(--friends-w);
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--friends-w);
   height: 100dvh;
   overflow: hidden;
   background: var(--color-paper);
@@ -516,7 +493,6 @@ onUnmounted(() => {
 
 .rail,
 .main,
-.side,
 .friends-slot {
   position: relative;
   min-height: 0;
@@ -531,34 +507,18 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  max-width: 1180px;
+  max-width: 1480px;
+  min-height: 100%;
   margin: 0 auto;
-  padding: 8px 26px 48px;
-}
-
-.side {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  height: 100dvh;
-  padding: 14px 0;
+  padding: 8px 26px 26px;
   box-sizing: border-box;
 }
 
-.side-chat {
-  flex: 1;
-  min-height: 0;
-}
-
-.side-inline {
+.duo {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1fr);
   gap: 18px;
   align-items: stretch;
-}
-
-.chat-inline {
-  height: 420px;
 }
 
 .friends-sheet {
@@ -586,21 +546,16 @@ onUnmounted(() => {
   filter: brightness(1.05);
 }
 
-@media (min-width: 1800px) {
-  .client {
-    --side-w: 380px;
+@media (max-height: 860px) {
+  .main-inner {
+    gap: 18px;
+    padding-bottom: 16px;
   }
 }
 
 @media (max-width: 1279px) {
   .client {
-    --side-w: 320px;
-
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--side-w);
-  }
-
-  .side {
-    padding-right: 14px;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
   }
 
   .friends-slot {
@@ -608,9 +563,9 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 1023px) {
-  .client {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+@media (max-width: 1100px) {
+  .duo {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -635,10 +590,6 @@ onUnmounted(() => {
   .main-inner {
     gap: 18px;
     padding: 4px 16px 32px;
-  }
-
-  .side-inline {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

@@ -20,7 +20,6 @@ interface StoredSettings {
   theme: ThemeId
   felt: FeltId
   cardBack: CardBackId
-  showChat: boolean
   invites: InvitePolicy
   music: boolean
 }
@@ -32,7 +31,6 @@ const DEFAULTS: StoredSettings = {
   theme: 'paper',
   felt: 'linen',
   cardBack: 'classic',
-  showChat: true,
   invites: 'all',
   music: true,
 }
@@ -59,7 +57,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeId>(saved.theme)
   const felt = ref<FeltId>(saved.felt)
   const cardBack = ref<CardBackId>(saved.cardBack)
-  const showChat = ref(saved.showChat)
   const invites = ref<InvitePolicy>(saved.invites)
   const music = ref(saved.music)
   const soundOn = ref(localStorage.getItem(SOUND_KEY) !== 'true')
@@ -84,12 +81,11 @@ export const useSettingsStore = defineStore('settings', () => {
     return true
   }
 
-  watch([theme, felt, cardBack, showChat, invites, music], () => {
+  watch([theme, felt, cardBack, invites, music], () => {
     const value: StoredSettings = {
       theme: theme.value,
       felt: felt.value,
       cardBack: cardBack.value,
-      showChat: showChat.value,
       invites: invites.value,
       music: music.value,
     }
@@ -98,5 +94,5 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(soundOn, (on) => localStorage.setItem(SOUND_KEY, on ? 'false' : 'true'))
 
-  return { theme, felt, cardBack, showChat, invites, music, soundOn, owned, isOwned, isActive, select }
+  return { theme, felt, cardBack, invites, music, soundOn, owned, isOwned, isActive, select }
 })

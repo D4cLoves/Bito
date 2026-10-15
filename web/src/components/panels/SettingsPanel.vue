@@ -134,23 +134,6 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
 
           <div class="setting">
             <div class="setting-text">
-              <b>Общий чат в лобби</b>
-              <small>Скрыть, если отвлекает</small>
-            </div>
-            <button
-              type="button"
-              class="switch"
-              role="switch"
-              :aria-checked="settings.showChat"
-              aria-label="Общий чат в лобби"
-              @click="settings.showChat = !settings.showChat"
-            >
-              <span class="knob"></span>
-            </button>
-          </div>
-
-          <div class="setting">
-            <div class="setting-text">
               <b>Приглашения за стол</b>
               <small>Кто может позвать вас в партию</small>
             </div>
