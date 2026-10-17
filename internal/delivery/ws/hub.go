@@ -41,7 +41,6 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 
 	h := &Hub{
 		rooms:          make(map[string]*Room),
-		lobby:          NewLobby(),
 		tokenValidator: tokenValidator,
 		bank:           bank,
 		upgrader: websocket.Upgrader{
@@ -52,6 +51,7 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 			},
 		},
 	}
+	h.lobby = NewLobby(h, lobbyRefresh)
 	go h.lobby.Run()
 	return h
 }
@@ -238,7 +238,6 @@ func (h *Hub) RemoveRoom(id string) {
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
-
 	playerID, playerName, ok := h.authenticate(w, r)
 	if !ok {
 		return

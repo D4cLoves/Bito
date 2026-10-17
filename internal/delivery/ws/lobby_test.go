@@ -1,10 +1,37 @@
 package ws
 
-import "testing"
+import (
+	"encoding/json"
+	"sync"
+	"testing"
+	"time"
+)
+
+type fakeTables struct {
+	mu   sync.Mutex
+	list []RoomInfo
+}
+
+func (f *fakeTables) ListOpenRooms() []RoomInfo {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]RoomInfo(nil), f.list...)
+}
+
+func (f *fakeTables) set(list ...RoomInfo) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.list = list
+}
 
 func startLobby(t *testing.T) (*Lobby, <-chan struct{}) {
 	t.Helper()
-	l := NewLobby()
+	return startLobbyWith(t, &fakeTables{}, time.Hour)
+}
+
+func startLobbyWith(t *testing.T, tables tableSource, interval time.Duration) (*Lobby, <-chan struct{}) {
+	t.Helper()
+	l := NewLobby(tables, interval)
 	done := make(chan struct{})
 	go func() {
 		l.Run()
@@ -115,5 +142,134 @@ func TestLobby_CallsAfterCloseDoNotHang(t *testing.T) {
 	l.leave(c)
 	if l.deliver(IncomingMessage{Client: c}) {
 		t.Fatal("deliver reports a closed lobby as alive")
+	}
+}
+
+func nextLobbyState(t *testing.T, c *Client) LobbyStatePayload {
+	t.Helper()
+	select {
+	case data := <-c.send:
+		var msg Message[LobbyStatePayload]
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("bad message %s: %v", data, err)
+		}
+		if msg.Type != TypeLobbyState {
+			t.Fatalf("message type = %q, want %q", msg.Type, TypeLobbyState)
+		}
+		return msg.Payload
+	case <-time.After(time.Second):
+		t.Fatal("no lobby_state arrived")
+		return LobbyStatePayload{}
+	}
+}
+
+func expectSilence(t *testing.T, c *Client, d time.Duration) {
+	t.Helper()
+	select {
+	case data := <-c.send:
+		t.Fatalf("unexpected message: %s", data)
+	case <-time.After(d):
+	}
+}
+
+func TestLobby_NewClientGetsCurrentState(t *testing.T) {
+	tables := &fakeTables{}
+	tables.set(RoomInfo{ID: "t1", Players: 1, MaxPlayers: 3})
+	l, _ := startLobbyWith(t, tables, time.Hour)
+
+	c := lobbyClient("alice", l)
+	l.Register(c)
+
+	state := nextLobbyState(t, c)
+	if state.Online != 1 || len(state.Tables) != 1 || state.Tables[0].ID != "t1" {
+		t.Fatalf("state = %+v, want online 1 and table t1", state)
+	}
+}
+
+func TestLobby_EmptyTablesAreAnArray(t *testing.T) {
+	l, _ := startLobby(t)
+	c := lobbyClient("alice", l)
+	l.Register(c)
+
+	data := <-c.send
+	var raw struct {
+		Payload struct {
+			Tables json.RawMessage `json:"tables"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw.Payload.Tables) != "[]" {
+		t.Fatalf("tables = %s, want []", raw.Payload.Tables)
+	}
+}
+
+func TestLobby_SecondTabOfSamePlayerGetsStateWithoutBroadcast(t *testing.T) {
+	l, _ := startLobby(t)
+	tab1 := lobbyClient("alice", l)
+	tab2 := lobbyClient("alice", l)
+	l.Register(tab1)
+	nextLobbyState(t, tab1)
+
+	l.Register(tab2)
+	if state := nextLobbyState(t, tab2); state.Online != 1 {
+		t.Fatalf("second tab online = %d, want 1", state.Online)
+	}
+	expectSilence(t, tab1, 30*time.Millisecond)
+}
+
+func TestLobby_BroadcastsOnlineChanges(t *testing.T) {
+	l, _ := startLobby(t)
+	alice := lobbyClient("alice", l)
+	l.Register(alice)
+	nextLobbyState(t, alice)
+
+	bob := lobbyClient("bob", l)
+	l.Register(bob)
+	if state := nextLobbyState(t, alice); state.Online != 2 {
+		t.Fatalf("alice sees online %d after bob joined, want 2", state.Online)
+	}
+	nextLobbyState(t, bob)
+
+	l.leave(bob)
+	if state := nextLobbyState(t, alice); state.Online != 1 {
+		t.Fatalf("alice sees online %d after bob left, want 1", state.Online)
+	}
+}
+
+func TestLobby_BroadcastsOnlyWhenTablesChange(t *testing.T) {
+	tables := &fakeTables{}
+	l, _ := startLobbyWith(t, tables, 5*time.Millisecond)
+	c := lobbyClient("alice", l)
+	l.Register(c)
+	nextLobbyState(t, c)
+
+	expectSilence(t, c, 40*time.Millisecond)
+
+	tables.set(RoomInfo{ID: "t1", Players: 1, MaxPlayers: 2})
+	if state := nextLobbyState(t, c); len(state.Tables) != 1 {
+		t.Fatalf("tables after change = %d, want 1", len(state.Tables))
+	}
+	expectSilence(t, c, 40*time.Millisecond)
+}
+
+func TestLobby_DropsClientThatDoesNotRead(t *testing.T) {
+	tables := &fakeTables{}
+	l, _ := startLobbyWith(t, tables, time.Millisecond)
+	slow := &Client{id: "slow", name: "slow", owner: l, send: make(chan []byte, 1)}
+	l.Register(slow)
+	l.Online()
+
+	tables.set(RoomInfo{ID: "t1"})
+	deadline := time.Now().Add(time.Second)
+	for !isClosed(slow) {
+		if time.Now().After(deadline) {
+			t.Fatal("slow client was never dropped")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := l.Online(); got != 0 {
+		t.Fatalf("online = %d after dropping the only client, want 0", got)
 	}
 }

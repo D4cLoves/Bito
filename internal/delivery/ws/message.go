@@ -22,6 +22,7 @@ const (
 	TypeTimerTick          = "timer_tick"
 	TypePlayerDisconnected = "player_disconnected"
 	TypePlayerReconnected  = "player_reconnected"
+	TypeLobbyState         = "lobby_state"
 )
 
 type Message[T any] struct {
@@ -54,6 +55,11 @@ type ErrorPayload struct {
 
 type PlayerStatusPayload struct {
 	PlayerID string `json:"playerId"`
+}
+
+type LobbyStatePayload struct {
+	Online int        `json:"online"`
+	Tables []RoomInfo `json:"tables"`
 }
 
 type TimerTickPayload struct {

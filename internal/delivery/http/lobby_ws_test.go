@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"bito/internal/delivery/ws"
+	"bito/internal/game"
+
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -66,5 +69,41 @@ func waitOnline(t *testing.T, online func() int, want int) {
 			t.Fatalf("online = %d, want %d", got, want)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestLobbyWS_SendsOpenTablesOnConnect(t *testing.T) {
+	tokenManager, hub, wsURL := newTestWSServer(t)
+	creator := uuid.New()
+	room, err := hub.CreateTable(ws.RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 3, CreatedBy: creator.String()})
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	defer room.Close()
+
+	token, err := tokenManager.GenerateAccessToken(uuid.New(), "Bob")
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+	header := http.Header{}
+	header.Set("Origin", testAllowedOrigin)
+	header.Set("Cookie", "accessToken="+token)
+
+	conn, _, err := websocket.DefaultDialer.Dial(lobbyURL(wsURL), header)
+	if err != nil {
+		t.Fatalf("lobby handshake failed: %v", err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var msg ws.Message[ws.LobbyStatePayload]
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Fatalf("read lobby state: %v", err)
+	}
+	if msg.Type != ws.TypeLobbyState {
+		t.Fatalf("type = %q, want %q", msg.Type, ws.TypeLobbyState)
+	}
+	if msg.Payload.Online != 1 || len(msg.Payload.Tables) != 1 || msg.Payload.Tables[0].ID != room.ID() {
+		t.Fatalf("payload = %+v, want online 1 and the created table", msg.Payload)
 	}
 }
