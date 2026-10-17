@@ -30,9 +30,10 @@ import { usePanel } from '../../composables/usePanel'
 import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
+import { useLobbySocket } from '../../composables/useLobbySocket'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_FRIENDS, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
+import { MOCK_FRIENDS, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { TableInfo } from '../../types/game'
 import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry } from '../../types/social'
 import type { TablePreset } from '../../composables/tableList'
@@ -59,6 +60,15 @@ const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
 const tablesError = ref('')
 const now = ref(Date.now())
+const { status: lobbyStatus, tables: liveTables, online } = useLobbySocket()
+
+watch(liveTables, (list) => {
+  if (!list) return
+  tables.value = list
+  tablesError.value = ''
+  tablesLoaded.value = true
+  now.value = Date.now()
+})
 
 const friends = ref<Friend[]>([...MOCK_FRIENDS])
 const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
@@ -80,7 +90,9 @@ watch(balance, (b) => {
 
 async function refreshTables() {
   try {
-    tables.value = await listTables()
+    const list = await listTables()
+    if (lobbyStatus.value === 'open' && liveTables.value) return
+    tables.value = list
     tablesError.value = ''
   } catch (err) {
     tablesError.value = err instanceof Error ? err.message : 'Не удалось загрузить столы'
@@ -247,7 +259,7 @@ function playAgain(g: GameHistoryEntry) {
 }
 
 function refreshAll() {
-  refreshTables()
+  if (lobbyStatus.value !== 'open') refreshTables()
   refreshActiveTable()
 }
 
@@ -301,7 +313,7 @@ onUnmounted(() => {
         <TopBar
           :username="username"
           :balance="balance"
-          :online="MOCK_ONLINE"
+          :online="online"
           :friends-badge="requests.length"
           @profile="panels.open('profile')"
           @friends="panels.open('friends')"

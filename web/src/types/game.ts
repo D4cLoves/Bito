@@ -80,6 +80,11 @@ export interface TableInfo {
   matchmaking?: boolean
 }
 
+export interface LobbyState {
+  online: number
+  tables: TableInfo[]
+}
+
 export interface CreateTableRequest {
   mode: GameMode
   deck: DeckSize

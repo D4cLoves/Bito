@@ -8,7 +8,7 @@ import { TOP_UP_THRESHOLD } from '../../constants/economy'
 const props = defineProps<{
   username: string
   balance: number | null
-  online: number
+  online: number | null
   friendsBadge: number
 }>()
 
@@ -32,7 +32,7 @@ const greeting = greetingFor(new Date().getHours())
   <header class="top">
     <div class="where">
       <h1><span class="hello">{{ greeting }},</span> {{ username }}</h1>
-      <span class="online"><i aria-hidden="true"></i>{{ online }} онлайн</span>
+      <span v-if="online !== null" class="online"><i aria-hidden="true"></i>{{ online }} онлайн</span>
     </div>
 
     <div class="right">

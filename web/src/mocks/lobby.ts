@@ -2,8 +2,6 @@ import type { Friend, FriendRequest, GameHistoryEntry } from '../types/social'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 
-export const MOCK_ONLINE = 128
-
 export const MOCK_FRIENDS: Friend[] = [
   { id: 'f1', username: 'Миша', status: 'playing' },
   { id: 'f2', username: 'Оля_К', status: 'online' },
