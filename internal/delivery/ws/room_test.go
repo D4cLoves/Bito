@@ -16,10 +16,10 @@ func testSettings(maxPlayers int) RoomSettings {
 // Helper to create a test client with a monitored send channel.
 func createTestClient(id, name string, room *Room) *Client {
 	return &Client{
-		id:   id,
-		name: name,
-		room: room,
-		send: make(chan []byte, 100),
+		id:    id,
+		name:  name,
+		owner: room,
+		send:  make(chan []byte, 100),
 	}
 }
 

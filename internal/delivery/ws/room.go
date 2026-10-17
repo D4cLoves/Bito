@@ -799,3 +799,21 @@ func turnLeftMs(endsAt time.Time) int64 {
 	}
 	return max(time.Until(endsAt).Milliseconds(), 0)
 }
+
+var _ endpoint = (*Room)(nil)
+
+func (r *Room) deliver(m IncomingMessage) bool {
+	select {
+	case r.incoming <- m:
+		return true
+	case <-r.stop:
+		return false
+	}
+}
+
+func (r *Room) leave(c *Client) {
+	select {
+	case r.unregister <- c:
+	case <-r.stop:
+	}
+}
