@@ -78,6 +78,7 @@ func (s *Server) setupMiddlewares() {
 
 func (s *Server) setupRoutes() {
 	s.router.Get("/ws", s.hub.ServeWS)
+	s.router.Get("/ws/lobby", s.hub.ServeLobby)
 
 	s.router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

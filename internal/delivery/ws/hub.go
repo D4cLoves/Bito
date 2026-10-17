@@ -24,6 +24,7 @@ type TokenValidator interface {
 type Hub struct {
 	mu             sync.RWMutex
 	rooms          map[string]*Room
+	lobby          *Lobby
 	tokenValidator TokenValidator
 	bank           Bank
 	upgrader       websocket.Upgrader
@@ -38,8 +39,9 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 		origins[o] = true
 	}
 
-	return &Hub{
+	h := &Hub{
 		rooms:          make(map[string]*Room),
+		lobby:          NewLobby(),
 		tokenValidator: tokenValidator,
 		bank:           bank,
 		upgrader: websocket.Upgrader{
@@ -50,6 +52,8 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 			},
 		},
 	}
+	go h.lobby.Run()
+	return h
 }
 
 func (h *Hub) CreateRoom(s RoomSettings) *Room {
@@ -234,23 +238,13 @@ func (h *Hub) RemoveRoom(id string) {
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
-	accessToken := tokenFromRequest(r)
-	if accessToken == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+
+	playerID, playerName, ok := h.authenticate(w, r)
+	if !ok {
 		return
 	}
-
-	claims, err := h.tokenValidator.ValidateAccessToken(accessToken)
-	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	playerID := claims.UserID.String()
-	playerName := claims.Username
 
 	query := r.URL.Query()
-
 	roomID := query.Get("room_id")
 	if roomID == "" {
 		http.Error(w, "missing room_id", http.StatusBadRequest)
@@ -286,6 +280,50 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	go client.WritePump()
 	go client.ReadPump()
+}
+
+func (h *Hub) ServeLobby(w http.ResponseWriter, r *http.Request) {
+	playerID, playerName, ok := h.authenticate(w, r)
+	if !ok {
+		return
+	}
+
+	conn, err := h.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Upgrade error: %v", err)
+		return
+	}
+
+	client := NewClient(playerID, playerName, conn, h.lobby)
+	if !h.lobby.Register(client) {
+		client.Close()
+		_ = conn.Close()
+		return
+	}
+
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+func (h *Hub) authenticate(w http.ResponseWriter, r *http.Request) (id, name string, ok bool) {
+	accessToken := tokenFromRequest(r)
+	if accessToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", "", false
+	}
+
+	claims, err := h.tokenValidator.ValidateAccessToken(accessToken)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", "", false
+	}
+
+	id = claims.UserID.String()
+	name = claims.Username
+	if name == "" {
+		name = "Player_" + id
+	}
+	return id, name, true
 }
 
 func (h *Hub) admit(room *Room, playerID string) string {
@@ -326,4 +364,8 @@ func tokenFromRequest(r *http.Request) string {
 		return cookie.Value
 	}
 	return r.URL.Query().Get("token")
+}
+
+func (h *Hub) LobbyOnline() int {
+	return h.lobby.Online()
 }
