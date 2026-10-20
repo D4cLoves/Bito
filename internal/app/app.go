@@ -93,6 +93,7 @@ func Run() {
 		User:   deliveryHTTP.NewUserHandler(service.NewUserService(userRepo)),
 		Wallet: deliveryHTTP.NewWalletHandler(economyService),
 		Game:   deliveryHTTP.NewGameHandler(service.NewGameService(postgres.NewGameRepository(pool))),
+		Friend: deliveryHTTP.NewFriendHandler(service.NewFriendService(postgres.NewFriendRepository(pool), userRepo, hub, hub)),
 	}, tokenManager)
 
 	// Запуск сервера в отдельной горутине

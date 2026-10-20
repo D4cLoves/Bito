@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bito/internal/game"
+	"bito/internal/model"
 	"bito/internal/pkg/jwt"
 
 	"github.com/google/uuid"
@@ -367,4 +368,45 @@ func tokenFromRequest(r *http.Request) string {
 
 func (h *Hub) LobbyOnline() int {
 	return h.lobby.Online()
+}
+
+func (h *Hub) Presence(ids []uuid.UUID) map[uuid.UUID]model.Presence {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = id.String()
+	}
+	inLobby := h.lobby.OnlineOf(keys)
+
+	h.mu.RLock()
+	rooms := make([]*Room, 0, len(h.rooms))
+	for _, room := range h.rooms {
+		rooms = append(rooms, room)
+	}
+	h.mu.RUnlock()
+
+	out := make(map[uuid.UUID]model.Presence, len(ids))
+	for i, id := range ids {
+		out[id] = model.PresenceOffline
+		if inLobby[keys[i]] {
+			out[id] = model.PresenceOnline
+		}
+		for _, room := range rooms {
+			if room.Holds(keys[i]) {
+				out[id] = model.PresencePlaying
+				break
+			}
+		}
+	}
+	return out
+}
+
+func (h *Hub) FriendsChanged(ids ...uuid.UUID) {
+	data, err := NewMessage(TypeFriendsChanged, nil)
+	if err != nil {
+		log.Printf("[Hub] friends_changed: %v", err)
+		return
+	}
+	for _, id := range ids {
+		h.lobby.Notify(id.String(), data)
+	}
 }

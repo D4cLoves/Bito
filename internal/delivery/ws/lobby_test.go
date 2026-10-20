@@ -5,6 +5,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"bito/internal/game"
+	"bito/internal/model"
+
+	"github.com/google/uuid"
 )
 
 type fakeTables struct {
@@ -271,5 +276,69 @@ func TestLobby_DropsClientThatDoesNotRead(t *testing.T) {
 	}
 	if got := l.Online(); got != 0 {
 		t.Fatalf("online = %d after dropping the only client, want 0", got)
+	}
+}
+
+func TestLobby_OnlineOfReportsOnlyConnectedPlayers(t *testing.T) {
+	l, _ := startLobby(t)
+	l.Register(lobbyClient("alice", l))
+
+	in := l.OnlineOf([]string{"alice", "bob"})
+	if !in["alice"] || in["bob"] {
+		t.Fatalf("online of = %v, want only alice", in)
+	}
+}
+
+func TestLobby_NotifyReachesEveryTabOfOnePlayer(t *testing.T) {
+	l, _ := startLobby(t)
+	tab1, tab2 := lobbyClient("alice", l), lobbyClient("alice", l)
+	bob := lobbyClient("bob", l)
+	for _, c := range []*Client{tab1, tab2, bob} {
+		l.Register(c)
+	}
+	l.Online()
+	for _, c := range []*Client{tab1, tab2, bob} {
+		for len(c.send) > 0 {
+			<-c.send
+		}
+	}
+
+	l.Notify("alice", []byte(`{"type":"friends_changed"}`))
+	l.Online()
+
+	for _, c := range []*Client{tab1, tab2} {
+		select {
+		case data := <-c.send:
+			if string(data) != `{"type":"friends_changed"}` {
+				t.Fatalf("got %s", data)
+			}
+		default:
+			t.Fatal("a tab of alice got no notice")
+		}
+	}
+	if len(bob.send) != 0 {
+		t.Fatal("bob got alice's notice")
+	}
+}
+
+func TestHub_PresenceLobbyTableOffline(t *testing.T) {
+	h := NewHub(nil, nil, nil)
+	inLobby, atTable, away := uuid.New(), uuid.New(), uuid.New()
+
+	h.lobby.Register(lobbyClient(inLobby.String(), h.lobby))
+	room := h.CreateRoom(RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 2, CreatedBy: "x"})
+	defer room.Close()
+	room.RegisterClient(createTestClient(atTable.String(), "T", room))
+	deadline := time.Now().Add(time.Second)
+	for !room.Holds(atTable.String()) && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	got := h.Presence([]uuid.UUID{inLobby, atTable, away})
+	want := map[uuid.UUID]model.Presence{inLobby: model.PresenceOnline, atTable: model.PresencePlaying, away: model.PresenceOffline}
+	for id, p := range want {
+		if got[id] != p {
+			t.Errorf("presence of %s = %q, want %q", id, got[id], p)
+		}
 	}
 }

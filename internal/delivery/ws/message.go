@@ -23,6 +23,7 @@ const (
 	TypePlayerDisconnected = "player_disconnected"
 	TypePlayerReconnected  = "player_reconnected"
 	TypeLobbyState         = "lobby_state"
+	TypeFriendsChanged     = "friends_changed"
 )
 
 type Message[T any] struct {

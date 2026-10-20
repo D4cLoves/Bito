@@ -23,6 +23,7 @@ type Server struct {
 	userHandler   *UserHandler
 	walletHandler *WalletHandler
 	gameHandler   *GameHandler
+	friendHandler *FriendHandler
 	tokens        TokenValidator
 }
 
@@ -32,6 +33,7 @@ type Handlers struct {
 	User   *UserHandler
 	Wallet *WalletHandler
 	Game   *GameHandler
+	Friend *FriendHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -43,6 +45,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		userHandler:   h.User,
 		walletHandler: h.Wallet,
 		gameHandler:   h.Game,
+		friendHandler: h.Friend,
 		tokens:        tokens,
 	}
 
@@ -130,6 +133,16 @@ func (s *Server) setupRoutes() {
 			r.Use(AuthMiddleware(s.tokens))
 			r.Post("/top-up", s.walletHandler.TopUp)
 			r.Get("/transactions", s.walletHandler.Transactions)
+		})
+	}
+
+	if s.friendHandler != nil {
+		s.router.Route("/api/v1/friends", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Get("/", s.friendHandler.List)
+			r.Post("/requests", s.friendHandler.Request)
+			r.Post("/requests/{id}/accept", s.friendHandler.Accept)
+			r.Delete("/{id}", s.friendHandler.Remove)
 		})
 	}
 }

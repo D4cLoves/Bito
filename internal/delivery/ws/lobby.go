@@ -13,6 +13,16 @@ type tableSource interface {
 	ListOpenRooms() []RoomInfo
 }
 
+type presenceQuery struct {
+	ids   []string
+	reply chan map[string]bool
+}
+
+type notice struct {
+	playerID string
+	data     []byte
+}
+
 type Lobby struct {
 	clients    map[string]map[*Client]bool
 	tables     tableSource
@@ -23,6 +33,8 @@ type Lobby struct {
 	stop       chan struct{}
 	stopOnce   sync.Once
 	online     chan chan int
+	presence   chan presenceQuery
+	notices    chan notice
 }
 
 var _ endpoint = (*Lobby)(nil)
@@ -36,6 +48,8 @@ func NewLobby(tables tableSource, interval time.Duration) *Lobby {
 		unregister: make(chan *Client),
 		stop:       make(chan struct{}),
 		online:     make(chan chan int),
+		presence:   make(chan presenceQuery),
+		notices:    make(chan notice),
 	}
 }
 
@@ -59,6 +73,18 @@ func (l *Lobby) Run() {
 			l.publish()
 		case reply := <-l.online:
 			reply <- len(l.clients)
+		case q := <-l.presence:
+			in := make(map[string]bool, len(q.ids))
+			for _, id := range q.ids {
+				if _, ok := l.clients[id]; ok {
+					in[id] = true
+				}
+			}
+			q.reply <- in
+		case n := <-l.notices:
+			for c := range l.clients[n.playerID] {
+				l.sendTo(c, n.data)
+			}
 		case <-l.stop:
 			for _, conns := range l.clients {
 				for c := range conns {
@@ -169,5 +195,27 @@ func (l *Lobby) deliver(IncomingMessage) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+func (l *Lobby) OnlineOf(ids []string) map[string]bool {
+	q := presenceQuery{ids: ids, reply: make(chan map[string]bool, 1)}
+	select {
+	case l.presence <- q:
+	case <-l.stop:
+		return map[string]bool{}
+	}
+	select {
+	case in := <-q.reply:
+		return in
+	case <-l.stop:
+		return map[string]bool{}
+	}
+}
+
+func (l *Lobby) Notify(playerID string, data []byte) {
+	select {
+	case l.notices <- notice{playerID: playerID, data: data}:
+	case <-l.stop:
 	}
 }
