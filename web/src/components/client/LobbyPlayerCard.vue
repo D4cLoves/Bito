@@ -4,15 +4,11 @@ import { PhArrowCounterClockwise, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
 import { avatarTone, avatarInitial } from '../../composables/avatar'
-import { useSettingsStore } from '../../stores/settings'
-import CardBack from './CardBack.vue'
 import type { Profile } from '../../types/user'
 import type { GameHistoryEntry, GameOutcome } from '../../types/social'
 
 const SLOTS = 6
 
-const settings = useSettingsStore()
-const tilt = (i: number) => ({ '--i': i - (SLOTS - 1) / 2 })
 
 const props = defineProps<{
   username: string
@@ -67,12 +63,6 @@ function metaOf(g: GameHistoryEntry) {
   return `${mode} · ${g.deck} карт · ${who} · ${ago(g.finishedAt)}`
 }
 
-function placeOf(g: GameHistoryEntry) {
-  return outcomeOf(g) === 'win' && !isDuel(g) ? String(g.place) : ''
-}
-
-const suitOf = (g: GameHistoryEntry) => (g.mode === 'perevodnoy' ? '♥' : '♠')
-
 function shortPayout(g: GameHistoryEntry) {
   const abs = Math.abs(g.payout)
   const sign = g.payout > 0 ? '+' : g.payout < 0 ? '−' : ''
@@ -123,30 +113,18 @@ function ago(iso: string) {
       <span v-if="best > 0"><b>+{{ best.toLocaleString('ru-RU') }}</b> лучший</span>
     </p>
 
-    <ol v-if="loaded" class="minis" aria-label="Последние партии">
+    <ol v-if="loaded" class="chips" aria-label="Последние партии">
       <li
-        v-for="(g, i) in recent"
+        v-for="g in recent"
         :key="g.id"
-        class="mini"
-        :style="tilt(i)"
-        :class="[outcomeOf(g), { first: isFirst(g) }]"
+        class="chip"
+        :class="[outcomeOf(g), { first: isFirst(g) && !isDuel(g) }]"
         :title="`${titleOf(g)} ${payoutOf(g)} · ${metaOf(g)}`"
         :aria-label="`${titleOf(g)}, ${payoutOf(g)}, ${metaOf(g)}`"
       >
-        <template v-if="outcomeOf(g) === 'lose'">
-          <CardBack class="back" :variant="settings.cardBack" />
-          <span class="sum tag" aria-hidden="true">{{ shortPayout(g) }}</span>
-        </template>
-        <template v-else>
-          <span class="index" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">
-            <b v-if="placeOf(g)">{{ placeOf(g) }}</b>
-            <i>{{ suitOf(g) }}</i>
-          </span>
-          <span class="pip" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">{{ suitOf(g) }}</span>
-          <span class="sum" aria-hidden="true">{{ shortPayout(g) }}</span>
-        </template>
+        <span class="face" aria-hidden="true">{{ shortPayout(g) }}</span>
       </li>
-      <li v-for="i in empty" :key="`e${i}`" class="mini slot" :style="tilt(recent.length + i - 1)" aria-hidden="true"></li>
+      <li v-for="i in empty" :key="`e${i}`" class="chip slot" aria-hidden="true"></li>
     </ol>
     <div v-else class="minis-skeleton" aria-busy="true"></div>
 
@@ -348,141 +326,76 @@ button {
   color: var(--color-gold);
 }
 
-.minis {
+.chips {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
   margin: 0;
-  padding: 0;
+  padding: 4px 0 8px;
   list-style: none;
+  justify-items: center;
 }
 
-.mini {
+.chip {
+  --chip: var(--color-paper-sunken);
+  --chip-ink: var(--color-ink-muted);
+
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 6px;
-  aspect-ratio: 5 / 7;
-  border-radius: 9px;
-  background: var(--color-paper-raised);
+  display: grid;
+  place-items: center;
+  width: min(100%, 46px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, color-mix(in srgb, #fff 70%, transparent) 0 10deg, transparent 10deg 45deg),
+    var(--chip);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--color-paper-raised) 50%, #fff),
-    0 10px 16px -10px rgba(0, 0, 0, 0.6);
-  color: var(--color-ink);
-  transform: translateY(calc(var(--i, 0) * var(--i, 0) * 1.3px)) rotate(calc(var(--i, 0) * 2.4deg));
-  transform-origin: 50% 120%;
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    0 3px 0 color-mix(in srgb, var(--chip) 55%, #000),
+    0 8px 12px -6px rgba(0, 0, 0, 0.55);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.mini:not(.slot):hover {
-  z-index: 1;
-  transform: translateY(-6px) rotate(0deg) scale(1.06);
+.chip:not(.slot):hover {
+  transform: translateY(-3px);
 }
 
-.mini .index {
-  position: absolute;
-  top: 5px;
-  left: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: var(--font-card);
-  line-height: 1;
-}
-
-.mini .index b {
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.mini .index i {
-  margin-top: 1px;
-  font-size: 9px;
-  font-style: normal;
-}
-
-.mini .index i:only-child {
-  margin-top: 0;
-  font-size: 12px;
-}
-
-.mini .index.red i {
-  color: var(--color-red);
-}
-
-.mini .pip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -64%);
-  font-family: var(--font-card);
-  font-size: 24px;
-  line-height: 1;
-  color: var(--color-ink);
-}
-
-.mini .pip.red {
-  color: var(--color-red);
-}
-
-.mini.first .pip {
-  color: var(--color-gold);
-}
-
-.mini .sum {
-  position: relative;
-  font-size: 11px;
+.chip .face {
+  display: grid;
+  place-items: center;
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  background: var(--chip);
+  outline: 1.5px solid color-mix(in srgb, #fff 50%, transparent);
+  outline-offset: -1.5px;
+  color: var(--chip-ink);
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.mini.win .sum {
-  color: var(--color-green);
+.chip.win {
+  --chip: var(--color-green);
+  --chip-ink: var(--color-on-green);
 }
 
-.mini.first {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 50%, transparent),
-    0 10px 16px -10px rgba(0, 0, 0, 0.6);
+.chip.first {
+  --chip: var(--color-gold);
+  --chip-ink: var(--color-on-gold);
 }
 
-.mini.first .index b {
-  color: var(--color-gold-ink);
+.chip.lose {
+  --chip: var(--color-red);
+  --chip-ink: var(--color-on-red);
 }
 
-.mini.draw .sum,
-.mini.draw .index b {
-  color: var(--color-ink-faint);
-}
-
-.mini.lose {
+.chip.slot {
   background: none;
   box-shadow: none;
-}
-
-.mini .back {
-  position: absolute;
-  inset: 0;
-  border-radius: 9px;
-}
-
-.mini .tag {
-  position: relative;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--color-red);
-  color: var(--color-on-red);
-  font-size: 10px;
-  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.5);
-}
-
-.mini.slot {
-  background: none;
-  box-shadow: inset 0 0 0 1.5px var(--color-felt-line);
+  outline: 1.5px dashed var(--color-felt-line);
+  outline-offset: -1.5px;
 }
 
 .minis-skeleton {
