@@ -4,10 +4,15 @@ import { PhArrowCounterClockwise, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
 import { avatarTone, avatarInitial } from '../../composables/avatar'
+import { useSettingsStore } from '../../stores/settings'
+import CardBack from './CardBack.vue'
 import type { Profile } from '../../types/user'
 import type { GameHistoryEntry, GameOutcome } from '../../types/social'
 
 const SLOTS = 6
+
+const settings = useSettingsStore()
+const tilt = (i: number) => ({ '--i': i - (SLOTS - 1) / 2 })
 
 const props = defineProps<{
   username: string
@@ -120,21 +125,28 @@ function ago(iso: string) {
 
     <ol v-if="loaded" class="minis" aria-label="Последние партии">
       <li
-        v-for="g in recent"
+        v-for="(g, i) in recent"
         :key="g.id"
         class="mini"
+        :style="tilt(i)"
         :class="[outcomeOf(g), { first: isFirst(g) }]"
         :title="`${titleOf(g)} ${payoutOf(g)} · ${metaOf(g)}`"
         :aria-label="`${titleOf(g)}, ${payoutOf(g)}, ${metaOf(g)}`"
       >
-        <span class="index" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">
-          <b v-if="placeOf(g)">{{ placeOf(g) }}</b>
-          <i>{{ suitOf(g) }}</i>
-        </span>
-        <span class="pip" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">{{ suitOf(g) }}</span>
-        <span class="sum" aria-hidden="true">{{ shortPayout(g) }}</span>
+        <template v-if="outcomeOf(g) === 'lose'">
+          <CardBack class="back" :variant="settings.cardBack" />
+          <span class="sum tag" aria-hidden="true">{{ shortPayout(g) }}</span>
+        </template>
+        <template v-else>
+          <span class="index" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">
+            <b v-if="placeOf(g)">{{ placeOf(g) }}</b>
+            <i>{{ suitOf(g) }}</i>
+          </span>
+          <span class="pip" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">{{ suitOf(g) }}</span>
+          <span class="sum" aria-hidden="true">{{ shortPayout(g) }}</span>
+        </template>
       </li>
-      <li v-for="i in empty" :key="`e${i}`" class="mini slot" aria-hidden="true"></li>
+      <li v-for="i in empty" :key="`e${i}`" class="mini slot" :style="tilt(recent.length + i - 1)" aria-hidden="true"></li>
     </ol>
     <div v-else class="minis-skeleton" aria-busy="true"></div>
 
@@ -360,11 +372,14 @@ button {
     inset 0 1px 0 color-mix(in srgb, var(--color-paper-raised) 50%, #fff),
     0 10px 16px -10px rgba(0, 0, 0, 0.6);
   color: var(--color-ink);
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform: translateY(calc(var(--i, 0) * var(--i, 0) * 1.3px)) rotate(calc(var(--i, 0) * 2.4deg));
+  transform-origin: 50% 120%;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mini:not(.slot):hover {
-  transform: translateY(-4px) rotate(-2deg);
+  z-index: 1;
+  transform: translateY(-6px) rotate(0deg) scale(1.06);
 }
 
 .mini .index {
@@ -402,15 +417,19 @@ button {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -62%);
+  transform: translate(-50%, -64%);
   font-family: var(--font-card);
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
-  color: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  color: var(--color-ink);
 }
 
 .mini .pip.red {
-  color: color-mix(in srgb, var(--color-red) 30%, transparent);
+  color: var(--color-red);
+}
+
+.mini.first .pip {
+  color: var(--color-gold);
 }
 
 .mini .sum {
@@ -441,15 +460,24 @@ button {
 }
 
 .mini.lose {
-  background: color-mix(in srgb, var(--color-red) 14%, var(--color-paper-raised));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-red) 40%, transparent),
-    0 10px 16px -10px rgba(0, 0, 0, 0.6);
+  background: none;
+  box-shadow: none;
 }
 
-.mini.lose .sum,
-.mini.lose .index b {
-  color: var(--color-red);
+.mini .back {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+}
+
+.mini .tag {
+  position: relative;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-red);
+  color: var(--color-on-red);
+  font-size: 10px;
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.5);
 }
 
 .mini.slot {
