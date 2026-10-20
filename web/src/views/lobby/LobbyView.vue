@@ -31,9 +31,9 @@ import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
 import { useLobbySocket } from '../../composables/useLobbySocket'
+import { useFriends } from '../../composables/useFriends'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_FRIENDS, MOCK_REQUESTS } from '../../mocks/lobby'
 import type { TableInfo } from '../../types/game'
 import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry } from '../../types/social'
 import type { TablePreset } from '../../composables/tableList'
@@ -60,7 +60,7 @@ const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
 const tablesError = ref('')
 const now = ref(Date.now())
-const { status: lobbyStatus, tables: liveTables, online } = useLobbySocket()
+const { status: lobbyStatus, tables: liveTables, online, friendsVersion } = useLobbySocket()
 
 watch(liveTables, (list) => {
   if (!list) return
@@ -70,8 +70,16 @@ watch(liveTables, (list) => {
   now.value = Date.now()
 })
 
-const friends = ref<Friend[]>([...MOCK_FRIENDS])
-const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
+const { friends, incoming, outgoing, refresh: refreshFriends, add: addFriendByName, accept: acceptFriend, remove: removeFriend } = useFriends()
+const addingFriend = ref(false)
+
+watch([online, friendsVersion], () => refreshFriends())
+watch(
+  () => panels.panel.value,
+  (panel) => {
+    if (panel !== 'friends') addingFriend.value = false
+  },
+)
 const history = ref<GameHistoryEntry[]>([])
 const historyLoaded = ref(false)
 const activeTable = ref<ActiveTable | null>(null)
@@ -189,14 +197,53 @@ async function topUp() {
   }
 }
 
-function acceptRequest(req: FriendRequest) {
-  requests.value = requests.value.filter((r) => r.id !== req.id)
-  friends.value = [...friends.value, { id: req.id, username: req.username, status: 'online' }]
+function friendError(err: unknown) {
+  sound.playError()
+  toast.show(err instanceof ApiError ? err.message : 'Не получилось, попробуйте ещё раз', 'error')
+}
+
+async function addFriend(username: string) {
+  const status = await addFriendByName(username)
   sound.playSuccess()
+  return status === 'accepted' ? `${username} теперь в друзьях` : `Заявка отправлена: ${username}`
+}
+
+async function acceptRequest(req: FriendRequest) {
+  try {
+    await acceptFriend(req.id)
+    sound.playSuccess()
+    toast.show(`${req.username} теперь в друзьях`)
+  } catch (err) {
+    friendError(err)
+  }
+}
+
+async function dropLink(id: string, done: string) {
+  try {
+    await removeFriend(id)
+    sound.playClick()
+    toast.show(done)
+  } catch (err) {
+    friendError(err)
+  }
 }
 
 function declineRequest(req: FriendRequest) {
-  requests.value = requests.value.filter((r) => r.id !== req.id)
+  dropLink(req.id, `Заявка от ${req.username} отклонена`)
+}
+
+function cancelRequest(req: FriendRequest) {
+  dropLink(req.id, `Заявка для ${req.username} отменена`)
+}
+
+function removeFromFriends(friend: Friend) {
+  if (!window.confirm(`Удалить ${friend.username} из друзей?`)) return
+  dropLink(friend.id, `${friend.username} больше не в друзьях`)
+}
+
+function openAddFriend() {
+  addingFriend.value = true
+  panels.open('friends')
 }
 
 function invite(friend: Friend) {
@@ -259,7 +306,10 @@ function playAgain(g: GameHistoryEntry) {
 }
 
 function refreshAll() {
-  if (lobbyStatus.value !== 'open') refreshTables()
+  if (lobbyStatus.value !== 'open') {
+    refreshTables()
+    refreshFriends()
+  }
   refreshActiveTable()
 }
 
@@ -282,6 +332,7 @@ onMounted(() => {
   profileStore.load(true)
   loadHistory()
   refreshAll()
+  refreshFriends()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') refreshAll()
   }, POLL_MS)
@@ -314,7 +365,7 @@ onUnmounted(() => {
           :username="username"
           :balance="balance"
           :online="online"
-          :friends-badge="requests.length"
+          :friends-badge="incoming.length"
           @profile="panels.open('profile')"
           @friends="panels.open('friends')"
           @top-up="topUp"
@@ -379,10 +430,10 @@ onUnmounted(() => {
       class="friends-slot"
       :username="username"
       :friends="friends"
-      :requests="requests"
+      :requests="incoming"
       @profile="panels.open('profile')"
       @friends="panels.open('friends')"
-      @add="soon('Поиск друзей по имени скоро появится')"
+      @add="openAddFriend"
     />
 
     <AnimatePresence>
@@ -450,12 +501,16 @@ onUnmounted(() => {
       >
         <FriendsList
           class="friends-sheet"
+          v-model:adding="addingFriend"
           :friends="friends"
-          :requests="requests"
-          @add="soon('Поиск друзей по имени скоро появится')"
+          :requests="incoming"
+          :outgoing="outgoing"
+          :add="addFriend"
           @invite="invite"
           @accept="acceptRequest"
           @decline="declineRequest"
+          @cancel="cancelRequest"
+          @remove="removeFromFriends"
         />
       </OverlayPanel>
     </AnimatePresence>

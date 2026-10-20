@@ -1,16 +1,6 @@
-import type { Friend, FriendRequest, GameHistoryEntry } from '../types/social'
+import type { GameHistoryEntry } from '../types/social'
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
-
-export const MOCK_FRIENDS: Friend[] = [
-  { id: 'f1', username: 'Миша', status: 'playing' },
-  { id: 'f2', username: 'Оля_К', status: 'online' },
-  { id: 'f3', username: 'Тузовый', status: 'online' },
-  { id: 'f4', username: 'Петрович', status: 'offline', lastSeen: ago(45) },
-  { id: 'f5', username: 'Лиса', status: 'offline', lastSeen: ago(60 * 26) },
-]
-
-export const MOCK_REQUESTS: FriendRequest[] = [{ id: 'r1', username: 'Козырь77' }]
 
 export const MOCK_HISTORY: GameHistoryEntry[] = [
   { id: 'g1', finishedAt: ago(35), mode: 'perevodnoy', deck: 36, players: 4, stake: 500, place: 1, payout: 238 },

@@ -6,12 +6,20 @@ export interface Friend {
   id: string
   username: string
   status: FriendStatus
+  since?: string
   lastSeen?: string
 }
 
 export interface FriendRequest {
   id: string
   username: string
+  at?: string
+}
+
+export interface FriendsOverview {
+  friends: Friend[]
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
 }
 
 export interface ChatEntry {

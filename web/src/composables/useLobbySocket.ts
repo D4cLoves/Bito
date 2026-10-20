@@ -9,6 +9,7 @@ export function useLobbySocket() {
   const status = ref<SocketStatus>('connecting')
   const tables = shallowRef<TableInfo[] | null>(null)
   const online = ref<number | null>(null)
+  const friendsVersion = ref(0)
 
   let ws: WebSocket | null = null
   let retries = 0
@@ -37,6 +38,10 @@ export function useLobbySocket() {
       try {
         msg = JSON.parse(ev.data)
       } catch {
+        return
+      }
+      if (msg.type === 'friends_changed') {
+        friendsVersion.value++
         return
       }
       if (msg.type !== 'lobby_state' || !msg.payload) return
@@ -68,5 +73,5 @@ export function useLobbySocket() {
   connect()
   onUnmounted(disconnect)
 
-  return { status, tables, online, disconnect }
+  return { status, tables, online, friendsVersion, disconnect }
 }

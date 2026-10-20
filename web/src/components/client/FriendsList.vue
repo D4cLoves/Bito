@@ -1,16 +1,53 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { PhUserPlus, PhPaperPlaneTilt, PhCheck, PhX, PhMagnifyingGlass } from '@phosphor-icons/vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { PhUserPlus, PhUserMinus, PhPaperPlaneTilt, PhCheck, PhX, PhMagnifyingGlass } from '@phosphor-icons/vue'
 import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
 import { avatarHue, avatarInitial } from '../../composables/avatar'
 
-const props = defineProps<{ friends: Friend[]; requests: FriendRequest[] }>()
+const props = defineProps<{
+  friends: Friend[]
+  requests: FriendRequest[]
+  outgoing: FriendRequest[]
+  add: (username: string) => Promise<string>
+}>()
 defineEmits<{
-  (e: 'add'): void
   (e: 'invite', friend: Friend): void
   (e: 'accept', req: FriendRequest): void
   (e: 'decline', req: FriendRequest): void
+  (e: 'cancel', req: FriendRequest): void
+  (e: 'remove', friend: Friend): void
 }>()
+
+const adding = defineModel<boolean>('adding', { default: false })
+const newName = ref('')
+const addBusy = ref(false)
+const addResult = ref<{ ok: boolean; text: string } | null>(null)
+const addInput = ref<HTMLInputElement | null>(null)
+
+watch(
+  adding,
+  async (open) => {
+    addResult.value = null
+    if (!open) return
+    await nextTick()
+    addInput.value?.focus()
+  },
+  { immediate: true },
+)
+
+async function submitAdd() {
+  const name = newName.value.trim()
+  if (!name || addBusy.value) return
+  addBusy.value = true
+  try {
+    addResult.value = { ok: true, text: await props.add(name) }
+    newName.value = ''
+  } catch (err) {
+    addResult.value = { ok: false, text: err instanceof Error ? err.message : 'Не получилось' }
+  } finally {
+    addBusy.value = false
+  }
+}
 
 type Filter = 'online' | 'all'
 
@@ -117,12 +154,58 @@ function statusText(f: Friend) {
           >
             <PhPaperPlaneTilt :size="15" />
           </button>
+          <button
+            type="button"
+            class="mini invite"
+            :aria-label="`Удалить ${f.username} из друзей`"
+            title="Удалить из друзей"
+            @click="$emit('remove', f)"
+          >
+            <PhUserMinus :size="15" />
+          </button>
         </li>
       </ul>
       <p v-else class="empty">{{ emptyText }}</p>
     </section>
 
-    <button type="button" class="add" @click="$emit('add')">
+    <section v-if="outgoing.length" class="group" aria-labelledby="outgoing-title">
+      <h3 id="outgoing-title">Отправленные <span>{{ outgoing.length }}</span></h3>
+      <ul class="rows">
+        <li v-for="r in outgoing" :key="r.id" class="row friend offline">
+          <span class="avatar" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
+          <span class="who">
+            <b>{{ r.username }}</b>
+            <small>ждёт ответа</small>
+          </span>
+          <button type="button" class="mini" :aria-label="`Отменить заявку для ${r.username}`" title="Отменить" @click="$emit('cancel', r)">
+            <PhX :size="15" weight="bold" />
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <form v-if="adding" class="add-form" @submit.prevent="submitAdd" @keydown.esc="adding = false">
+      <label class="search">
+        <PhUserPlus :size="17" aria-hidden="true" />
+        <input
+          ref="addInput"
+          v-model="newName"
+          type="text"
+          maxlength="64"
+          autocomplete="off"
+          placeholder="Имя игрока"
+          aria-label="Имя игрока"
+        />
+      </label>
+      <div class="add-actions">
+        <button type="button" class="ghost" @click="adding = false">Отмена</button>
+        <button type="submit" class="send" :disabled="!newName.trim() || addBusy">
+          {{ addBusy ? 'Отправляем…' : 'Отправить заявку' }}
+        </button>
+      </div>
+      <p v-if="addResult" class="add-result" :class="{ bad: !addResult.ok }" role="status">{{ addResult.text }}</p>
+    </form>
+    <button v-else type="button" class="add" @click="adding = true">
       <PhUserPlus :size="18" aria-hidden="true" />
       Добавить друга
     </button>
@@ -409,5 +492,53 @@ h3 span {
 .add:hover {
   border-color: var(--color-gold);
   color: var(--color-gold-ink);
+}
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-actions button {
+  flex: 1;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.ghost {
+  background: var(--color-paper-sunken);
+  color: var(--color-ink-muted);
+}
+
+.send {
+  background: var(--color-gold);
+  color: var(--color-ink);
+}
+
+.send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.add-result {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--color-green);
+  font-size: 13px;
+}
+
+.add-result.bad {
+  color: var(--color-red);
 }
 </style>
