@@ -1,5 +1,5 @@
 import { authedFetch } from './http'
-import type { FriendsOverview } from '../types/social'
+import type { FriendsOverview, PlayerProfile } from '../types/social'
 
 const BASE = '/api/v1/friends'
 
@@ -20,4 +20,8 @@ export async function acceptFriend(id: string): Promise<void> {
 
 export async function removeFriend(id: string): Promise<void> {
   await authedFetch<null>(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function getPlayer(id: string): Promise<PlayerProfile> {
+  return authedFetch<PlayerProfile>(`/api/v1/players/${encodeURIComponent(id)}`)
 }

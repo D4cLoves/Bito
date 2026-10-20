@@ -51,3 +51,26 @@ export interface ActiveTable {
   stake: number
   players: number
 }
+
+export type Relation = 'self' | 'friend' | 'incoming' | 'outgoing' | 'none'
+
+export interface PublicGame {
+  id: string
+  finishedAt: string
+  mode: GameMode
+  deck: DeckSize
+  players: number
+  stake: number
+  place: number
+  outcome: GameOutcome
+}
+
+export interface PlayerProfile {
+  id: string
+  username: string
+  createdAt: string
+  stats: { wins: number; losses: number; totalGames: number }
+  relation: Relation
+  status?: FriendStatus
+  games: PublicGame[]
+}

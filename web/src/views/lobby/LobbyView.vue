@@ -18,6 +18,7 @@ import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ProfilePanel from '../../components/panels/ProfilePanel.vue'
 import SettingsPanel from '../../components/panels/SettingsPanel.vue'
 import ShopPanel from '../../components/panels/ShopPanel.vue'
+import PlayerPanel from '../../components/panels/PlayerPanel.vue'
 import Leaderboard from '../../components/lobby/Leaderboard.vue'
 import { createTable, getActiveTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
@@ -35,7 +36,7 @@ import { useFriends } from '../../composables/useFriends'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
 import type { TableInfo } from '../../types/game'
-import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry } from '../../types/social'
+import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, PlayerProfile } from '../../types/social'
 import type { TablePreset } from '../../composables/tableList'
 
 const POLL_MS = 3000
@@ -72,8 +73,10 @@ watch(liveTables, (list) => {
 
 const { friends, incoming, outgoing, refresh: refreshFriends, add: addFriendByName, accept: acceptFriend, remove: removeFriend } = useFriends()
 const addingFriend = ref(false)
+const playerRevision = ref(0)
 
 watch([online, friendsVersion], () => refreshFriends())
+watch([friends, incoming, outgoing], () => playerRevision.value++)
 watch(
   () => panels.panel.value,
   (panel) => {
@@ -246,6 +249,24 @@ function openAddFriend() {
   panels.open('friends')
 }
 
+function openPlayer(id: string) {
+  sound.playClick()
+  if (id === auth.user?.id) panels.open('profile')
+  else panels.open('player', id)
+}
+
+async function addFromProfile(username: string) {
+  try {
+    toast.show(await addFriend(username))
+  } catch (err) {
+    friendError(err)
+  }
+}
+
+function asFriend(p: PlayerProfile): Friend {
+  return { id: p.id, username: p.username, status: p.status ?? 'offline' }
+}
+
 function invite(friend: Friend) {
   soon(`Приглашения скоро заработают — ${friend.username} пока не узнает`)
 }
@@ -268,6 +289,7 @@ const PANEL_TITLES = {
   shop: 'Магазин',
   friends: 'Друзья',
   tables: 'Все столы',
+  player: 'Игрок',
 } as const
 
 async function refreshActiveTable() {
@@ -434,6 +456,7 @@ onUnmounted(() => {
       @profile="panels.open('profile')"
       @friends="panels.open('friends')"
       @add="openAddFriend"
+      @open="openPlayer"
     />
 
     <AnimatePresence>
@@ -464,6 +487,18 @@ onUnmounted(() => {
           v-else-if="panels.panel.value === 'shop'"
           :balance="balance"
           @buy="(item) => soon(`«${item.name}» можно будет купить, когда заработают покупки на сервере`)"
+        />
+        <PlayerPanel
+          v-else-if="panels.panel.value === 'player'"
+          :id="panels.section.value"
+          :revision="playerRevision"
+          @add="addFromProfile"
+          @accept="(p) => acceptRequest(p)"
+          @decline="(p) => declineRequest(p)"
+          @cancel="(p) => cancelRequest(p)"
+          @remove="(p) => removeFromFriends(asFriend(p))"
+          @invite="(p) => invite(asFriend(p))"
+          @own="panels.open('profile')"
         />
       </OverlayPanel>
 
@@ -511,6 +546,7 @@ onUnmounted(() => {
           @decline="declineRequest"
           @cancel="cancelRequest"
           @remove="removeFromFriends"
+          @open="openPlayer"
         />
       </OverlayPanel>
     </AnimatePresence>

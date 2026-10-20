@@ -5,7 +5,7 @@ import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
 import { avatarHue, avatarInitial } from '../../composables/avatar'
 
 const props = defineProps<{ username: string; friends: Friend[]; requests: FriendRequest[] }>()
-defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'add'): void }>()
+defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'add'): void; (e: 'open', id: string): void }>()
 
 const ORDER: Record<FriendStatus, number> = { playing: 0, online: 1, offline: 2 }
 const STATUS: Record<FriendStatus, string> = { online: 'в лобби', playing: 'за столом', offline: 'не в сети' }
@@ -48,7 +48,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
           :class="f.status"
           :title="`${f.username} — ${STATUS[f.status]}`"
           :aria-label="`${f.username}, ${STATUS[f.status]}`"
-          @click="$emit('friends')"
+          @click="$emit('open', f.id)"
         >
           <span class="avatar" :style="{ '--h': avatarHue(f.username) }">
             {{ avatarInitial(f.username) }}

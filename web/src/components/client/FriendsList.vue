@@ -16,6 +16,7 @@ defineEmits<{
   (e: 'decline', req: FriendRequest): void
   (e: 'cancel', req: FriendRequest): void
   (e: 'remove', friend: Friend): void
+  (e: 'open', id: string): void
 }>()
 
 const adding = defineModel<boolean>('adding', { default: false })
@@ -118,10 +119,10 @@ function statusText(f: Friend) {
       <ul class="rows requests">
         <li v-for="r in requests" :key="r.id" class="row">
           <span class="avatar request" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
-          <span class="who">
+          <button type="button" class="who open" :aria-label="`Профиль ${r.username}`" @click="$emit('open', r.id)">
             <b>{{ r.username }}</b>
             <small>хочет дружить</small>
-          </span>
+          </button>
           <button type="button" class="mini ok" :aria-label="`Принять ${r.username}`" title="Принять" @click="$emit('accept', r)">
             <PhCheck :size="15" weight="bold" />
           </button>
@@ -140,10 +141,10 @@ function statusText(f: Friend) {
             {{ avatarInitial(f.username) }}
             <i v-if="f.status !== 'offline'" class="dot" aria-hidden="true"></i>
           </span>
-          <span class="who">
+          <button type="button" class="who open" :aria-label="`Профиль ${f.username}`" @click="$emit('open', f.id)">
             <b>{{ f.username }}</b>
             <small>{{ statusText(f) }}</small>
-          </span>
+          </button>
           <button
             v-if="f.status === 'online'"
             type="button"
@@ -173,10 +174,10 @@ function statusText(f: Friend) {
       <ul class="rows">
         <li v-for="r in outgoing" :key="r.id" class="row friend offline">
           <span class="avatar" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
-          <span class="who">
+          <button type="button" class="who open" :aria-label="`Профиль ${r.username}`" @click="$emit('open', r.id)">
             <b>{{ r.username }}</b>
             <small>ждёт ответа</small>
-          </span>
+          </button>
           <button type="button" class="mini" :aria-label="`Отменить заявку для ${r.username}`" title="Отменить" @click="$emit('cancel', r)">
             <PhX :size="15" weight="bold" />
           </button>
@@ -414,6 +415,22 @@ h3 span {
 .who small {
   font-size: 12px;
   color: var(--color-ink-faint);
+}
+
+.open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.open:hover b,
+.open:focus-visible b {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .online .who small {
