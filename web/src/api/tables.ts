@@ -26,3 +26,14 @@ export function quickMatch(req: QuickMatchRequest): Promise<TableInfo> {
     body: JSON.stringify(req),
   })
 }
+
+export function inviteToTable(tableId: string, userId: string): Promise<{ tableId: string; expiresAt: string }> {
+  return authedFetch(`/api/v1/tables/${encodeURIComponent(tableId)}/invites`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export async function declineInvite(tableId: string): Promise<void> {
+  await authedFetch<null>(`/api/v1/tables/${encodeURIComponent(tableId)}/invites/decline`, { method: 'POST' })
+}

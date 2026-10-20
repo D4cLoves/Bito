@@ -13,11 +13,11 @@ const mode = defineModel<GameMode>('mode', { required: true })
 const deck = defineModel<DeckSize>('deck', { required: true })
 const players = defineModel<number>('players', { required: true })
 
-const props = defineProps<{ balance: number | null; busy: boolean }>()
+const props = defineProps<{ balance: number | null; busy: boolean; invitee?: string | null }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'create'): void }>()
 
 const DECKS: DeckSize[] = [24, 36, 52]
-const SEATS = [3, 4, 5, 6]
+const SEATS = computed(() => (props.invitee ? [2, 3, 4, 5, 6] : [3, 4, 5, 6]))
 const MODES: { id: GameMode; label: string; suit: string }[] = [
   { id: 'podkidnoy', label: 'Подкидной', suit: '♠' },
   { id: 'perevodnoy', label: 'Переводной', suit: '♥' },
@@ -98,12 +98,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
       :transition="{ type: 'spring', stiffness: 420, damping: 34 }"
     >
       <header class="head">
-        <h2 id="create-title">Новый стол</h2>
+        <h2 id="create-title">{{ invitee ? `Позвать ${invitee}` : 'Новый стол' }}</h2>
         <button type="button" class="close" aria-label="Закрыть" @click="emit('close')">
           <PhX :size="20" />
         </button>
       </header>
-      <p class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
+      <p v-if="invitee" class="sub">Создадим стол и придержим место для {{ invitee }} на 45 секунд. Вдвоём — дуэль, на 3–6 мест подсядут и другие игроки.</p>
+      <p v-else class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
 
       <div ref="body" class="body">
         <div class="group">
@@ -203,7 +204,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
         <button type="button" class="btn ghost" @click="emit('close')">Отмена</button>
         <button type="button" class="btn primary" :disabled="busy || !canCreate" @click="submit">
           <span v-if="busy" class="spinner" aria-hidden="true"></span>
-          {{ busy ? 'Создаём…' : 'Создать и сесть' }}
+          {{ busy ? (invitee ? 'Зовём…' : 'Создаём…') : invitee ? 'Создать и позвать' : 'Создать и сесть' }}
         </button>
       </footer>
     </motion.section>

@@ -1,6 +1,6 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { freshAccessToken } from '../api/http'
-import type { LobbyState, TableInfo } from '../types/game'
+import type { LobbyState, TableInfo, TableInvite } from '../types/game'
 import type { SocketStatus } from './useGameSocket'
 
 const MAX_DELAY_MS = 10000
@@ -10,6 +10,7 @@ export function useLobbySocket() {
   const tables = shallowRef<TableInfo[] | null>(null)
   const online = ref<number | null>(null)
   const friendsVersion = ref(0)
+  const invites = ref<TableInvite[]>([])
 
   let ws: WebSocket | null = null
   let retries = 0
@@ -34,7 +35,7 @@ export function useLobbySocket() {
     }
 
     socket.onmessage = (ev) => {
-      let msg: { type: string; payload?: LobbyState }
+      let msg: { type: string; payload?: unknown }
       try {
         msg = JSON.parse(ev.data)
       } catch {
@@ -44,9 +45,15 @@ export function useLobbySocket() {
         friendsVersion.value++
         return
       }
+      if (msg.type === 'table_invite' && msg.payload) {
+        const inv = msg.payload as TableInvite
+        invites.value = [...invites.value.filter((i) => i.tableId !== inv.tableId), inv]
+        return
+      }
       if (msg.type !== 'lobby_state' || !msg.payload) return
-      tables.value = msg.payload.tables
-      online.value = msg.payload.online
+      const state = msg.payload as LobbyState
+      tables.value = state.tables
+      online.value = state.online
     }
 
     socket.onclose = () => {
@@ -63,6 +70,10 @@ export function useLobbySocket() {
     }
   }
 
+  function dismissInvite(tableId: string) {
+    invites.value = invites.value.filter((i) => i.tableId !== tableId)
+  }
+
   function disconnect() {
     stopped = true
     if (retryTimer) clearTimeout(retryTimer)
@@ -73,5 +84,5 @@ export function useLobbySocket() {
   connect()
   onUnmounted(disconnect)
 
-  return { status, tables, online, friendsVersion, disconnect }
+  return { status, tables, online, friendsVersion, invites, dismissInvite, disconnect }
 }

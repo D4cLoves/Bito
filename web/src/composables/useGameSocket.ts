@@ -130,6 +130,11 @@ export function useGameSocket(roomId: string) {
         system(`${nameOf(id)} вернулся`)
         break
       }
+      case 'invite_declined': {
+        const name = (msg.payload as { username?: string })?.username ?? 'Друг'
+        system(`${name} не принял приглашение`)
+        break
+      }
       case 'chat': {
         const m = msg.payload as ChatMessage
         pushChat({ userId: m.senderId, username: m.senderName, text: m.message })

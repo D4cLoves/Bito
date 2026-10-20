@@ -154,3 +154,14 @@ export function canBeat(attack: Card, defend: Card, trumpSuit: number): boolean 
   if (defend.suit === trumpSuit && attack.suit !== trumpSuit) return true
   return defend.suit === attack.suit && defend.rank > attack.rank
 }
+
+export interface TableInvite {
+  tableId: string
+  fromId: string
+  fromName: string
+  mode: GameMode
+  deck: DeckSize
+  maxPlayers: number
+  stake: number
+  expiresAt: string
+}

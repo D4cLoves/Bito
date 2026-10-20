@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { PhPlus } from '@phosphor-icons/vue'
 import ToastStack from '../../components/app/ToastStack.vue'
+import InviteCards from '../../components/client/InviteCards.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
 import ReturnBanner from '../../components/client/ReturnBanner.vue'
@@ -20,7 +21,7 @@ import SettingsPanel from '../../components/panels/SettingsPanel.vue'
 import ShopPanel from '../../components/panels/ShopPanel.vue'
 import PlayerPanel from '../../components/panels/PlayerPanel.vue'
 import Leaderboard from '../../components/lobby/Leaderboard.vue'
-import { createTable, getActiveTable, listTables, quickMatch } from '../../api/tables'
+import { createTable, declineInvite, getActiveTable, inviteToTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
 import { topUp as requestTopUp } from '../../api/wallet'
 import { getGameHistory } from '../../api/users'
@@ -35,7 +36,7 @@ import { useLobbySocket } from '../../composables/useLobbySocket'
 import { useFriends } from '../../composables/useFriends'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import type { TableInfo } from '../../types/game'
+import type { TableInfo, TableInvite } from '../../types/game'
 import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, PlayerProfile } from '../../types/social'
 import type { TablePreset } from '../../composables/tableList'
 
@@ -56,12 +57,22 @@ const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
 const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
 const creating = ref(false)
+const invitingFriend = ref<Friend | null>(null)
+const invitePlayers = ref(2)
+const dialogPlayers = computed({
+  get: () => (invitingFriend.value ? invitePlayers.value : createPrefs.players.value),
+  set: (n: number) => {
+    if (invitingFriend.value) invitePlayers.value = n
+    else createPrefs.players.value = n
+  },
+})
 
 const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
+const companyTables = computed(() => tables.value.filter((t) => t.maxPlayers >= 3))
 const tablesError = ref('')
 const now = ref(Date.now())
-const { status: lobbyStatus, tables: liveTables, online, friendsVersion } = useLobbySocket()
+const { status: lobbyStatus, tables: liveTables, online, friendsVersion, invites, dismissInvite } = useLobbySocket()
 
 watch(liveTables, (list) => {
   if (!list) return
@@ -126,20 +137,28 @@ function goToTable(id: string, search = false) {
 
 function openCreate() {
   sound.playClick()
+  invitingFriend.value = null
   creating.value = true
+}
+
+function closeCreate() {
+  creating.value = false
+  invitingFriend.value = null
 }
 
 async function create() {
   if (busy.value) return
   busy.value = 'create'
   try {
+    const friend = invitingFriend.value
     const table = await createTable({
       mode: createPrefs.mode.value,
       deck: createPrefs.deck.value,
-      maxPlayers: createPrefs.players.value,
+      maxPlayers: dialogPlayers.value,
       stake: createPrefs.stake.value,
     })
-    creating.value = false
+    closeCreate()
+    if (friend) await inviteFriend(table.id, friend)
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -268,8 +287,38 @@ function asFriend(p: PlayerProfile): Friend {
 }
 
 function invite(friend: Friend) {
-  soon(`Приглашения скоро заработают — ${friend.username} пока не узнает`)
+  sound.playClick()
+  if (panels.panel.value) panels.close()
+  invitingFriend.value = friend
+  creating.value = true
 }
+
+async function inviteFriend(tableId: string, friend: Friend) {
+  try {
+    await inviteToTable(tableId, friend.id)
+    toast.show(`Позвали ${friend.username}, место держим 45 секунд`, 'success')
+  } catch (err) {
+    toast.show(`Стол создан, но позвать не вышло: ${err instanceof Error ? err.message : 'ошибка'}`, 'error', 4500)
+  }
+}
+
+function acceptInvite(inv: TableInvite) {
+  dismissInvite(inv.tableId)
+  goToTable(inv.tableId)
+}
+
+function rejectInvite(inv: TableInvite) {
+  sound.playClick()
+  dismissInvite(inv.tableId)
+  declineInvite(inv.tableId).catch(() => {})
+}
+
+watch(
+  () => invites.value.length,
+  (n, prev) => {
+    if (n > prev) sound.playYourTurn()
+  },
+)
 
 function toggleSound() {
   settings.soundOn = !settings.soundOn
@@ -432,7 +481,7 @@ onUnmounted(() => {
         <TablesCarousel
           class="rise"
           style="--d: 4"
-          :tables="tables"
+          :tables="companyTables"
           :loaded="tablesLoaded"
           :error="tablesError"
           :my-id="auth.user?.id"
@@ -557,14 +606,16 @@ onUnmounted(() => {
         v-model:stake="createPrefs.stake.value"
         v-model:mode="createPrefs.mode.value"
         v-model:deck="createPrefs.deck.value"
-        v-model:players="createPrefs.players.value"
+        v-model:players="dialogPlayers"
         :balance="balance"
         :busy="busy === 'create'"
-        @close="creating = false"
+        :invitee="invitingFriend?.username ?? null"
+        @close="closeCreate"
         @create="create"
       />
     </AnimatePresence>
 
+    <InviteCards class="invite-dock" :invites="invites" @accept="acceptInvite" @decline="rejectInvite" @expire="(inv) => dismissInvite(inv.tableId)" />
     <ToastStack />
   </div>
 </template>
@@ -656,9 +707,17 @@ onUnmounted(() => {
   }
 }
 
+.client .invite-dock {
+  right: calc(var(--friends-w) + 12px);
+}
+
 @media (max-width: 1279px) {
   .client {
     grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  }
+
+  .client .invite-dock {
+    right: 16px;
   }
 
   .friends-slot {
@@ -679,6 +738,10 @@ onUnmounted(() => {
 
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .client .invite-dock {
+    bottom: calc(var(--rail-h) + 16px);
   }
 
   .rail {
