@@ -278,6 +278,16 @@
   --shadow-panel: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 30px 70px -30px rgba(0, 0, 0, 0.8);
 }
 
+[data-theme] {
+  --color-gold-hi: color-mix(in srgb, var(--color-gold) 55%, #fff);
+  --color-on-gold: color-mix(in srgb, var(--color-gold) 22%, #000);
+  --gradient-gold: linear-gradient(180deg, var(--color-gold-hi), var(--color-gold));
+  --color-green-hi: color-mix(in srgb, var(--color-green) 55%, #fff);
+  --color-on-green: color-mix(in srgb, var(--color-green) 22%, #000);
+  --color-red-deep: color-mix(in srgb, var(--color-red) 72%, #000);
+  --color-on-red: color-mix(in srgb, var(--color-red) 14%, #fff);
+}
+
 [data-felt] {
   --color-on-felt: #f3eee4;
   --color-on-felt-muted: rgba(243, 238, 228, 0.68);

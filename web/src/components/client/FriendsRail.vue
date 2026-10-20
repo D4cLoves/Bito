@@ -156,7 +156,7 @@ button {
   box-sizing: border-box;
   border-radius: 999px;
   background: var(--color-green);
-  color: #fff;
+  color: var(--color-on-green);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -230,7 +230,7 @@ button {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-on-red);
   font-size: 9px;
   font-weight: 600;
   line-height: 15px;

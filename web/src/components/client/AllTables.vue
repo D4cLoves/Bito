@@ -355,7 +355,7 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
 
 .btn.primary {
   background: var(--color-gold);
-  color: #2b1f08;
+  color: var(--color-on-gold);
 }
 
 @media (max-width: 560px) {

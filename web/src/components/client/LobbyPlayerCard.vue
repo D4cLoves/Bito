@@ -230,7 +230,7 @@ button {
   height: 24px;
   border-radius: 50%;
   background: var(--color-gold);
-  color: #3a2a0c;
+  color: var(--color-on-gold);
   font-size: 13px;
   font-style: normal;
   box-shadow: 0 0 0 2px var(--color-felt);
@@ -320,7 +320,7 @@ button {
 
 .line .hot,
 .line .hot b {
-  color: #f2a65a;
+  color: var(--color-gold);
 }
 
 .minis {
@@ -338,11 +338,11 @@ button {
   place-items: center;
   aspect-ratio: 5 / 7;
   border-radius: 8px;
-  background: linear-gradient(160deg, #fbf8f1, #ece5d6);
+  background: linear-gradient(160deg, var(--color-paper-raised), var(--color-paper-sunken));
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.7) inset,
     0 8px 14px -8px rgba(0, 0, 0, 0.55);
-  color: #2b2824;
+  color: var(--color-ink);
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -361,13 +361,13 @@ button {
 
 .mini .pip {
   margin-top: -8px;
-  color: #b08a3e;
+  color: var(--color-gold);
 }
 
 .mini .glyph {
   font-size: 20px;
   line-height: 1;
-  color: #2b2824;
+  color: var(--color-ink);
 }
 
 .mini .sum {
@@ -382,7 +382,7 @@ button {
 }
 
 .mini.win .sum {
-  color: #3f7a3a;
+  color: var(--color-green);
 }
 
 .mini.draw {
@@ -390,13 +390,13 @@ button {
 }
 
 .mini.draw .sum {
-  color: #736d5f;
+  color: var(--color-ink-faint);
 }
 
 .mini.lose {
   background:
     repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 7px),
-    linear-gradient(160deg, #8a3a33, #5a221d);
+    linear-gradient(160deg, var(--color-red), var(--color-red-deep));
   box-shadow:
     inset 0 0 0 3px rgba(255, 255, 255, 0.12),
     0 8px 14px -8px rgba(0, 0, 0, 0.55);
@@ -404,7 +404,7 @@ button {
 
 .mini.lose .sum {
   bottom: auto;
-  color: #fbe3dd;
+  color: var(--color-on-red);
   font-size: 11px;
 }
 

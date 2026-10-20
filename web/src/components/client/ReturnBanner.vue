@@ -84,7 +84,7 @@ strong {
   border: 0;
   border-radius: 999px;
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-on-red);
   font: inherit;
   font-size: 14px;
   white-space: nowrap;

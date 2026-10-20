@@ -103,8 +103,8 @@ function wear(item: CatalogEntry) {
 
 .buy {
   padding-left: 10px;
-  background: linear-gradient(180deg, #f7e2ad, #d6aa58);
-  color: #2b1f08;
+  background: var(--gradient-gold);
+  color: var(--color-on-gold);
   box-shadow: 0 8px 16px -10px rgba(120, 80, 20, 0.7);
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
@@ -115,7 +115,7 @@ function wear(item: CatalogEntry) {
 }
 
 .buy :deep(.chip) {
-  color: #8a5a14;
+  color: var(--color-gold-ink);
 }
 
 .wear {

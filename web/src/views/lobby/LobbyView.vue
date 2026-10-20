@@ -638,7 +638,7 @@ onUnmounted(() => {
   border: 0;
   border-radius: 999px;
   background: var(--color-gold);
-  color: #2b1f08;
+  color: var(--color-on-gold);
   font: inherit;
   font-size: 14px;
   font-weight: 500;

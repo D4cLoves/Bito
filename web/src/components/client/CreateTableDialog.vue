@@ -460,8 +460,8 @@ h2 {
 }
 
 .btn.primary {
-  background: linear-gradient(180deg, #f7e2ad, #d6aa58);
-  color: #2b1f08;
+  background: var(--gradient-gold);
+  color: var(--color-on-gold);
   box-shadow: 0 12px 24px -14px rgba(0, 0, 0, 0.6);
 }
 
@@ -474,8 +474,8 @@ h2 {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(43, 31, 8, 0.25);
-  border-top-color: #2b1f08;
+  border: 2px solid color-mix(in srgb, var(--color-on-gold) 25%, transparent);
+  border-top-color: var(--color-on-gold);
   animation: spin 0.7s linear infinite;
 }
 

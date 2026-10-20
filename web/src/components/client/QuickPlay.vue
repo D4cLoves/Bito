@@ -184,7 +184,7 @@ function onPlay() {
   right: 4%;
   width: 62%;
   height: 130%;
-  background: radial-gradient(ellipse at 50% 30%, rgba(255, 228, 170, 0.26), transparent 65%);
+  background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-gold-hi) 26%, transparent), transparent 65%);
 }
 
 .rim {
@@ -209,7 +209,7 @@ function onPlay() {
   padding: 5px 12px 5px 9px;
   border-radius: 999px;
   background: var(--color-gold);
-  color: #2b1f08;
+  color: var(--color-on-gold);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -259,15 +259,15 @@ h2 {
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(180deg, #f7e2ad, #d6aa58);
-  color: #2b1f08;
+  background: var(--gradient-gold);
+  color: var(--color-on-gold);
   font: inherit;
   font-size: 20px;
   font-weight: 500;
   letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow:
-    0 0 0 6px rgba(214, 170, 88, 0.18),
+    0 0 0 6px color-mix(in srgb, var(--color-gold) 18%, transparent),
     0 20px 36px -16px rgba(0, 0, 0, 0.8);
   transition:
     transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -277,7 +277,7 @@ h2 {
 .go:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow:
-    0 0 0 8px rgba(214, 170, 88, 0.22),
+    0 0 0 8px color-mix(in srgb, var(--color-gold) 22%, transparent),
     0 26px 40px -16px rgba(0, 0, 0, 0.85);
 }
 
@@ -295,8 +295,8 @@ h2 {
 }
 
 .go.broke {
-  background: linear-gradient(180deg, #bfe3b0, #6f9a6a);
-  color: #12301f;
+  background: linear-gradient(180deg, var(--color-green-hi), var(--color-green));
+  color: var(--color-on-green);
   box-shadow:
     0 0 0 6px rgba(111, 154, 106, 0.2),
     0 20px 36px -16px rgba(0, 0, 0, 0.8);
@@ -324,8 +324,8 @@ h2 {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 2px solid rgba(43, 31, 8, 0.25);
-  border-top-color: #2b1f08;
+  border: 2px solid color-mix(in srgb, var(--color-on-gold) 25%, transparent);
+  border-top-color: var(--color-on-gold);
   animation: spin 0.7s linear infinite;
 }
 

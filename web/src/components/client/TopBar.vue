@@ -160,7 +160,7 @@ h1 {
   box-sizing: border-box;
   border-radius: 999px;
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-on-red);
   font-size: 11px;
 }
 

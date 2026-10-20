@@ -95,11 +95,11 @@ const list = computed(() =>
 }
 
 .seat.taken {
-  background: linear-gradient(160deg, #f3eee4, #d9d0bd);
+  background: linear-gradient(160deg, var(--color-paper-raised), var(--color-paper-sunken));
   box-shadow:
     0 0 0 3px var(--color-paper-raised),
     0 6px 10px -4px rgba(0, 0, 0, 0.7);
-  color: #5a5246;
+  color: var(--color-ink-muted);
 }
 
 .seat.me {

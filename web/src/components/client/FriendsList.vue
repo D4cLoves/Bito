@@ -462,7 +462,7 @@ h3 span {
 
 .mini.ok {
   background: var(--color-green);
-  color: #fff;
+  color: var(--color-on-green);
 }
 
 .invite {

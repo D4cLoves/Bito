@@ -517,7 +517,7 @@ h2 {
   height: 54px;
   border-radius: 50%;
   background: var(--color-gold);
-  color: #3a2a0c;
+  color: var(--color-on-gold);
 }
 
 .create b {
