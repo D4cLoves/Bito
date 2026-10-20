@@ -62,11 +62,8 @@ function metaOf(g: GameHistoryEntry) {
   return `${mode} · ${g.deck} карт · ${who} · ${ago(g.finishedAt)}`
 }
 
-function indexOf(g: GameHistoryEntry) {
-  const o = outcomeOf(g)
-  if (o === 'lose') return 'Д'
-  if (o === 'draw') return '='
-  return String(isDuel(g) ? 1 : g.place)
+function placeOf(g: GameHistoryEntry) {
+  return outcomeOf(g) === 'win' && !isDuel(g) ? String(g.place) : ''
 }
 
 const suitOf = (g: GameHistoryEntry) => (g.mode === 'perevodnoy' ? '♥' : '♠')
@@ -131,7 +128,7 @@ function ago(iso: string) {
         :aria-label="`${titleOf(g)}, ${payoutOf(g)}, ${metaOf(g)}`"
       >
         <span class="index" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">
-          <b>{{ indexOf(g) }}</b>
+          <b v-if="placeOf(g)">{{ placeOf(g) }}</b>
           <i>{{ suitOf(g) }}</i>
         </span>
         <span class="pip" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">{{ suitOf(g) }}</span>
@@ -392,6 +389,11 @@ button {
   font-style: normal;
 }
 
+.mini .index i:only-child {
+  margin-top: 0;
+  font-size: 12px;
+}
+
 .mini .index.red i {
   color: var(--color-red);
 }
@@ -425,9 +427,7 @@ button {
 
 .mini.first {
   box-shadow:
-    inset 0 0 0 1.5px var(--color-gold),
-    inset 0 0 0 4px var(--color-paper-raised),
-    inset 0 0 0 5px color-mix(in srgb, var(--color-gold) 45%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 50%, transparent),
     0 10px 16px -10px rgba(0, 0, 0, 0.6);
 }
 
