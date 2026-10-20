@@ -19,6 +19,7 @@ const (
 	defaultDuelMode = game.ModePodkidnoy
 	defaultDuelDeck = game.Deck36
 	reservationTTL  = 15 * time.Second
+	inviteTTL       = 45 * time.Second
 	settleAttempts  = 3
 	settleRetryWait = time.Second
 )
@@ -70,12 +71,14 @@ type Room struct {
 	clients           map[string]*Client
 	seated            map[string]bool
 	reservations      map[string]time.Time
+	invites           map[string]time.Time
 	game              *game.Game
 	payouts           map[string]int64
 	draw              bool
 	register          chan *Client
 	unregister        chan *Client
 	incoming          chan IncomingMessage
+	announce          chan []byte
 	turnTimeout       chan struct{}
 	disconnectTimeout chan string
 	stop              chan struct{}
@@ -110,9 +113,11 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		clients:           make(map[string]*Client),
 		seated:            make(map[string]bool),
 		reservations:      make(map[string]time.Time),
+		invites:           make(map[string]time.Time),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
 		incoming:          make(chan IncomingMessage, 100),
+		announce:          make(chan []byte, 8),
 		turnTimeout:       make(chan struct{}, 1),
 		disconnectTimeout: make(chan string, 10),
 		stop:              make(chan struct{}),
@@ -197,13 +202,64 @@ func (r *Room) Occupancy() int {
 			n++
 		}
 	}
+	for id, until := range r.invites {
+		if !r.seated[id] && now.Before(until) {
+			n++
+		}
+	}
 	return n
+}
+
+func (r *Room) freeSeatsFor(playerID string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	now := time.Now()
+	held := make(map[string]bool)
+	for _, holds := range []map[string]time.Time{r.reservations, r.invites} {
+		for id, until := range holds {
+			if _, connected := r.clients[id]; id != playerID && !connected && now.Before(until) {
+				held[id] = true
+			}
+		}
+	}
+	return r.maxUsers - len(r.clients) - len(held)
+}
+
+func (r *Room) Invite(playerID string, ttl time.Duration) {
+	r.mu.Lock()
+	r.invites[playerID] = time.Now().Add(ttl)
+	r.mu.Unlock()
+}
+
+func (r *Room) Uninvite(playerID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	until, ok := r.invites[playerID]
+	delete(r.invites, playerID)
+	return ok && time.Now().Before(until)
+}
+
+func (r *Room) Invited(playerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	until, ok := r.invites[playerID]
+	return ok && time.Now().Before(until)
+}
+
+func (r *Room) Announce(data []byte) {
+	select {
+	case r.announce <- data:
+	case <-r.stop:
+	default:
+	}
 }
 
 func (r *Room) seat(playerID string) {
 	r.mu.Lock()
 	r.seated[playerID] = true
 	delete(r.reservations, playerID)
+	delete(r.invites, playerID)
 	r.mu.Unlock()
 }
 
@@ -265,6 +321,11 @@ func (r *Room) Run() {
 
 		case playerID := <-r.disconnectTimeout:
 			r.handleDisconnectTimeout(playerID)
+
+		case data := <-r.announce:
+			for _, c := range r.clients {
+				c.Send(data)
+			}
 		}
 	}
 }
@@ -319,12 +380,11 @@ func (r *Room) handleRegister(client *Client) {
 		}
 	}
 
-	if len(r.clients) >= r.maxUsers {
-		if _, alreadyPresent := r.clients[playerID]; !alreadyPresent {
-			r.sendError(client, "стол уже заполнен")
-			client.Close()
-			return
-		}
+	if _, alreadyPresent := r.clients[playerID]; !alreadyPresent && r.freeSeatsFor(playerID) <= 0 {
+		r.sendError(client, "стол уже заполнен")
+		client.Close()
+		return
+
 	}
 
 	r.clients[playerID] = client

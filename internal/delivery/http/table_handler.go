@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	minCompanySize = 3
+	minTableSize   = 2
 	maxCompanySize = 6
 	cardsPerHand   = 6
 	anyMode        = "any"
@@ -25,7 +25,7 @@ var (
 	ErrInvalidQuickMode  = errors.New("mode must be podkidnoy, perevodnoy or any")
 	ErrInvalidDeck       = errors.New("deck must be 24, 36 or 52")
 	ErrInvalidQuickDeck  = errors.New("deck must be 24, 36, 52 or 0 for any")
-	ErrInvalidMaxPlayers = errors.New("maxPlayers must be between 3 and 6")
+	ErrInvalidMaxPlayers = errors.New("maxPlayers must be between 2 and 6")
 	ErrNotEnoughCards    = errors.New("not enough cards for this many players")
 	ErrInvalidStake      = errors.New("stake must be one of 100, 250, 500, 1000, 2500, 5000")
 )
@@ -87,7 +87,7 @@ func (req CreateTableRequest) validate() (ws.RoomSettings, error) {
 	if s.Deck, ok = parseDeck(req.Deck); !ok {
 		return s, ErrInvalidDeck
 	}
-	if req.MaxPlayers < minCompanySize || req.MaxPlayers > maxCompanySize {
+	if req.MaxPlayers < minTableSize || req.MaxPlayers > maxCompanySize {
 		return s, ErrInvalidMaxPlayers
 	}
 	if req.MaxPlayers*cardsPerHand > req.Deck {

@@ -26,6 +26,11 @@ const (
 	TypeFriendsChanged     = "friends_changed"
 )
 
+const (
+	TypeTableInvite    = "table_invite"
+	TypeInviteDeclined = "invite_declined"
+)
+
 type Message[T any] struct {
 	Type    string `json:"type"`
 	Payload T      `json:"payload,omitempty"`
@@ -99,6 +104,21 @@ type GameStatePayload struct {
 	TurnLeftMs  int64           `json:"turnLeftMs"`
 	YouPassed   bool            `json:"youPassed"`
 	Stake       int64           `json:"stake"`
+}
+
+type TableInvitePayload struct {
+	TableID    string `json:"tableId"`
+	FromID     string `json:"fromId"`
+	FromName   string `json:"fromName"`
+	Mode       string `json:"mode"`
+	Deck       int    `json:"deck"`
+	MaxPlayers int    `json:"maxPlayers"`
+	Stake      int64  `json:"stake"`
+	ExpiresAt  string `json:"expiresAt"`
+}
+
+type InviteDeclinedPayload struct {
+	Username string `json:"username"`
 }
 
 func NewMessage(msgType string, payload any) ([]byte, error) {

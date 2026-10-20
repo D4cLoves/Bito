@@ -25,6 +25,7 @@ type Server struct {
 	gameHandler   *GameHandler
 	friendHandler *FriendHandler
 	playerHandler *PlayerHandler
+	inviteHandler *InviteHandler
 	tokens        TokenValidator
 }
 
@@ -36,6 +37,7 @@ type Handlers struct {
 	Game   *GameHandler
 	Friend *FriendHandler
 	Player *PlayerHandler
+	Invite *InviteHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -49,6 +51,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		gameHandler:   h.Game,
 		friendHandler: h.Friend,
 		playerHandler: h.Player,
+		inviteHandler: h.Invite,
 		tokens:        tokens,
 	}
 
@@ -110,6 +113,10 @@ func (s *Server) setupRoutes() {
 			r.Post("/quick", s.tableHandler.Quick)
 			r.Get("/", s.tableHandler.List)
 			r.Get("/{id}", s.tableHandler.Get)
+			if s.inviteHandler != nil {
+				r.Post("/{id}/invites", s.inviteHandler.Invite)
+				r.Post("/{id}/invites/decline", s.inviteHandler.Decline)
+			}
 		})
 	}
 

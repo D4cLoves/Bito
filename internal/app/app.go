@@ -95,6 +95,7 @@ func Run() {
 		Game:   deliveryHTTP.NewGameHandler(service.NewGameService(postgres.NewGameRepository(pool))),
 		Friend: deliveryHTTP.NewFriendHandler(service.NewFriendService(postgres.NewFriendRepository(pool), userRepo, hub, hub)),
 		Player: deliveryHTTP.NewPlayerHandler(service.NewPlayerService(userRepo, postgres.NewFriendRepository(pool), postgres.NewGameRepository(pool), hub)),
+		Invite: deliveryHTTP.NewInviteHandler(service.NewInviteService(hub, postgres.NewFriendRepository(pool), hub, userRepo, economyService, hub)),
 	}, tokenManager)
 
 	// Запуск сервера в отдельной горутине

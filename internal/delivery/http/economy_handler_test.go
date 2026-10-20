@@ -186,10 +186,10 @@ func TestTables_QuickValidation(t *testing.T) {
 	}
 }
 
-func TestTables_CreateIsForCompaniesOnly(t *testing.T) {
+func TestTables_CreateAllowsTwoSeatsForInvites(t *testing.T) {
 	router, _, token, _ := newEconomyRouter(t, &stubWallet{balance: 2500})
-	if w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":2}`); w.Code != http.StatusBadRequest {
-		t.Errorf("two-player table via create: status = %d, want 400", w.Code)
+	if w := doRequest(router, http.MethodPost, "/api/v1/tables", token, `{"mode":"podkidnoy","deck":36,"maxPlayers":2}`); w.Code != http.StatusCreated {
+		t.Errorf("two-player table via create: status = %d, want 201", w.Code)
 	}
 }
 

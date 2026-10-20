@@ -410,3 +410,74 @@ func (h *Hub) FriendsChanged(ids ...uuid.UUID) {
 		h.lobby.Notify(id.String(), data)
 	}
 }
+
+func inviteTable(room *Room) model.InviteTable {
+	return model.InviteTable{
+		ID:         room.id,
+		Mode:       room.gameMode.String(),
+		Deck:       int(room.deckType),
+		MaxPlayers: room.maxUsers,
+		Stake:      room.stake,
+	}
+}
+
+func (h *Hub) InviteTable(roomID string) (model.InviteTable, bool) {
+	room, ok := h.GetRoom(roomID)
+	if !ok {
+		return model.InviteTable{}, false
+	}
+	return inviteTable(room), true
+}
+
+func (h *Hub) Invite(roomID, from, to string) (model.InviteTable, time.Time, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room, ok := h.rooms[roomID]
+	switch {
+	case !ok:
+		return model.InviteTable{}, time.Time{}, model.ErrTableNotFound
+	case room.matchmaking || !(room.Holds(from) || room.Reserved(from)):
+		return model.InviteTable{}, time.Time{}, model.ErrNotAtTable
+	case room.Started():
+		return model.InviteTable{}, time.Time{}, model.ErrTableStarted
+	case room.Holds(to) || room.Invited(to):
+		return model.InviteTable{}, time.Time{}, model.ErrAlreadyInvited
+	case h.busyLocked(to, room):
+		return model.InviteTable{}, time.Time{}, model.ErrFriendBusy
+	case room.Occupancy() >= room.maxUsers:
+		return model.InviteTable{}, time.Time{}, model.ErrTableFull
+	}
+
+	room.Invite(to, inviteTTL)
+	return inviteTable(room), time.Now().Add(inviteTTL), nil
+}
+
+func (h *Hub) Decline(roomID, playerID, username string) bool {
+	room, ok := h.GetRoom(roomID)
+	if !ok || !room.Uninvite(playerID) {
+		return false
+	}
+	if data, err := NewMessage(TypeInviteDeclined, InviteDeclinedPayload{Username: username}); err == nil {
+		room.Announce(data)
+	}
+	return true
+}
+
+func (h *Hub) SendInvite(to uuid.UUID, inv model.TableInvite) {
+	data, err := NewMessage(TypeTableInvite, TableInvitePayload{
+		TableID:    inv.Table.ID,
+		FromID:     inv.FromID.String(),
+		FromName:   inv.FromName,
+		Mode:       inv.Table.Mode,
+		Deck:       inv.Table.Deck,
+		MaxPlayers: inv.Table.MaxPlayers,
+		Stake:      inv.Table.Stake,
+		ExpiresAt:  inv.ExpiresAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		log.Printf("[Hub] table_invite: %v", err)
+		return
+	}
+	h.lobby.Notify(to.String(), data)
+}
