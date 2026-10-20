@@ -24,6 +24,7 @@ type Server struct {
 	walletHandler *WalletHandler
 	gameHandler   *GameHandler
 	friendHandler *FriendHandler
+	playerHandler *PlayerHandler
 	tokens        TokenValidator
 }
 
@@ -34,6 +35,7 @@ type Handlers struct {
 	Wallet *WalletHandler
 	Game   *GameHandler
 	Friend *FriendHandler
+	Player *PlayerHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -46,6 +48,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		walletHandler: h.Wallet,
 		gameHandler:   h.Game,
 		friendHandler: h.Friend,
+		playerHandler: h.Player,
 		tokens:        tokens,
 	}
 
@@ -144,6 +147,10 @@ func (s *Server) setupRoutes() {
 			r.Post("/requests/{id}/accept", s.friendHandler.Accept)
 			r.Delete("/{id}", s.friendHandler.Remove)
 		})
+	}
+
+	if s.playerHandler != nil {
+		s.router.With(AuthMiddleware(s.tokens)).Get("/api/v1/players/{id}", s.playerHandler.Profile)
 	}
 }
 

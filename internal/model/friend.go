@@ -43,3 +43,23 @@ type FriendsOverview struct {
 	Incoming []FriendLink
 	Outgoing []FriendLink
 }
+
+type Relation string
+
+const (
+	RelationSelf     Relation = "self"
+	RelationFriend   Relation = "friend"
+	RelationIncoming Relation = "incoming"
+	RelationOutgoing Relation = "outgoing"
+	RelationNone     Relation = "none"
+)
+
+type PlayerProfile struct {
+	ID        uuid.UUID
+	Username  string
+	CreatedAt time.Time
+	Stats     UserStats
+	Relation  Relation
+	Presence  Presence
+	Games     []GameHistoryEntry
+}

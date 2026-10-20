@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"bito/internal/model"
+
+	"github.com/google/uuid"
 )
 
 func TestFriends_RequestAcceptRemove(t *testing.T) {
@@ -142,4 +144,32 @@ func TestFriends_DatabaseRejectsBrokenRows(t *testing.T) {
 			t.Errorf("%s: insert succeeded, want a constraint violation", name)
 		}
 	}
+}
+
+func TestFriends_BetweenFromBothSides(t *testing.T) {
+	pool := setupTestDB(t)
+	repo := NewFriendRepository(pool)
+	ctx := context.Background()
+	ids := createUsers(t, pool, 2)
+	alice, bob := ids[0], ids[1]
+
+	check := func(me, other uuid.UUID, want model.Relation) {
+		t.Helper()
+		got, err := repo.Between(ctx, me, other)
+		if err != nil || got != want {
+			t.Fatalf("between = %q, %v; want %q", got, err, want)
+		}
+	}
+
+	check(alice, bob, model.RelationNone)
+	if _, err := repo.Request(ctx, alice, bob); err != nil {
+		t.Fatal(err)
+	}
+	check(alice, bob, model.RelationOutgoing)
+	check(bob, alice, model.RelationIncoming)
+	if err := repo.Accept(ctx, bob, alice); err != nil {
+		t.Fatal(err)
+	}
+	check(alice, bob, model.RelationFriend)
+	check(bob, alice, model.RelationFriend)
 }

@@ -114,3 +114,23 @@ func (r *FriendRepository) List(ctx context.Context, me uuid.UUID) ([]model.Frie
 	}
 	return links, nil
 }
+
+func (r *FriendRepository) Between(ctx context.Context, me, other uuid.UUID) (model.Relation, error) {
+	low, high := orderedPair(me, other)
+	const pairSQL = `SELECT status, requested_by = $3 FROM friendships WHERE user_low = $1 AND user_high = $2`
+	var state model.FriendState
+	var mine bool
+	err := r.pool.QueryRow(ctx, pairSQL, low, high, me).Scan(&state, &mine)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return model.RelationNone, nil
+	case err != nil:
+		return "", fmt.Errorf("friend repo: between: %w", err)
+	case state == model.FriendAccepted:
+		return model.RelationFriend, nil
+	case mine:
+		return model.RelationOutgoing, nil
+	default:
+		return model.RelationIncoming, nil
+	}
+}
