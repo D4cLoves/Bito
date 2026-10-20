@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { PhUser } from '@phosphor-icons/vue'
 import StakeChip from './StakeChip.vue'
-import { avatarHue, avatarInitial } from '../../composables/avatar'
+import { avatarTone, avatarInitial } from '../../composables/avatar'
 
 const props = defineProps<{ seats: number; taken: number; stake: number; me?: string; muted?: boolean }>()
 
@@ -26,7 +26,7 @@ const list = computed(() =>
       :key="i"
       class="seat"
       :class="{ taken: s.taken, me: s.me }"
-      :style="{ left: `${s.x}%`, top: `${s.y}%`, '--h': me ? avatarHue(me) : 0 }"
+      :style="{ left: `${s.x}%`, top: `${s.y}%`, '--tone': me ? avatarTone(me) : undefined }"
     >
       <template v-if="s.me && me">{{ avatarInitial(me) }}</template>
       <PhUser v-else-if="s.taken" :size="16" weight="fill" />
@@ -103,7 +103,7 @@ const list = computed(() =>
 }
 
 .seat.me {
-  background: hsl(var(--h) 46% 50%);
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
   box-shadow:
     0 0 0 2px var(--color-paper-raised),
     0 0 0 4px var(--color-gold);

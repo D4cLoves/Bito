@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { PhUserPlus, PhUserMinus, PhPaperPlaneTilt, PhCheck, PhX, PhMagnifyingGlass } from '@phosphor-icons/vue'
 import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
-import { avatarHue, avatarInitial } from '../../composables/avatar'
+import { avatarTone, avatarInitial } from '../../composables/avatar'
 
 const props = defineProps<{
   friends: Friend[]
@@ -118,7 +118,7 @@ function statusText(f: Friend) {
       <h3 id="requests-title">Заявки <span>{{ requests.length }}</span></h3>
       <ul class="rows requests">
         <li v-for="r in requests" :key="r.id" class="row">
-          <span class="avatar request" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
+          <span class="avatar request" :style="{ '--tone': avatarTone(r.username) }">{{ avatarInitial(r.username) }}</span>
           <button type="button" class="who open" :aria-label="`Профиль ${r.username}`" @click="$emit('open', r.id)">
             <b>{{ r.username }}</b>
             <small>хочет дружить</small>
@@ -137,7 +137,7 @@ function statusText(f: Friend) {
       <h3 id="list-title">{{ filter === 'online' ? 'В сети' : 'Все друзья' }}</h3>
       <ul v-if="shown.length" class="rows">
         <li v-for="f in shown" :key="f.id" class="row friend" :class="f.status">
-          <span class="avatar" :style="{ '--h': avatarHue(f.username) }">
+          <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">
             {{ avatarInitial(f.username) }}
             <i v-if="f.status !== 'offline'" class="dot" aria-hidden="true"></i>
           </span>
@@ -173,7 +173,7 @@ function statusText(f: Friend) {
       <h3 id="outgoing-title">Отправленные <span>{{ outgoing.length }}</span></h3>
       <ul class="rows">
         <li v-for="r in outgoing" :key="r.id" class="row friend offline">
-          <span class="avatar" :style="{ '--h': avatarHue(r.username) }">{{ avatarInitial(r.username) }}</span>
+          <span class="avatar" :style="{ '--tone': avatarTone(r.username) }">{{ avatarInitial(r.username) }}</span>
           <button type="button" class="who open" :aria-label="`Профиль ${r.username}`" @click="$emit('open', r.id)">
             <b>{{ r.username }}</b>
             <small>ждёт ответа</small>
@@ -357,7 +357,7 @@ h3 span {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: hsl(var(--h) 46% 50%);
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
   color: #fff;
   font-size: 15px;
   font-weight: 500;

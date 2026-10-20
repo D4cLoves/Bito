@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { PhArrowCounterClockwise, PhCrown, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
-import { avatarHue, avatarInitial } from '../../composables/avatar'
+import { avatarTone, avatarInitial } from '../../composables/avatar'
 import type { Profile } from '../../types/user'
 import type { GameHistoryEntry, GameOutcome } from '../../types/social'
 
@@ -82,7 +82,7 @@ function ago(iso: string) {
   <section class="player" aria-label="Карточка игрока">
     <header class="who">
       <button type="button" class="me" :aria-label="`Профиль: ${username}`" @click="$emit('profile')">
-        <span class="avatar" :style="{ '--h': avatarHue(username) }">{{ avatarInitial(username) }}</span>
+        <span class="avatar" :style="{ '--tone': avatarTone(username) }">{{ avatarInitial(username) }}</span>
         <i class="suit" aria-hidden="true">♠</i>
       </button>
       <button type="button" class="id" @click="$emit('profile')">
@@ -204,7 +204,7 @@ button {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: hsl(var(--h) 46% 50%);
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--color-felt-deep) 70%, transparent),
     0 0 0 5px var(--color-gold),

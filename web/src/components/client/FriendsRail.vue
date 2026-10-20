@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { PhUsersThree, PhUserPlus, PhPlus } from '@phosphor-icons/vue'
 import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
-import { avatarHue, avatarInitial } from '../../composables/avatar'
+import { avatarTone, avatarInitial } from '../../composables/avatar'
 
 const props = defineProps<{ username: string; friends: Friend[]; requests: FriendRequest[] }>()
 defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'add'): void; (e: 'open', id: string): void }>()
@@ -17,7 +17,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
 <template>
   <aside class="friends-rail" aria-label="Друзья">
     <button type="button" class="me" :title="`${username} — профиль`" :aria-label="`Профиль: ${username}`" @click="$emit('profile')">
-      <span class="avatar" :style="{ '--h': avatarHue(username) }">{{ avatarInitial(username) }}</span>
+      <span class="avatar" :style="{ '--tone': avatarTone(username) }">{{ avatarInitial(username) }}</span>
     </button>
 
     <button type="button" class="friends-btn" title="Друзья" :aria-label="`Друзья, ${online} в сети`" @click="$emit('friends')">
@@ -34,7 +34,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
           :aria-label="`${r.username} хочет дружить`"
           @click="$emit('friends')"
         >
-          <span class="avatar" :style="{ '--h': avatarHue(r.username) }">
+          <span class="avatar" :style="{ '--tone': avatarTone(r.username) }">
             {{ avatarInitial(r.username) }}
             <i class="plus" aria-hidden="true"><PhPlus :size="10" weight="bold" /></i>
           </span>
@@ -50,7 +50,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
           :aria-label="`${f.username}, ${STATUS[f.status]}`"
           @click="$emit('open', f.id)"
         >
-          <span class="avatar" :style="{ '--h': avatarHue(f.username) }">
+          <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">
             {{ avatarInitial(f.username) }}
             <i v-if="f.status === 'online'" class="dot" aria-hidden="true"></i>
           </span>
@@ -97,7 +97,7 @@ button {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: hsl(var(--h) 46% 50%);
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
   color: #fff;
   font-size: 16px;
   font-weight: 500;
