@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PhArrowCounterClockwise, PhCrown, PhFire } from '@phosphor-icons/vue'
+import { PhArrowCounterClockwise, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
 import { avatarTone, avatarInitial } from '../../composables/avatar'
@@ -62,6 +62,22 @@ function metaOf(g: GameHistoryEntry) {
   return `${mode} · ${g.deck} карт · ${who} · ${ago(g.finishedAt)}`
 }
 
+function indexOf(g: GameHistoryEntry) {
+  const o = outcomeOf(g)
+  if (o === 'lose') return 'Д'
+  if (o === 'draw') return '='
+  return String(isDuel(g) ? 1 : g.place)
+}
+
+const suitOf = (g: GameHistoryEntry) => (g.mode === 'perevodnoy' ? '♥' : '♠')
+
+function shortPayout(g: GameHistoryEntry) {
+  const abs = Math.abs(g.payout)
+  const sign = g.payout > 0 ? '+' : g.payout < 0 ? '−' : ''
+  if (abs < 1000) return `${sign}${abs}`
+  return `${sign}${(abs / 1000).toFixed(1).replace('.0', '').replace('.', ',')}к`
+}
+
 function payoutOf(g: GameHistoryEntry) {
   if (g.payout > 0) return `+${g.payout.toLocaleString('ru-RU')}`
   if (g.payout < 0) return `−${Math.abs(g.payout).toLocaleString('ru-RU')}`
@@ -110,16 +126,16 @@ function ago(iso: string) {
         v-for="g in recent"
         :key="g.id"
         class="mini"
-        :class="outcomeOf(g)"
+        :class="[outcomeOf(g), { first: isFirst(g) }]"
         :title="`${titleOf(g)} ${payoutOf(g)} · ${metaOf(g)}`"
         :aria-label="`${titleOf(g)}, ${payoutOf(g)}, ${metaOf(g)}`"
       >
-        <template v-if="outcomeOf(g) !== 'lose'">
-          <span class="corner" aria-hidden="true">{{ outcomeOf(g) === 'draw' ? '=' : isFirst(g) ? '♠' : g.place }}</span>
-          <PhCrown v-if="isFirst(g)" class="pip" :size="20" weight="fill" aria-hidden="true" />
-          <span v-else class="pip glyph" aria-hidden="true">{{ outcomeOf(g) === 'draw' ? '♦' : '♣' }}</span>
-        </template>
-        <span class="sum" aria-hidden="true">{{ payoutOf(g) }}</span>
+        <span class="index" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">
+          <b>{{ indexOf(g) }}</b>
+          <i>{{ suitOf(g) }}</i>
+        </span>
+        <span class="pip" :class="{ red: g.mode === 'perevodnoy' }" aria-hidden="true">{{ suitOf(g) }}</span>
+        <span class="sum" aria-hidden="true">{{ shortPayout(g) }}</span>
       </li>
       <li v-for="i in empty" :key="`e${i}`" class="mini slot" aria-hidden="true"></li>
     </ol>
@@ -334,50 +350,72 @@ button {
 
 .mini {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
   aspect-ratio: 5 / 7;
-  border-radius: 8px;
-  background: linear-gradient(160deg, var(--color-paper-raised), var(--color-paper-sunken));
+  border-radius: 9px;
+  background: var(--color-paper-raised);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.7) inset,
-    0 8px 14px -8px rgba(0, 0, 0, 0.55);
+    inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-paper-raised) 50%, #fff),
+    0 10px 16px -10px rgba(0, 0, 0, 0.6);
   color: var(--color-ink);
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mini:not(.slot):hover {
-  transform: translateY(-3px) rotate(-2deg);
+  transform: translateY(-4px) rotate(-2deg);
 }
 
-.mini .corner {
+.mini .index {
   position: absolute;
-  top: 4px;
-  left: 5px;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-family: var(--font-card);
-  font-size: 11px;
   line-height: 1;
+}
+
+.mini .index b {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.mini .index i {
+  margin-top: 1px;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.mini .index.red i {
+  color: var(--color-red);
 }
 
 .mini .pip {
-  margin-top: -8px;
-  color: var(--color-gold);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -62%);
+  font-family: var(--font-card);
+  font-size: 22px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--color-ink) 16%, transparent);
 }
 
-.mini .glyph {
-  font-size: 20px;
-  line-height: 1;
-  color: var(--color-ink);
+.mini .pip.red {
+  color: color-mix(in srgb, var(--color-red) 30%, transparent);
 }
 
 .mini .sum {
-  position: absolute;
-  bottom: 4px;
-  left: 0;
-  right: 0;
-  font-size: 10px;
+  position: relative;
+  font-size: 11px;
   font-weight: 600;
-  text-align: center;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -385,27 +423,33 @@ button {
   color: var(--color-green);
 }
 
-.mini.draw {
-  opacity: 0.75;
+.mini.first {
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-gold),
+    inset 0 0 0 4px var(--color-paper-raised),
+    inset 0 0 0 5px color-mix(in srgb, var(--color-gold) 45%, transparent),
+    0 10px 16px -10px rgba(0, 0, 0, 0.6);
 }
 
-.mini.draw .sum {
+.mini.first .index b {
+  color: var(--color-gold-ink);
+}
+
+.mini.draw .sum,
+.mini.draw .index b {
   color: var(--color-ink-faint);
 }
 
 .mini.lose {
-  background:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 7px),
-    linear-gradient(160deg, var(--color-red), var(--color-red-deep));
+  background: color-mix(in srgb, var(--color-red) 14%, var(--color-paper-raised));
   box-shadow:
-    inset 0 0 0 3px rgba(255, 255, 255, 0.12),
-    0 8px 14px -8px rgba(0, 0, 0, 0.55);
+    inset 0 0 0 1px color-mix(in srgb, var(--color-red) 40%, transparent),
+    0 10px 16px -10px rgba(0, 0, 0, 0.6);
 }
 
-.mini.lose .sum {
-  bottom: auto;
-  color: var(--color-on-red);
-  font-size: 11px;
+.mini.lose .sum,
+.mini.lose .index b {
+  color: var(--color-red);
 }
 
 .mini.slot {
