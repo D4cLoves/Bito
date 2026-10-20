@@ -658,7 +658,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="hand" :class="{ crowded: hand.length > 10 }">
+        <div class="hand" :class="{ crowded: hand.length > 10 }" data-fly-zone="hand">
           <TransitionGroup name="hand-slot">
             <div
               v-for="(card, i) in hand"

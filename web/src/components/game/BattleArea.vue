@@ -52,7 +52,7 @@ function toss(key: string, defend = false) {
     </div>
 
     <div class="center">
-      <TransitionGroup tag="div" class="pairs" name="pair">
+      <TransitionGroup tag="div" class="pairs" name="pair" data-fly-zone="table">
         <div
           v-for="pair in pairs"
           :key="cardKey(pair.attack)"

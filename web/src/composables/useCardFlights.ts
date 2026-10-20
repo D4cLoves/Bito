@@ -2,6 +2,7 @@ import { nextTick, onUnmounted, ref, watch, type Ref, type ShallowRef } from 'vu
 import { cardKey, type Card, type GameState } from '../types/game'
 
 export type FlightKind = 'throw' | 'deal' | 'sweep' | 'take'
+type FlyZone = 'hand' | 'table'
 
 export interface Box {
   x: number
@@ -70,8 +71,8 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     return root.value?.querySelector<HTMLElement>(selector) ?? null
   }
 
-  function cardEl(key: string) {
-    return find(`[data-fly="${CSS.escape(key)}"]`)
+  function cardEl(zone: FlyZone, key: string) {
+    return find(`[data-fly-zone="${zone}"] [data-fly="${CSS.escape(key)}"]`)
   }
 
   function seatBox(id: string | undefined, w: number): Box | null {
@@ -145,7 +146,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
         if (!card) continue
         const key = cardKey(card)
         if (prevTableKeys.has(key)) continue
-        const target = cardEl(key)
+        const target = cardEl('table', key)
         if (!target) continue
         const to = boxOf(target)
         let from: Box | null = handBoxes.get(key) ?? null
@@ -194,7 +195,7 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     for (const card of next.myHand ?? []) {
       const key = cardKey(card)
       if (prevHand.has(key)) continue
-      const target = cardEl(key)
+      const target = cardEl('hand', key)
       if (!target) continue
       const to = boxOf(target)
       const fromTable = tableBoxes.get(key)
@@ -273,11 +274,11 @@ export function useCardFlights(root: Ref<HTMLElement | null>, state: ShallowRef<
     const handBoxes = new Map<string, Box>()
     const tableBoxes = new Map<string, Box>()
     for (const key of prevHand) {
-      const el = cardEl(key)
+      const el = cardEl('hand', key)
       if (el) handBoxes.set(key, boxOf(el))
     }
     for (const card of prevTable) {
-      const el = cardEl(cardKey(card))
+      const el = cardEl('table', cardKey(card))
       if (el) tableBoxes.set(cardKey(card), boxOf(el))
     }
     nextTick(() => {
