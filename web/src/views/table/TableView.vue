@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
-import { useMediaQuery } from '@vueuse/core'
+import { useElementSize, useMediaQuery } from '@vueuse/core'
 import { PhX } from '@phosphor-icons/vue'
 import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import ToastStack from '../../components/app/ToastStack.vue'
@@ -48,6 +48,8 @@ const settings = useSettingsStore()
 const sound = useGameSound()
 const toast = useToast()
 const wide = useMediaQuery('(min-width: 1100px)')
+const phone = useMediaQuery('(max-width: 767px)')
+const short = useMediaQuery('(max-height: 820px) and (min-width: 768px)')
 
 const roomId = String(route.params.id)
 const linkKey = typeof route.query.key === 'string' ? route.query.key : ''
@@ -342,13 +344,42 @@ function sortHand(cards: Card[]): Card[] {
   })
 }
 
-function fanStyle(i: number, n: number) {
-  const mid = (n - 1) / 2
-  const spread = Math.min(5, 40 / Math.max(n, 1))
-  const angle = (i - mid) * spread
-  const lift = Math.abs(i - mid) * Math.abs(i - mid) * 0.9
-  return { transform: `rotate(${angle}deg) translateY(${lift}px)` }
+const FAN_MAX_LIFT = 4
+
+function fanAngle(i: number, n: number) {
+  return (i - (n - 1) / 2) * Math.min(5, 40 / Math.max(n, 1))
 }
+
+function fanLift(i: number, n: number) {
+  const d = Math.min(Math.abs(i - (n - 1) / 2), FAN_MAX_LIFT)
+  return d * d * 0.9
+}
+
+function fanStyle(i: number, n: number) {
+  return { transform: `rotate(${fanAngle(i, n)}deg) translateY(${fanLift(i, n)}px)` }
+}
+
+const handEl = ref<HTMLElement | null>(null)
+const { width: handWidth } = useElementSize(handEl)
+const handCardW = computed(() => (phone.value ? 66 : short.value ? 84 : wide.value ? 104 : 88))
+
+const handOverlap = computed(() => {
+  const n = hand.value.length
+  const w = handCardW.value
+  const roomy = phone.value ? 16 : 14
+  if (n < 2 || !handWidth.value) return roomy
+  const step = (handWidth.value - 24 - w * 1.6) / (n - 1)
+  return Math.min(Math.max(roomy, (w - step) / 2), (w - 18) / 2)
+})
+
+const handStyle = computed(() => {
+  const n = hand.value.length
+  const w = handCardW.value
+  const edge = Math.max(0, n - 1)
+  const angle = (Math.abs(fanAngle(edge, n)) * Math.PI) / 180
+  const drop = (w / 2) * Math.sin(angle) + fanLift(edge, n)
+  return { paddingBottom: `${Math.ceil(10 + drop)}px` }
+})
 
 function lift(card: Card) {
   launching.value = cardKey(card)
@@ -788,14 +819,14 @@ onUnmounted(() => {
         </div>
 
         <p v-if="watching" class="watch-note">Вы смотрите партию: карты игроков на руках не видны, ходить и писать в чат нельзя.</p>
-        <div v-else class="hand" :class="{ crowded: hand.length > 10 }" data-fly-zone="hand">
+        <div v-else ref="handEl" class="hand" :style="handStyle" data-fly-zone="hand">
           <TransitionGroup name="hand-slot">
             <div
               v-for="(card, i) in hand"
               :key="cardKey(card)"
               class="hand-slot"
               :class="{ launching: launching === cardKey(card) }"
-              :style="{ zIndex: i }"
+              :style="{ zIndex: i, margin: `0 -${handOverlap}px` }"
             >
               <div class="fan" :style="fanStyle(i, hand.length)">
                 <GameCard
@@ -985,6 +1016,7 @@ onUnmounted(() => {
   inset: 18% 9% 12%;
   z-index: 2;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 
@@ -1336,22 +1368,19 @@ onUnmounted(() => {
   justify-content: center;
   align-items: flex-end;
   min-height: 184px;
-  padding: 30px 8px 14px;
+  padding: 30px 12px 14px;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
 }
 
-.hand-slot {
-  margin: 0 -14px;
+.hand::-webkit-scrollbar {
+  display: none;
 }
 
 .fan {
   transform-origin: 50% 160%;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hand.crowded .hand-slot {
-  margin: 0 -26px;
 }
 
 .hand-slot:hover {
@@ -1832,12 +1861,28 @@ onUnmounted(() => {
     padding-top: 22px;
   }
 
-  .hand-slot {
-    margin: 0 -16px;
+  .hand-slot :deep(.game-card) {
+    --w: 66px;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 768px) {
+  .arena {
+    padding-top: 62px;
+    padding-bottom: 14px;
+  }
+
+  .me-seat {
+    zoom: 0.8;
+  }
+
+  .hand {
+    min-height: 146px;
+    padding-top: 22px;
   }
 
   .hand-slot :deep(.game-card) {
-    --w: 66px;
+    --w: 84px;
   }
 }
 </style>

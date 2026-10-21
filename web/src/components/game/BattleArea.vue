@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useElementSize, useMediaQuery } from '@vueuse/core'
 import GameCard from './GameCard.vue'
 import { cardKey, getSuitSymbol, type Card, type CardPair } from '../../types/game'
 
@@ -14,6 +15,51 @@ const props = defineProps<{
 }>()
 
 defineEmits<{ (e: 'pair', pair: CardPair): void }>()
+
+const PAIR_W = 1.24
+const PAIR_H = 1.66
+const GAP_X = 18
+const GAP_Y = 12
+const MIN_CARD = 40
+const MAX_CARD = 92
+const PILE_W = 124
+const PILE_H = 124
+const MIN_CENTER = 170
+
+const phone = useMediaQuery('(max-width: 767px)')
+const battleEl = ref<HTMLElement | null>(null)
+const centerEl = ref<HTMLElement | null>(null)
+const { width: battleW, height: battleH } = useElementSize(battleEl)
+const { width: centerW, height: centerH } = useElementSize(centerEl)
+
+const pileScale = computed(() => {
+  if (phone.value || !battleW.value || !battleH.value) return 1
+  const byWidth = (battleW.value - MIN_CENTER - 24) / (2 * PILE_W)
+  const byHeight = battleH.value / PILE_H
+  return Math.max(0.55, Math.min(1, byWidth, byHeight))
+})
+
+const layout = computed(() => {
+  const n = Math.max(props.pairs.length, 1)
+  if (!centerW.value || !centerH.value) return { card: MIN_CARD, cols: n }
+  let best = { card: MIN_CARD, cols: n }
+  for (let rows = 1; rows <= n; rows++) {
+    const cols = Math.ceil(n / rows)
+    const byWidth = (centerW.value - (cols - 1) * GAP_X) / (cols * PAIR_W)
+    const byHeight = (centerH.value - (rows - 1) * GAP_Y) / (rows * PAIR_H)
+    const card = Math.min(byWidth, byHeight, MAX_CARD)
+    if (card > best.card) best = { card, cols }
+  }
+  return { card: Math.floor(best.card), cols: best.cols }
+})
+
+const pairsStyle = computed(() => {
+  const { card, cols } = layout.value
+  return {
+    '--card': `${card}px`,
+    maxWidth: `${Math.ceil(cols * card * PAIR_W + (cols - 1) * GAP_X) + 1}px`,
+  }
+})
 
 const deckBacks = computed(() => (props.cardsLeft > 1 ? Math.min(5, Math.ceil((props.cardsLeft - 1) / 6)) : 0))
 const redTrump = computed(() => props.trumpSuit === 2 || props.trumpSuit === 3)
@@ -34,7 +80,7 @@ function toss(key: string, defend = false) {
 </script>
 
 <template>
-  <div class="battle">
+  <div ref="battleEl" class="battle" :style="{ '--pile': pileScale }">
     <div class="pile deck">
       <div class="deck-stack" data-fly-deck>
         <GameCard v-if="cardsLeft > 0" :card="trumpCard" size="sm" class="trump-card" />
@@ -51,8 +97,8 @@ function toss(key: string, defend = false) {
       <span class="label">{{ cardsLeft ? `${cardsLeft} в колоде` : 'колода пуста' }}</span>
     </div>
 
-    <div class="center">
-      <TransitionGroup tag="div" class="pairs" name="pair" data-fly-zone="table">
+    <div ref="centerEl" class="center">
+      <TransitionGroup tag="div" class="pairs" name="pair" data-fly-zone="table" :style="pairsStyle">
         <div
           v-for="pair in pairs"
           :key="cardKey(pair.attack)"
@@ -87,7 +133,8 @@ function toss(key: string, defend = false) {
 <style scoped>
 .battle {
   display: grid;
-  grid-template-columns: 124px minmax(0, 1fr) 124px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -99,6 +146,8 @@ function toss(key: string, defend = false) {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: 124px;
+  zoom: var(--pile, 1);
 }
 
 .deck-stack,
@@ -167,23 +216,28 @@ function toss(key: string, defend = false) {
 .center {
   display: grid;
   place-items: center;
+  align-self: stretch;
   min-width: 0;
-  min-height: 180px;
+  min-height: 0;
 }
 
 .pairs {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 14px 22px;
+  gap: 12px 18px;
 }
 
 .pair {
   position: relative;
-  width: 112px;
-  height: 160px;
+  width: calc(var(--card) * 1.24);
+  height: calc(var(--card) * 1.66);
   border-radius: 14px;
   transition: box-shadow 0.2s;
+}
+
+.pair :deep(.game-card) {
+  --w: var(--card);
 }
 
 .pair.target {
@@ -227,8 +281,8 @@ function toss(key: string, defend = false) {
 
 .defend-card {
   position: absolute;
-  left: 22px;
-  top: 22px;
+  left: calc(var(--card) * 0.24);
+  top: calc(var(--card) * 0.24);
   transform: var(--toss);
 }
 
@@ -242,60 +296,30 @@ function toss(key: string, defend = false) {
   text-align: center;
 }
 
-@media (max-width: 1100px) {
-  .pair {
-    width: 90px;
-    height: 128px;
-  }
-
-  .pair :deep(.game-card) {
-    --w: 76px;
-  }
-
-  .defend-card {
-    left: 15px;
-    top: 15px;
-  }
-}
-
 @media (max-width: 767px) {
   .battle {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    justify-content: space-between;
     gap: 8px;
   }
 
   .center {
     grid-column: 1 / -1;
     grid-row: 2;
-    min-height: 140px;
   }
 
   .pile {
-    flex-direction: row;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .label {
-    min-width: 0;
-    white-space: normal;
-    line-height: 1.25;
-  }
-
-  .discard {
-    flex-direction: row-reverse;
-    justify-content: flex-start;
+    gap: 6px;
+    width: auto;
   }
 
   .deck-stack {
-    flex: none;
     width: 116px;
     height: 84px;
   }
 
   .discard-stack {
-    flex: none;
     width: 72px;
     height: 84px;
   }
@@ -303,25 +327,7 @@ function toss(key: string, defend = false) {
   .discard-stack.empty {
     width: 52px;
     height: 72px;
-    margin: 0;
-  }
-
-  .pair {
-    width: 72px;
-    height: 102px;
-  }
-
-  .pair :deep(.game-card) {
-    --w: 60px;
-  }
-
-  .defend-card {
-    left: 12px;
-    top: 12px;
-  }
-
-  .pairs {
-    gap: 10px 14px;
+    margin: 6px 10px;
   }
 }
 </style>
