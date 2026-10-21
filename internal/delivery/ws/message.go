@@ -13,6 +13,8 @@ const (
 	TypePass      = "pass"
 	TypeSurrender = "surrender"
 	TypeChat      = "chat"
+	TypeRematch   = "rematch"
+	TypeRematchNo = "rematch_decline"
 )
 
 const (
@@ -29,6 +31,12 @@ const (
 const (
 	TypeTableInvite    = "table_invite"
 	TypeInviteDeclined = "invite_declined"
+)
+
+const (
+	TypeRematchState     = "rematch_state"
+	TypeRematchCancelled = "rematch_cancelled"
+	TypeRematchStart     = "rematch_start"
 )
 
 type Message[T any] struct {

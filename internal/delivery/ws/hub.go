@@ -80,6 +80,7 @@ func (h *Hub) createRoomLocked(s RoomSettings) *Room {
 	roomID := uuid.NewString()
 
 	room := NewRoom(roomID, s, h.bank)
+	room.rematch = h.rematchTable
 	h.rooms[roomID] = room
 
 	go func() {
@@ -480,4 +481,20 @@ func (h *Hub) SendInvite(to uuid.UUID, inv model.TableInvite) {
 		return
 	}
 	h.lobby.Notify(to.String(), data)
+}
+
+func (h *Hub) rematchTable(s RoomSettings, players []string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, id := range players {
+		if h.busyLocked(id, nil) {
+			return "", ErrSeatedElsewhere
+		}
+	}
+	room := h.createRoomLocked(s)
+	for _, id := range players {
+		room.Reserve(id)
+	}
+	return room.id, nil
 }

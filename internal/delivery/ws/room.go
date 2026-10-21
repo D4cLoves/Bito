@@ -87,6 +87,9 @@ type Room struct {
 	disconnectTimers  map[string]*time.Timer
 	lastChatAt        map[string]time.Time
 	settleRetryDelay  time.Duration
+	rematch           rematchStarter
+	rematchVotes      map[string]bool
+	rematchOver       bool
 	mu                sync.RWMutex
 	closed            bool
 	createdBy         string
@@ -420,6 +423,9 @@ func (r *Room) handleUnregister(client *Client) {
 		if len(r.clients) == 0 {
 			r.Close()
 		}
+		if r.game != nil {
+			r.checkRematch()
+		}
 		return
 	}
 
@@ -598,6 +604,10 @@ func (r *Room) handleIncoming(msg IncomingMessage) {
 
 	if raw.Type == TypeChat {
 		r.handleChat(msg.Client, msg.Data)
+		return
+	}
+	if raw.Type == TypeRematch || raw.Type == TypeRematchNo {
+		r.handleRematch(msg.Client, raw.Type == TypeRematch)
 		return
 	}
 
