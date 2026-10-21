@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { PhX } from '@phosphor-icons/vue'
+import AvatarGlyph from './AvatarGlyph.vue'
 import { avatarTone } from '../../composables/avatar'
 import type { TableInvite } from '../../types/game'
 

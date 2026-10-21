@@ -260,7 +260,7 @@ function toss(key: string, defend = false) {
 
 @media (max-width: 767px) {
   .battle {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: auto 1fr;
     gap: 8px;
   }
@@ -274,6 +274,13 @@ function toss(key: string, defend = false) {
   .pile {
     flex-direction: row;
     gap: 8px;
+    min-width: 0;
+  }
+
+  .label {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
   }
 
   .discard {
@@ -289,6 +296,7 @@ function toss(key: string, defend = false) {
 
   .discard-stack {
     flex: none;
+    width: 72px;
     height: 84px;
   }
 

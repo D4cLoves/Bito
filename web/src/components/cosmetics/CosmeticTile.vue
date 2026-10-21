@@ -32,6 +32,7 @@ defineEmits<{ (e: 'pick'): void }>()
 
 <style scoped>
 .tile {
+  container: tile / inline-size;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -116,6 +117,19 @@ defineEmits<{ (e: 'pick'): void }>()
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px 14px;
+}
+
+@container tile (max-width: 230px) {
+  .foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px 12px;
+  }
+
+  .foot > :slotted(*) {
+    width: 100%;
+  }
 }
 
 .meta {

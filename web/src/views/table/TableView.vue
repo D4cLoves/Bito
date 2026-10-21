@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { useMediaQuery } from '@vueuse/core'
 import { PhX } from '@phosphor-icons/vue'
+import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import ToastStack from '../../components/app/ToastStack.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ChatBox from '../../components/client/ChatBox.vue'
@@ -24,6 +24,7 @@ import { useGameSound } from '../../composables/useGameSound'
 import { useTurnAlert } from '../../composables/useTurnAlert'
 import { useLoungeMusic } from '../../composables/useLoungeMusic'
 import { useToast } from '../../composables/useToast'
+import { useThemeColor } from '../../composables/useThemeColor'
 import { useFriends } from '../../composables/useFriends'
 import { avatarTone } from '../../composables/avatar'
 import { MIN_STAKE } from '../../constants/economy'
@@ -56,6 +57,7 @@ const { state, gameOver, status, offline, lastError, chat, rematch, rematchCance
 
 const me = computed(() => auth.user?.id ?? '')
 const gameEl = ref<HTMLElement | null>(null)
+useThemeColor(gameEl, () => settings.theme)
 const { flights, reveal: flightReveal, done: flightDone, enabled: flightsEnabled } = useCardFlights(gameEl, state, me)
 const launching = ref<string | null>(null)
 const landedAt: Partial<Record<FlightKind, number>> = {}
@@ -1473,7 +1475,20 @@ onUnmounted(() => {
   border-radius: 999px;
   font: inherit;
   font-size: 15px;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .dialog-actions {
+    flex-wrap: wrap;
+  }
+
+  .dialog-actions .btn {
+    flex: 1 1 auto;
+    padding: 0 14px;
+    font-size: 14px;
+  }
 }
 
 .btn.ghost {

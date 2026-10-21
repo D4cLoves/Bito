@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { PhUserPlus, PhUserMinus, PhPaperPlaneTilt, PhCheck, PhX, PhMagnifyingGlass } from '@phosphor-icons/vue'
+import AvatarGlyph from './AvatarGlyph.vue'
 import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
 import { avatarTone } from '../../composables/avatar'
 

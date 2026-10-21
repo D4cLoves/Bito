@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { motion } from 'motion-v'
 import { PhX } from '@phosphor-icons/vue'
-import { useSmoothScroll } from '../../composables/useSmoothScroll'
 
 const props = withDefaults(defineProps<{ title: string; side?: 'left' | 'right'; width?: number }>(), {
   side: 'left',
@@ -10,10 +9,6 @@ const props = withDefaults(defineProps<{ title: string; side?: 'left' | 'right';
 })
 
 const emit = defineEmits<{ (e: 'close'): void }>()
-
-const bodyEl = ref<HTMLElement | null>(null)
-
-useSmoothScroll(bodyEl)
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close')
@@ -53,7 +48,7 @@ const offset = props.side === 'left' ? -60 : 60
           <PhX :size="20" />
         </button>
       </header>
-      <div ref="bodyEl" class="sheet-body">
+      <div class="sheet-body">
         <slot />
       </div>
     </motion.section>
@@ -103,7 +98,10 @@ const offset = props.side === 'left' ? -60 : 60
 h2 {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
   margin: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: var(--font-card);
   font-size: 30px;
   font-style: italic;
@@ -133,20 +131,24 @@ h2 {
   min-height: 0;
   padding: 8px 28px 32px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 767px) {
-  .overlay.left {
+  .overlay.left,
+  .overlay.right {
     left: 0;
     bottom: var(--rail-h, 0px);
   }
 
   .sheet-head {
-    padding: 16px 16px 10px;
+    gap: 10px;
+    padding: 14px 16px 10px;
   }
 
   h2 {
-    font-size: 26px;
+    font-size: 24px;
   }
 
   .sheet-body {

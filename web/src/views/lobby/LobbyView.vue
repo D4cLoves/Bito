@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { PhEye, PhPlus } from '@phosphor-icons/vue'
@@ -10,18 +10,9 @@ import TopBar from '../../components/client/TopBar.vue'
 import ReturnBanner from '../../components/client/ReturnBanner.vue'
 import QuickPlay from '../../components/client/QuickPlay.vue'
 import TablesCarousel from '../../components/client/TablesCarousel.vue'
-import AllTables from '../../components/client/AllTables.vue'
-import LiveGames from '../../components/client/LiveGames.vue'
-import CreateTableDialog from '../../components/client/CreateTableDialog.vue'
-import FriendsList from '../../components/client/FriendsList.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
 import LobbyPlayerCard from '../../components/client/LobbyPlayerCard.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
-import ProfilePanel from '../../components/panels/ProfilePanel.vue'
-import SettingsPanel from '../../components/panels/SettingsPanel.vue'
-import ShopPanel from '../../components/panels/ShopPanel.vue'
-import PlayerPanel from '../../components/panels/PlayerPanel.vue'
-import Leaderboard from '../../components/lobby/Leaderboard.vue'
 import { createTable, declineInvite, getActiveTable, inviteToTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
 import { topUp as requestTopUp } from '../../api/wallet'
@@ -30,9 +21,9 @@ import { useAuthStore } from '../../stores/auth'
 import { useProfileStore } from '../../stores/profile'
 import { useSettingsStore } from '../../stores/settings'
 import { usePanel } from '../../composables/usePanel'
-import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
+import { useThemeColor } from '../../composables/useThemeColor'
 import { useLobbySocket } from '../../composables/useLobbySocket'
 import { useFriends } from '../../composables/useFriends'
 import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
@@ -42,18 +33,47 @@ import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, PlayerProfil
 import type { TablePreset } from '../../composables/tableList'
 import type { CatalogEntry } from '../../constants/cosmetics'
 
+const loaders = {
+  tables: () => import('../../components/client/AllTables.vue'),
+  live: () => import('../../components/client/LiveGames.vue'),
+  create: () => import('../../components/client/CreateTableDialog.vue'),
+  friends: () => import('../../components/client/FriendsList.vue'),
+  profile: () => import('../../components/panels/ProfilePanel.vue'),
+  settings: () => import('../../components/panels/SettingsPanel.vue'),
+  shop: () => import('../../components/panels/ShopPanel.vue'),
+  player: () => import('../../components/panels/PlayerPanel.vue'),
+  leaderboard: () => import('../../components/lobby/Leaderboard.vue'),
+}
+
+const AllTables = defineAsyncComponent(loaders.tables)
+const LiveGames = defineAsyncComponent(loaders.live)
+const CreateTableDialog = defineAsyncComponent(loaders.create)
+const FriendsList = defineAsyncComponent(loaders.friends)
+const ProfilePanel = defineAsyncComponent(loaders.profile)
+const SettingsPanel = defineAsyncComponent(loaders.settings)
+const ShopPanel = defineAsyncComponent(loaders.shop)
+const PlayerPanel = defineAsyncComponent(loaders.player)
+const Leaderboard = defineAsyncComponent(loaders.leaderboard)
+
+const clientEl = ref<HTMLElement | null>(null)
+
+function preloadPanels() {
+  const run = () => Object.values(loaders).forEach((load) => load().catch(() => {}))
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 4000 })
+  else window.setTimeout(run, 1500)
+}
+
 const POLL_MS = 3000
 
 const router = useRouter()
 const auth = useAuthStore()
 const profileStore = useProfileStore()
 const settings = useSettingsStore()
+useThemeColor(clientEl, () => settings.theme)
 const panels = usePanel()
 const sound = useGameSound()
 const toast = useToast()
-const mainEl = ref<HTMLElement | null>(null)
 
-useSmoothScroll(mainEl)
 
 const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
 const createPrefs = useCreatePrefs()
@@ -434,6 +454,7 @@ onMounted(() => {
   loadHistory()
   refreshAll()
   refreshFriends()
+  preloadPanels()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') refreshAll()
   }, POLL_MS)
@@ -447,7 +468,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="client" :data-theme="settings.theme" :data-felt="settings.felt">
+  <div ref="clientEl" class="client" :data-theme="settings.theme" :data-felt="settings.felt">
     <div class="glow" aria-hidden="true"></div>
 
     <NavRail
@@ -460,7 +481,7 @@ onUnmounted(() => {
       @logout="logout"
     />
 
-    <main ref="mainEl" class="main">
+    <main class="main">
       <div class="main-inner">
         <TopBar
           :username="username"

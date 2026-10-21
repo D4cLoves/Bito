@@ -72,18 +72,18 @@ const suit = computed(() => SUITS[id.value])
 </script>
 
 <template>
-  <component :is="icon" v-if="icon" class="glyph icon" weight="fill" aria-hidden="true" />
-  <span v-else-if="suit" class="glyph suit" aria-hidden="true">{{ suit }}</span>
+  <component :is="icon" v-if="icon" class="avatar-glyph-icon" weight="fill" aria-hidden="true" />
+  <span v-else-if="suit" class="avatar-glyph-suit" aria-hidden="true">{{ suit }}</span>
   <template v-else>{{ avatarInitial(name) }}</template>
 </template>
 
 <style scoped>
-.icon {
+.avatar-glyph-icon {
   width: 58%;
   height: 58%;
 }
 
-.suit {
+.avatar-glyph-suit {
   font-family: var(--font-card);
   font-size: 1.25em;
   line-height: 1;

@@ -380,6 +380,11 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
     position: static;
     flex-direction: row;
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .tabs button {

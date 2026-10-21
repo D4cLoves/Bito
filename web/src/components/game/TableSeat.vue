@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AvatarGlyph from '../client/AvatarGlyph.vue'
 import { computed } from 'vue'
 import { motion, AnimatePresence } from 'motion-v'
+import AvatarGlyph from '../client/AvatarGlyph.vue'
 import GameCard from './GameCard.vue'
 import AnimatedEmoji from './AnimatedEmoji.vue'
 import { emojiOf } from '../../constants/emoji'
