@@ -26,6 +26,7 @@ type Server struct {
 	friendHandler *FriendHandler
 	playerHandler *PlayerHandler
 	inviteHandler *InviteHandler
+	shopHandler   *ShopHandler
 	tokens        TokenValidator
 }
 
@@ -38,6 +39,7 @@ type Handlers struct {
 	Friend *FriendHandler
 	Player *PlayerHandler
 	Invite *InviteHandler
+	Shop   *ShopHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -52,6 +54,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		friendHandler: h.Friend,
 		playerHandler: h.Player,
 		inviteHandler: h.Invite,
+		shopHandler:   h.Shop,
 		tokens:        tokens,
 	}
 
@@ -135,6 +138,15 @@ func (s *Server) setupRoutes() {
 			if s.gameHandler != nil {
 				r.Get("/games", s.gameHandler.History)
 			}
+		})
+	}
+
+	if s.shopHandler != nil {
+		s.router.Route("/api/v1/shop", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Get("/", s.shopHandler.State)
+			r.Post("/buy", s.shopHandler.Buy)
+			r.Put("/look", s.shopHandler.Wear)
 		})
 	}
 
