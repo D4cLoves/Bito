@@ -1,23 +1,30 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { motion } from 'motion-v'
-import { PhLockSimple, PhX } from '@phosphor-icons/vue'
+import { PhCheck, PhGlobeSimple, PhLockSimple, PhX } from '@phosphor-icons/vue'
 import StakeChip from './StakeChip.vue'
 import { STAKES, TABLE_FEE, bestPayout } from '../../constants/economy'
 import { fitsDeck } from '../../composables/useLobbyPrefs'
 import { useGameSound } from '../../composables/useGameSound'
+import { avatarInitial, avatarTone } from '../../composables/avatar'
 import type { DeckSize, GameMode } from '../../types/game'
+import type { Friend } from '../../types/social'
 
 const stake = defineModel<number>('stake', { required: true })
 const mode = defineModel<GameMode>('mode', { required: true })
 const deck = defineModel<DeckSize>('deck', { required: true })
 const players = defineModel<number>('players', { required: true })
+const isPrivate = defineModel<boolean>('private', { default: false })
+const invited = defineModel<string[]>('invited', { default: () => [] })
 
-const props = defineProps<{ balance: number | null; busy: boolean; invitee?: string | null }>()
+const props = defineProps<{ balance: number | null; busy: boolean; friends?: Friend[] }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'create'): void }>()
 
 const DECKS: DeckSize[] = [24, 36, 52]
-const SEATS = computed(() => (props.invitee ? [2, 3, 4, 5, 6] : [3, 4, 5, 6]))
+const withFriends = computed(() => isPrivate.value || invited.value.length > 0)
+const SEATS = computed(() => (withFriends.value ? [2, 3, 4, 5, 6] : [3, 4, 5, 6]))
+const lobbyFriends = computed(() => (props.friends ?? []).filter((f) => f.status === 'online'))
+const roomForFriends = computed(() => players.value - 1)
 const MODES: { id: GameMode; label: string; suit: string }[] = [
   { id: 'podkidnoy', label: 'Подкидной', suit: '♠' },
   { id: 'perevodnoy', label: 'Переводной', suit: '♥' },
@@ -28,7 +35,30 @@ const body = ref<HTMLElement | null>(null)
 
 const affordable = (s: number) => props.balance === null || s <= props.balance
 const payout = computed(() => bestPayout(stake.value, players.value))
-const canCreate = computed(() => affordable(stake.value) && fitsDeck(players.value, deck.value))
+const canCreate = computed(
+  () => affordable(stake.value) && fitsDeck(players.value, deck.value) && invited.value.length <= roomForFriends.value,
+)
+
+watch(withFriends, (on) => {
+  if (!on && players.value < 3) players.value = 3
+})
+
+function toggleFriend(id: string) {
+  sound.playClick()
+  if (invited.value.includes(id)) {
+    invited.value = invited.value.filter((f) => f !== id)
+    return
+  }
+  if (invited.value.length >= 5) return
+  invited.value = [...invited.value, id]
+  if (players.value < invited.value.length + 1) players.value = Math.min(6, invited.value.length + 1)
+}
+
+function pickAccess(priv: boolean) {
+  if (isPrivate.value === priv) return
+  sound.playClick()
+  isPrivate.value = priv
+}
 
 watch(deck, (d) => {
   if (!fitsDeck(players.value, d)) players.value = Math.floor(d / 6)
@@ -98,12 +128,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
       :transition="{ type: 'spring', stiffness: 420, damping: 34 }"
     >
       <header class="head">
-        <h2 id="create-title">{{ invitee ? `Позвать ${invitee}` : 'Новый стол' }}</h2>
+        <h2 id="create-title">{{ invited.length ? 'Стол для друзей' : 'Новый стол' }}</h2>
         <button type="button" class="close" aria-label="Закрыть" @click="emit('close')">
           <PhX :size="20" />
         </button>
       </header>
-      <p v-if="invitee" class="sub">Создадим стол и придержим место для {{ invitee }} на 45 секунд. Вдвоём — дуэль, на 3–6 мест подсядут и другие игроки.</p>
+      <p v-if="isPrivate" class="sub">Приватный стол не видно в списке. Сесть смогут только те, кого вы позовёте, или у кого есть ссылка.</p>
+      <p v-else-if="invited.length" class="sub">Позванным держим места 45 секунд. Остальные места займут игроки из списка столов.</p>
       <p v-else class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
 
       <div ref="body" class="body">
@@ -183,6 +214,43 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
             </button>
           </div>
         </div>
+
+        <div class="group">
+          <span id="c-access" class="label">Кто может сесть</span>
+          <div class="seg" role="radiogroup" aria-labelledby="c-access">
+            <button type="button" role="radio" :aria-checked="!isPrivate" :class="{ on: !isPrivate }" @click="pickAccess(false)">
+              <PhGlobeSimple :size="16" aria-hidden="true" />
+              Все
+            </button>
+            <button type="button" role="radio" :aria-checked="isPrivate" :class="{ on: isPrivate }" @click="pickAccess(true)">
+              <PhLockSimple :size="16" aria-hidden="true" />
+              По приглашению
+            </button>
+          </div>
+        </div>
+
+        <div v-if="friends" class="group">
+          <span id="c-friends" class="label">Позвать друзей · {{ invited.length }} из {{ roomForFriends }}</span>
+          <div v-if="lobbyFriends.length" class="friends" role="group" aria-labelledby="c-friends">
+            <button
+              v-for="f in lobbyFriends"
+              :key="f.id"
+              type="button"
+              class="friend"
+              :class="{ on: invited.includes(f.id) }"
+              :aria-pressed="invited.includes(f.id)"
+              :disabled="!invited.includes(f.id) && invited.length >= roomForFriends"
+              @click="toggleFriend(f.id)"
+            >
+              <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">
+                {{ avatarInitial(f.username) }}
+                <i v-if="invited.includes(f.id)" class="tick" aria-hidden="true"><PhCheck :size="10" weight="bold" /></i>
+              </span>
+              {{ f.username }}
+            </button>
+          </div>
+          <p v-else class="none">Сейчас никого из друзей нет в лобби. Позвать можно будет и со страницы стола или по ссылке.</p>
+        </div>
       </div>
 
       <dl class="odds">
@@ -204,7 +272,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
         <button type="button" class="btn ghost" @click="emit('close')">Отмена</button>
         <button type="button" class="btn primary" :disabled="busy || !canCreate" @click="submit">
           <span v-if="busy" class="spinner" aria-hidden="true"></span>
-          {{ busy ? (invitee ? 'Зовём…' : 'Создаём…') : invitee ? 'Создать и позвать' : 'Создать и сесть' }}
+          {{ busy ? (invited.length ? 'Зовём…' : 'Создаём…') : invited.length ? 'Создать и позвать' : 'Создать и сесть' }}
         </button>
       </footer>
     </motion.section>
@@ -386,6 +454,73 @@ h2 {
 .seg button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.friends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.friend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.friend.on {
+  background: var(--color-gold-tint);
+  box-shadow: inset 0 0 0 1.5px var(--color-gold);
+  color: var(--color-ink);
+}
+
+.friend:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.friend .avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.friend .tick {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-green);
+  color: var(--color-on-green);
+  box-shadow: 0 0 0 2px var(--color-paper-raised);
+}
+
+.none {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-ink-faint);
 }
 
 .suit {

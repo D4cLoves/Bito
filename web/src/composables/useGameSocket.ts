@@ -16,6 +16,7 @@ const FATAL_ERRORS = new Set([
   'стол уже заполнен',
   'партия уже завершена',
   'стол открыт в другой вкладке',
+  'стол закрытый: нужно приглашение',
 ])
 
 interface ServerMessage {
@@ -23,7 +24,7 @@ interface ServerMessage {
   payload?: unknown
 }
 
-export function useGameSocket(roomId: string) {
+export function useGameSocket(roomId: string, key = '') {
   const status = ref<SocketStatus>('connecting')
   const state = shallowRef<GameState | null>(null)
   const gameOver = shallowRef<GameOver | null>(null)
@@ -63,7 +64,7 @@ export function useGameSocket(roomId: string) {
     }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}`
+    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}${key ? `&key=${encodeURIComponent(key)}` : ''}`
     const socket = new WebSocket(url)
     ws = socket
 

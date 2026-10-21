@@ -14,7 +14,7 @@ import BattleArea from '../../components/game/BattleArea.vue'
 import QuickChat from '../../components/game/QuickChat.vue'
 import PostGameChat from '../../components/game/PostGameChat.vue'
 import FlightLayer from '../../components/game/FlightLayer.vue'
-import { getTable } from '../../api/tables'
+import { getTable, inviteToTable } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
@@ -23,9 +23,11 @@ import { useGameSound } from '../../composables/useGameSound'
 import { useTurnAlert } from '../../composables/useTurnAlert'
 import { useLoungeMusic } from '../../composables/useLoungeMusic'
 import { useToast } from '../../composables/useToast'
+import { useFriends } from '../../composables/useFriends'
+import { avatarInitial, avatarTone } from '../../composables/avatar'
 import { MIN_STAKE } from '../../constants/economy'
 import { canBeat, cardKey, sameCard, type Card, type CardPair, type PlayerView, type TableInfo } from '../../types/game'
-import type { ChatEntry } from '../../types/social'
+import type { ChatEntry, Friend } from '../../types/social'
 
 const TURN_MS = 20_000
 const BUBBLE_MS = 4500
@@ -46,7 +48,8 @@ const toast = useToast()
 const wide = useMediaQuery('(min-width: 1100px)')
 
 const roomId = String(route.params.id)
-const socket = useGameSocket(roomId)
+const linkKey = typeof route.query.key === 'string' ? route.query.key : ''
+const socket = useGameSocket(roomId, linkKey)
 const { state, gameOver, status, offline, lastError, chat, rematch, rematchCancelled, rematchTable } = socket
 
 const me = computed(() => auth.user?.id ?? '')
@@ -413,11 +416,39 @@ function say(text: string) {
 
 async function copyLink() {
   try {
-    await navigator.clipboard.writeText(location.href)
+    await navigator.clipboard.writeText(tableLink())
     copied.value = true
     setTimeout(() => (copied.value = false), 1600)
   } catch {
     toast.show('Не удалось скопировать ссылку', 'error')
+  }
+}
+
+function tableLink() {
+  const key = waitingInfo.value?.key || linkKey
+  return `${location.origin}/table/${roomId}${key ? `?key=${encodeURIComponent(key)}` : ''}`
+}
+
+const { friends, refresh: refreshFriends } = useFriends()
+const calledUntil = ref<Record<string, number>>({})
+const seatsLeft = computed(() => (waitingInfo.value ? waitingInfo.value.maxPlayers - Math.max(waitingInfo.value.players, 1) : 0))
+const canCall = computed(() => !state.value && status.value !== 'closed' && !!waitingInfo.value && !waitingInfo.value.matchmaking)
+const showCall = computed(() => canCall.value && seatsLeft.value > 0)
+const callable = computed(() => friends.value.filter((f) => f.status === 'online' || isCalled(f.id)))
+
+function isCalled(id: string) {
+  return (calledUntil.value[id] ?? 0) > tick.value
+}
+
+async function callFriend(friend: Friend) {
+  if (isCalled(friend.id)) return
+  try {
+    const { expiresAt } = await inviteToTable(roomId, friend.id)
+    calledUntil.value = { ...calledUntil.value, [friend.id]: new Date(expiresAt).getTime() }
+    toast.show(`Позвали ${friend.username}, место держим 45 секунд`, 'success')
+    pollWaiting()
+  } catch (err) {
+    toast.show(err instanceof Error ? err.message : 'Не удалось позвать', 'error')
   }
 }
 
@@ -549,6 +580,7 @@ async function pollWaiting() {
   } catch {
     return
   }
+  if (!state.value && !waitingInfo.value.matchmaking) refreshFriends()
 }
 
 onMounted(() => {
@@ -638,15 +670,35 @@ onUnmounted(() => {
             </div>
 
             <div v-else class="waiting">
-              <div class="waiting-cards" aria-hidden="true">
+              <div v-if="!showCall" class="waiting-cards" aria-hidden="true">
                 <GameCard v-for="i in 3" :key="i" face-down size="sm" :class="`wc wc${i}`" />
               </div>
               <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
               <p v-if="status === 'closed'">Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.</p>
               <p v-else-if="waitingInfo">
-                За столом {{ Math.max(waitingInfo.players, 1) }} из {{ waitingInfo.maxPlayers }}. Партия начнётся сама, когда все сядут.
+                За столом {{ Math.max(waitingInfo.players, 1) }} из {{ waitingInfo.maxPlayers }}.
+                {{ waitingInfo.private ? 'Стол закрытый: сядут только позванные и те, у кого есть ссылка.' : 'Партия начнётся сама, когда все сядут.' }}
               </p>
               <p v-else>Партия начнётся сама, когда все сядут.</p>
+              <div v-if="showCall" class="call">
+                <span class="call-label">Позвать друзей · свободно мест: {{ seatsLeft }}</span>
+                <div v-if="callable.length" class="call-list">
+                  <button
+                    v-for="f in callable"
+                    :key="f.id"
+                    type="button"
+                    class="call-friend"
+                    :class="{ on: isCalled(f.id) }"
+                    :disabled="isCalled(f.id)"
+                    @click="callFriend(f)"
+                  >
+                    <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">{{ avatarInitial(f.username) }}</span>
+                    {{ f.username }}
+                    <span class="call-state">{{ isCalled(f.id) ? 'позван' : 'позвать' }}</span>
+                  </button>
+                </div>
+                  <span v-else class="call-none">Друзей в лобби сейчас нет. Позовите по ссылке сверху.</span>
+              </div>
               <button v-if="status === 'closed'" type="button" class="felt-btn" @click="router.push('/lobby')">В лобби</button>
             </div>
           </div>
@@ -946,6 +998,72 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.45;
   color: var(--color-on-felt-muted);
+}
+
+.call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.call-label,
+.call-none {
+  font-size: 13px;
+  color: var(--color-on-felt-muted);
+}
+
+.call-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.call-friend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
+  color: var(--color-on-felt);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.call-friend:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1.5px var(--color-gold);
+}
+
+.call-friend:disabled {
+  cursor: default;
+}
+
+.call-friend .avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.call-state {
+  font-size: 12px;
+  color: var(--color-gold);
+}
+
+.call-friend.on .call-state {
+  color: var(--color-on-felt-faint);
 }
 
 .radar {

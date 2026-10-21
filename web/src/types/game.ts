@@ -78,6 +78,8 @@ export interface TableInfo {
   createdAt: string
   stake?: number
   matchmaking?: boolean
+  private?: boolean
+  key?: string
 }
 
 export interface LobbyState {
@@ -90,6 +92,7 @@ export interface CreateTableRequest {
   deck: DeckSize
   maxPlayers: number
   stake: number
+  private?: boolean
 }
 
 export type AnyMode = GameMode | 'any'

@@ -59,15 +59,8 @@ const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
 const buying = ref<string | null>(null)
 const creating = ref(false)
-const invitingFriend = ref<Friend | null>(null)
-const invitePlayers = ref(2)
-const dialogPlayers = computed({
-  get: () => (invitingFriend.value ? invitePlayers.value : createPrefs.players.value),
-  set: (n: number) => {
-    if (invitingFriend.value) invitePlayers.value = n
-    else createPrefs.players.value = n
-  },
-})
+const createPrivate = ref(false)
+const createInvited = ref<string[]>([])
 
 const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
@@ -139,28 +132,30 @@ function goToTable(id: string, search = false) {
 
 function openCreate() {
   sound.playClick()
-  invitingFriend.value = null
+  createPrivate.value = false
+  createInvited.value = []
+  if (createPrefs.players.value < 3) createPrefs.players.value = 3
   creating.value = true
 }
 
 function closeCreate() {
   creating.value = false
-  invitingFriend.value = null
 }
 
 async function create() {
   if (busy.value) return
   busy.value = 'create'
   try {
-    const friend = invitingFriend.value
+    const guests = [...createInvited.value]
     const table = await createTable({
       mode: createPrefs.mode.value,
       deck: createPrefs.deck.value,
-      maxPlayers: dialogPlayers.value,
+      maxPlayers: createPrefs.players.value,
       stake: createPrefs.stake.value,
+      private: createPrivate.value,
     })
     closeCreate()
-    if (friend) await inviteFriend(table.id, friend)
+    if (guests.length) await inviteFriends(table.id, guests)
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -308,17 +303,24 @@ function asFriend(p: PlayerProfile): Friend {
 function invite(friend: Friend) {
   sound.playClick()
   if (panels.panel.value) panels.close()
-  invitingFriend.value = friend
+  createPrivate.value = true
+  createInvited.value = [friend.id]
+  createPrefs.players.value = 2
   creating.value = true
 }
 
-async function inviteFriend(tableId: string, friend: Friend) {
-  try {
-    await inviteToTable(tableId, friend.id)
-    toast.show(`Позвали ${friend.username}, место держим 45 секунд`, 'success')
-  } catch (err) {
-    toast.show(`Стол создан, но позвать не вышло: ${err instanceof Error ? err.message : 'ошибка'}`, 'error', 4500)
+async function inviteFriends(tableId: string, ids: string[]) {
+  const nameOf = (id: string) => friends.value.find((f) => f.id === id)?.username ?? 'друг'
+  const results = await Promise.allSettled(ids.map((id) => inviteToTable(tableId, id)))
+  const failed = results
+    .map((r, i) => (r.status === 'rejected' ? `${nameOf(ids[i])}: ${r.reason instanceof Error ? r.reason.message : 'ошибка'}` : null))
+    .filter((x): x is string => !!x)
+  const ok = ids.length - failed.length
+  if (!failed.length) {
+    toast.show(ok === 1 ? `Позвали ${nameOf(ids[0])}, место держим 45 секунд` : `Позвали ${ok} друзей, места держим 45 секунд`, 'success')
+    return
   }
+  toast.show(`Позвали ${ok} из ${ids.length}. ${failed.join('; ')}`, 'error', 6000)
 }
 
 function acceptInvite(inv: TableInvite) {
@@ -627,10 +629,12 @@ onUnmounted(() => {
         v-model:stake="createPrefs.stake.value"
         v-model:mode="createPrefs.mode.value"
         v-model:deck="createPrefs.deck.value"
-        v-model:players="dialogPlayers"
+        v-model:players="createPrefs.players.value"
+        v-model:private="createPrivate"
+        v-model:invited="createInvited"
+        :friends="friends"
         :balance="balance"
         :busy="busy === 'create'"
-        :invitee="invitingFriend?.username ?? null"
         @close="closeCreate"
         @create="create"
       />
