@@ -20,6 +20,7 @@ const filter = ref<CosmeticFilterValue>('all')
 const visible = computed(() => (filter.value === 'all' ? ITEMS : ITEMS.filter((i) => i.kind === filter.value)))
 const counts = computed(() => ({
   all: ITEMS.length,
+  avatar: ITEMS.filter((i) => i.kind === 'avatar').length,
   back: ITEMS.filter((i) => i.kind === 'back').length,
   felt: ITEMS.filter((i) => i.kind === 'felt').length,
   theme: ITEMS.filter((i) => i.kind === 'theme').length,

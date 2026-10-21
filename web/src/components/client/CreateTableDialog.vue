@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvatarGlyph from './AvatarGlyph.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { motion } from 'motion-v'
 import { PhCheck, PhGlobeSimple, PhLockSimple, PhX } from '@phosphor-icons/vue'
@@ -6,7 +7,7 @@ import StakeChip from './StakeChip.vue'
 import { STAKES, TABLE_FEE, bestPayout } from '../../constants/economy'
 import { fitsDeck } from '../../composables/useLobbyPrefs'
 import { useGameSound } from '../../composables/useGameSound'
-import { avatarInitial, avatarTone } from '../../composables/avatar'
+import { avatarTone } from '../../composables/avatar'
 import type { DeckSize, GameMode } from '../../types/game'
 import type { Friend } from '../../types/social'
 
@@ -243,7 +244,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
               @click="toggleFriend(f.id)"
             >
               <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">
-                {{ avatarInitial(f.username) }}
+                <AvatarGlyph :name="f.username" :user-id="f.id" />
                 <i v-if="invited.includes(f.id)" class="tick" aria-hidden="true"><PhCheck :size="10" weight="bold" /></i>
               </span>
               {{ f.username }}

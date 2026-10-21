@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhArrowCounterClockwise, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
-import { avatarTone, avatarInitial } from '../../composables/avatar'
+import { avatarTone } from '../../composables/avatar'
 import { useSettingsStore } from '../../stores/settings'
 import CardBack from './CardBack.vue'
 import type { Profile } from '../../types/user'
@@ -100,7 +101,7 @@ function ago(iso: string) {
   <section class="player" aria-label="Карточка игрока">
     <header class="who">
       <button type="button" class="me" :aria-label="`Профиль: ${username}`" @click="$emit('profile')">
-        <span class="avatar" :style="{ '--tone': avatarTone(username) }">{{ avatarInitial(username) }}</span>
+        <span class="avatar" :style="{ '--tone': avatarTone(username) }"><AvatarGlyph :name="username" self /></span>
         <i class="suit" aria-hidden="true">♠</i>
       </button>
       <button type="button" class="id" @click="$emit('profile')">

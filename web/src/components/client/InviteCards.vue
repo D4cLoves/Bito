@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import AvatarGlyph from './AvatarGlyph.vue'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { PhX } from '@phosphor-icons/vue'
-import { avatarInitial, avatarTone } from '../../composables/avatar'
+import { avatarTone } from '../../composables/avatar'
 import type { TableInvite } from '../../types/game'
 
 const INVITE_MS = 45_000
@@ -45,7 +46,7 @@ onUnmounted(() => {
   <div class="invites" aria-live="polite">
     <TransitionGroup name="invite">
       <article v-for="inv in invites" :key="inv.tableId" class="invite" :aria-label="`${inv.fromName} зовёт за стол`">
-        <span class="avatar" :style="{ '--tone': avatarTone(inv.fromName) }" aria-hidden="true">{{ avatarInitial(inv.fromName) }}</span>
+        <span class="avatar" :style="{ '--tone': avatarTone(inv.fromName) }" aria-hidden="true"><AvatarGlyph :name="inv.fromName" :user-id="inv.fromId" /></span>
         <div class="text">
           <b>{{ inv.fromName }} зовёт за стол</b>
           <small>{{ details(inv) }}</small>

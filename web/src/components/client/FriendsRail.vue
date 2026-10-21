@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhUsersThree, PhUserPlus, PhPlus } from '@phosphor-icons/vue'
 import type { Friend, FriendRequest, FriendStatus } from '../../types/social'
-import { avatarTone, avatarInitial } from '../../composables/avatar'
+import { avatarTone } from '../../composables/avatar'
 
 const props = defineProps<{ username: string; friends: Friend[]; requests: FriendRequest[] }>()
 defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'add'): void; (e: 'open', id: string): void }>()
@@ -17,7 +18,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
 <template>
   <aside class="friends-rail" aria-label="Друзья">
     <button type="button" class="me" :title="`${username} — профиль`" :aria-label="`Профиль: ${username}`" @click="$emit('profile')">
-      <span class="avatar" :style="{ '--tone': avatarTone(username) }">{{ avatarInitial(username) }}</span>
+      <span class="avatar" :style="{ '--tone': avatarTone(username) }"><AvatarGlyph :name="username" self /></span>
     </button>
 
     <button type="button" class="friends-btn" title="Друзья" :aria-label="`Друзья, ${online} в сети`" @click="$emit('friends')">
@@ -35,7 +36,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
           @click="$emit('friends')"
         >
           <span class="avatar" :style="{ '--tone': avatarTone(r.username) }">
-            {{ avatarInitial(r.username) }}
+            <AvatarGlyph :name="r.username" :user-id="r.id" />
             <i class="plus" aria-hidden="true"><PhPlus :size="10" weight="bold" /></i>
           </span>
         </button>
@@ -51,7 +52,7 @@ const online = computed(() => props.friends.filter((f) => f.status !== 'offline'
           @click="$emit('open', f.id)"
         >
           <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">
-            {{ avatarInitial(f.username) }}
+            <AvatarGlyph :name="f.username" :user-id="f.id" />
             <i v-if="f.status === 'online'" class="dot" aria-hidden="true"></i>
           </span>
           <span v-if="f.status === 'playing'" class="tag" aria-hidden="true">в игре</span>

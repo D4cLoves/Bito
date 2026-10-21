@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhUsersThree, PhPlus } from '@phosphor-icons/vue'
 import ChipIcon from './ChipIcon.vue'
@@ -16,7 +17,6 @@ defineEmits<{ (e: 'profile'): void; (e: 'friends'): void; (e: 'top-up'): void }>
 
 const shown = useCountUp(computed(() => props.balance ?? undefined), 900)
 const canTopUp = computed(() => props.balance !== null && props.balance < TOP_UP_THRESHOLD)
-const initial = computed(() => (props.username[0] ?? '?').toUpperCase())
 
 function greetingFor(hour: number) {
   if (hour >= 5 && hour < 12) return 'Доброе утро'
@@ -57,7 +57,7 @@ const greeting = greetingFor(new Date().getHours())
       </div>
 
       <button type="button" class="me compact-only" @click="$emit('profile')">
-        <span class="avatar" aria-hidden="true">{{ initial }}</span>
+        <span class="avatar" aria-hidden="true"><AvatarGlyph :name="username" self /></span>
         <span class="name">{{ username }}</span>
       </button>
     </div>

@@ -39,6 +39,7 @@ const owned = computed(() => ALL_ITEMS.filter((i) => settings.isOwned(i.kind, i.
 const ownedVisible = computed(() => (filter.value === 'all' ? owned.value : owned.value.filter((i) => i.kind === filter.value)))
 const ownedCounts = computed(() => ({
   all: owned.value.length,
+  avatar: owned.value.filter((i) => i.kind === 'avatar').length,
   back: owned.value.filter((i) => i.kind === 'back').length,
   felt: owned.value.filter((i) => i.kind === 'felt').length,
   theme: owned.value.filter((i) => i.kind === 'theme').length,

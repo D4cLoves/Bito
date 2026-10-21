@@ -7,6 +7,7 @@ const props = defineProps<{ counts?: Partial<Record<CosmeticFilterValue, number>
 
 const OPTIONS: { id: CosmeticFilterValue; label: string }[] = [
   { id: 'all', label: 'Всё' },
+  { id: 'avatar', label: 'Аватарки' },
   { id: 'back', label: 'Рубашки' },
   { id: 'felt', label: 'Сукно' },
   { id: 'theme', label: 'Темы' },

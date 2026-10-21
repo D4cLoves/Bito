@@ -228,6 +228,7 @@ updated: 2026-10-17
 | `friendships` | дружба и заявки | одна строка на пару: `CHECK (user_low < user_high)`, кто отправил заявку, статус `pending` или `accepted` |
 | `user_items` | купленная косметика | PK (`user_id`, `item`): один предмет нельзя купить дважды |
 | `user_looks` | надетые тема, сукно, рубашка | одна строка на игрока |
+| `user_avatars` | выбранная аватарка | одна строка на игрока; нет строки — первая буква ника |
 | `games` | партия: режим, колода, ставка, комиссия, статус | `status`: playing, finished, draw, refunded |
 | `game_players` | кто играл, место, исход, итог | PK (`game_id`, `user_id`) |
 | `wallet_transactions` | **журнал каждого движения денег** | `amount`, `kind`, `balance_after`, индекс по игроку и времени |

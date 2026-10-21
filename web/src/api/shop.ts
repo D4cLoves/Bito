@@ -12,6 +12,7 @@ export interface ShopState {
   owned: string[]
   look: Look
   lookSaved: boolean
+  avatar: string
 }
 
 export function getShop(): Promise<ShopState> {
@@ -30,4 +31,15 @@ export async function saveLook(look: Look): Promise<void> {
     method: 'PUT',
     body: JSON.stringify(look),
   })
+}
+
+export async function saveAvatar(avatar: string): Promise<void> {
+  await authedFetch<null>('/api/v1/shop/avatar', {
+    method: 'PUT',
+    body: JSON.stringify({ avatar }),
+  })
+}
+
+export function getAvatars(ids: string[]): Promise<Record<string, string>> {
+  return authedFetch<Record<string, string>>(`/api/v1/shop/avatars?ids=${ids.map(encodeURIComponent).join(',')}`)
 }

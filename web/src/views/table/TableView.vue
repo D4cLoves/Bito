@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
@@ -24,7 +25,7 @@ import { useTurnAlert } from '../../composables/useTurnAlert'
 import { useLoungeMusic } from '../../composables/useLoungeMusic'
 import { useToast } from '../../composables/useToast'
 import { useFriends } from '../../composables/useFriends'
-import { avatarInitial, avatarTone } from '../../composables/avatar'
+import { avatarTone } from '../../composables/avatar'
 import { MIN_STAKE } from '../../constants/economy'
 import { canBeat, cardKey, sameCard, type Card, type CardPair, type PlayerView, type TableInfo } from '../../types/game'
 import type { ChatEntry, Friend } from '../../types/social'
@@ -659,6 +660,7 @@ onUnmounted(() => {
               :key="s.key"
               class="seat-pos"
               :data-fly-seat="s.player?.id"
+              :user-id="s.player?.id"
               :style="{ '--x': `${s.x}%`, '--y': `${s.y}%` }"
               :name="s.player?.name ?? s.waitingName"
               :hand-count="s.player?.handCount ?? 0"
@@ -720,7 +722,7 @@ onUnmounted(() => {
                     :disabled="isCalled(f.id)"
                     @click="callFriend(f)"
                   >
-                    <span class="avatar" :style="{ '--tone': avatarTone(f.username) }">{{ avatarInitial(f.username) }}</span>
+                    <span class="avatar" :style="{ '--tone': avatarTone(f.username) }"><AvatarGlyph :name="f.username" :user-id="f.id" /></span>
                     {{ f.username }}
                     <span class="call-state">{{ isCalled(f.id) ? 'позван' : 'позвать' }}</span>
                   </button>
@@ -739,6 +741,7 @@ onUnmounted(() => {
             v-if="watching"
             class="me-seat"
             :data-fly-seat="anchorId"
+            :user-id="anchorId"
             bubble-side="up"
             :name="anchor?.name ?? null"
             :hand-count="anchor?.handCount ?? 0"

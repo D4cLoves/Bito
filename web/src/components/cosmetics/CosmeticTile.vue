@@ -3,7 +3,7 @@ import { PhCheck } from '@phosphor-icons/vue'
 import CosmeticPreview from './CosmeticPreview.vue'
 import type { CosmeticKind } from '../../constants/cosmetics'
 
-const KIND_LABEL: Record<CosmeticKind, string> = { back: 'Рубашка', felt: 'Сукно', theme: 'Тема' }
+const KIND_LABEL: Record<CosmeticKind, string> = { avatar: 'Аватарка', back: 'Рубашка', felt: 'Сукно', theme: 'Тема' }
 
 withDefaults(defineProps<{ kind: CosmeticKind; id: string; name: string; note?: string; active?: boolean; clickable?: boolean }>(), {
   note: undefined,
