@@ -47,7 +47,7 @@ const wide = useMediaQuery('(min-width: 1100px)')
 
 const roomId = String(route.params.id)
 const socket = useGameSocket(roomId)
-const { state, gameOver, status, offline, lastError, chat } = socket
+const { state, gameOver, status, offline, lastError, chat, rematch, rematchCancelled, rematchTable } = socket
 
 const me = computed(() => auth.user?.id ?? '')
 const gameEl = ref<HTMLElement | null>(null)
@@ -468,6 +468,36 @@ watch(state, (s, prev) => {
   if (prev && s.defenderId !== prev.defenderId) selected.value = null
 })
 
+const iVotedRematch = computed(() => !!rematch.value?.votes.includes(me.value))
+const rivalWantsRematch = computed(() => (rematch.value?.votes.length ?? 0) > (iVotedRematch.value ? 1 : 0))
+const rematchOpen = computed(() => !!gameOver.value && status.value === 'open' && !rematchCancelled.value && !rematchTable.value)
+
+function voteRematch() {
+  sound.playClick()
+  socket.rematchVote()
+}
+
+function declineRematch() {
+  sound.playClick()
+  socket.rematchDecline()
+}
+
+watch(rivalWantsRematch, (wants) => {
+  if (!wants || iVotedRematch.value) return
+  resultOpen.value = true
+  sound.playYourTurn()
+})
+
+watch(rematchCancelled, (reason) => {
+  if (reason) toast.show(`Реванша не будет: ${reason}`)
+})
+
+watch(rematchTable, (id) => {
+  if (!id) return
+  sound.playShuffle()
+  router.push({ name: 'table', params: { id } })
+})
+
 watch(gameOver, (g) => {
   if (!g) return
   resultOpen.value = true
@@ -737,9 +767,20 @@ onUnmounted(() => {
             </li>
           </ol>
           <PostGameChat :messages="chat" :my-id="me" @send="say" />
+          <p v-if="rematchCancelled" class="rematch-note">Реванша не будет: {{ rematchCancelled }}</p>
+          <p v-else-if="rematchOpen && rivalWantsRematch && !iVotedRematch" class="rematch-note hot">Соперник хочет реванш</p>
           <div class="dialog-actions center">
-            <button type="button" class="btn ghost" @click="resultOpen = false">Остаться за столом</button>
-            <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
+            <template v-if="rematchOpen">
+              <button v-if="rivalWantsRematch && !iVotedRematch" type="button" class="btn ghost" @click="declineRematch">Нет, спасибо</button>
+              <button v-else type="button" class="btn ghost" @click="router.push('/lobby')">В лобби</button>
+              <button type="button" class="btn primary" :disabled="iVotedRematch" @click="voteRematch">
+                {{ iVotedRematch ? `Ждём соперника… ${rematch?.votes.length ?? 1} из ${rematch?.needed ?? 2}` : 'Реванш' }}
+              </button>
+            </template>
+            <template v-else>
+              <button type="button" class="btn ghost" @click="resultOpen = false">Остаться за столом</button>
+              <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
+            </template>
           </div>
         </div>
       </div>
@@ -1239,6 +1280,18 @@ onUnmounted(() => {
 
 .dialog-actions.center {
   justify-content: center;
+}
+
+.rematch-note {
+  margin: 18px 0 0;
+  color: var(--color-ink-faint);
+  font-size: 14px;
+  text-align: center;
+}
+
+.rematch-note.hot {
+  color: var(--color-gold-ink);
+  font-weight: 500;
 }
 
 .btn {

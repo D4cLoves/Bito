@@ -31,6 +31,9 @@ export function useGameSocket(roomId: string) {
   const chat = ref<ChatEntry[]>([])
   const lastError = ref<{ text: string; at: number } | null>(null)
   const stateReceivedAt = ref(0)
+  const rematch = ref<{ votes: string[]; needed: number } | null>(null)
+  const rematchCancelled = ref<string | null>(null)
+  const rematchTable = ref<string | null>(null)
 
   let ws: WebSocket | null = null
   let retries = 0
@@ -136,6 +139,15 @@ export function useGameSocket(roomId: string) {
         system(`${name} не принял приглашение`)
         break
       }
+      case 'rematch_state':
+        rematch.value = msg.payload as { votes: string[]; needed: number }
+        break
+      case 'rematch_cancelled':
+        rematchCancelled.value = (msg.payload as { reason: string }).reason
+        break
+      case 'rematch_start':
+        rematchTable.value = (msg.payload as { tableId: string }).tableId
+        break
       case 'chat': {
         const m = msg.payload as ChatMessage
         pushChat({ userId: m.senderId, username: m.senderName, text: m.message })
@@ -160,6 +172,8 @@ export function useGameSocket(roomId: string) {
     pass: () => send('pass'),
     surrender: () => send('surrender'),
     say: (message: string) => send('chat', { message }),
+    rematchVote: () => send('rematch'),
+    rematchDecline: () => send('rematch_decline'),
   }
 
   function disconnect() {
@@ -172,5 +186,5 @@ export function useGameSocket(roomId: string) {
   connect()
   onUnmounted(disconnect)
 
-  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, ...actions, disconnect }
+  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, rematch, rematchCancelled, rematchTable, ...actions, disconnect }
 }

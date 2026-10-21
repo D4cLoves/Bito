@@ -4,6 +4,6 @@ import { RouterView } from 'vue-router'
 
 <template>
   <div class="min-h-screen flex flex-col">
-    <RouterView />
+    <RouterView :key="$route.path" />
   </div>
 </template>
