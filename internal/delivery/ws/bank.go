@@ -16,6 +16,7 @@ const (
 	errStartFailed     = "не удалось начать партию, попробуйте ещё раз"
 	errBankUnavailable = "касса недоступна, попробуйте позже"
 	errStakesRefunded  = "не удалось провести расчёт, ставки возвращены"
+	errOtherTab        = "стол открыт в другой вкладке"
 )
 
 type Bank interface {

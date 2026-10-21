@@ -360,7 +360,7 @@ func (r *Room) handleRegister(client *Client) {
 				return
 			}
 
-			r.clients[playerID] = client
+			r.takeOver(playerID, client)
 
 			notifyMsg, err := NewMessage(TypePlayerReconnected, PlayerStatusPayload{PlayerID: playerID})
 			if err == nil {
@@ -384,15 +384,22 @@ func (r *Room) handleRegister(client *Client) {
 		r.sendError(client, "стол уже заполнен")
 		client.Close()
 		return
-
 	}
 
-	r.clients[playerID] = client
+	r.takeOver(playerID, client)
 	r.seat(playerID)
 
 	if len(r.clients) == r.maxUsers {
 		r.startGame()
 	}
+}
+
+func (r *Room) takeOver(playerID string, client *Client) {
+	if old, ok := r.clients[playerID]; ok && old != client {
+		r.sendError(old, errOtherTab)
+		old.Close()
+	}
+	r.clients[playerID] = client
 }
 
 func (r *Room) handleUnregister(client *Client) {
@@ -577,6 +584,10 @@ func (r *Room) refundStakes() {
 }
 
 func (r *Room) handleIncoming(msg IncomingMessage) {
+	if r.clients[msg.Client.ID()] != msg.Client {
+		return
+	}
+
 	var raw struct {
 		Type string `json:"type"`
 	}

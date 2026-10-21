@@ -429,3 +429,49 @@ func TestRoom_TurnTimeoutAutoAttacks(t *testing.T) {
 		t.Error("the turn timer must run for the defender")
 	}
 }
+
+func TestRoom_SecondTabTakesOverAndOldTabIsIgnored(t *testing.T) {
+	room := NewRoom("room-tabs", testSettings(3), nil)
+	go room.Run()
+	defer room.Close()
+
+	oldTab := createTestClient("p1", "Alice", room)
+	room.RegisterClient(oldTab)
+	bob := createTestClient("p2", "Bob", room)
+	room.RegisterClient(bob)
+	newTab := createTestClient("p1", "Alice", room)
+	room.RegisterClient(newTab)
+
+	deadline := time.Now().Add(time.Second)
+	for !isClosed(oldTab) {
+		if time.Now().After(deadline) {
+			t.Fatal("the old tab was not closed after the new one connected")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if msg, ok := lastOfType[ErrorPayload](t, oldTab, TypeError); !ok || msg.Payload.Message != errOtherTab {
+		t.Fatalf("old tab error = %+v, %v; want %q", msg.Payload, ok, errOtherTab)
+	}
+
+	ghost, _ := NewMessage(TypeChat, ChatPayload{Message: "from the old tab"})
+	room.incoming <- IncomingMessage{Client: oldTab, Data: ghost}
+	fresh, _ := NewMessage(TypeChat, ChatPayload{Message: "from the new tab"})
+	room.incoming <- IncomingMessage{Client: newTab, Data: fresh}
+
+	deadline = time.Now().Add(time.Second)
+	for {
+		if msg, ok := lastOfType[ChatPayload](t, bob, TypeChat); ok {
+			if msg.Payload.Message != "from the new tab" {
+				t.Fatalf("bob got %q, the old tab must be ignored", msg.Payload.Message)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bob got no chat from the new tab")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if room.Occupancy() != 2 {
+		t.Fatalf("occupancy = %d, want 2: one seat per player", room.Occupancy())
+	}
+}
