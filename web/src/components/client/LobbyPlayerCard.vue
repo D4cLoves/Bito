@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhArrowCounterClockwise, PhFire } from '@phosphor-icons/vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { rankTitle, winRate } from '../../composables/usePlayerRank'
 import { avatarTone } from '../../composables/avatar'
 import { useSettingsStore } from '../../stores/settings'
+import AvatarGlyph from './AvatarGlyph.vue'
 import CardBack from './CardBack.vue'
 import type { Profile } from '../../types/user'
 import type { GameHistoryEntry, GameOutcome } from '../../types/social'

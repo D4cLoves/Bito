@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { createTimeline, onScroll, utils } from 'animejs'
 import type { Timeline } from 'animejs'
 import PaperCard from './PaperCard.vue'
@@ -143,6 +144,8 @@ function buildStates(): Record<string, Pose>[] {
 
 const states = buildStates()
 
+const narrow = useMediaQuery('(max-width: 767px)')
+const stepVh = computed(() => (narrow.value ? 45 : 75))
 const sectionEl = ref<HTMLElement | null>(null)
 const tableWrap = ref<HTMLElement | null>(null)
 const tableEl = ref<HTMLElement | null>(null)
@@ -228,7 +231,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section id="how-to-play" ref="sectionEl" class="htp" :style="{ height: `calc(100vh + ${STEPS.length * 75}vh)` }">
+  <section id="how-to-play" ref="sectionEl" class="htp" :style="{ height: `calc(100vh + ${STEPS.length * stepVh}vh)` }">
     <div class="htp-pin">
       <div class="htp-copy">
         <p class="eyebrow">Как играть</p>

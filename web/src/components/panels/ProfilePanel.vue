@@ -140,8 +140,9 @@ defineEmits<{ (e: 'settings', section: string): void; (e: 'retry'): void }>()
   }
 
   .player-card {
-    max-width: 240px;
-    margin: 0 auto;
+    justify-self: center;
+    width: 100%;
+    max-width: 210px;
   }
 }
 </style>

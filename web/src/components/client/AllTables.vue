@@ -359,13 +359,45 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
 }
 
 @media (max-width: 560px) {
+  .all-tables {
+    gap: 14px;
+  }
+
+  .filters {
+    gap: 12px;
+  }
+
+  .filter {
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .seg {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -16px;
+    padding: 0 16px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg button {
+    flex: none;
+    height: 34px;
+    padding: 0 13px;
+  }
+
   .bar {
-    flex-direction: column;
-    align-items: stretch;
+    padding-top: 12px;
   }
 
   .sort {
-    width: 100%;
+    width: 180px;
   }
 }
 

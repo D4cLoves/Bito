@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhUsersThree, PhPlus } from '@phosphor-icons/vue'
+import AvatarGlyph from './AvatarGlyph.vue'
 import ChipIcon from './ChipIcon.vue'
 import { useCountUp } from '../../composables/useCountUp'
 import { TOP_UP_THRESHOLD } from '../../constants/economy'

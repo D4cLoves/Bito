@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, CircleAlert, Info } from 'lucide-vue-next'
+import { PhCheck, PhInfo, PhWarningCircle } from '@phosphor-icons/vue'
 import { useToast } from '../../composables/useToast'
 
 const { toasts, dismiss } = useToast()
@@ -9,9 +9,9 @@ const { toasts, dismiss } = useToast()
   <div class="toast-stack" role="status" aria-live="polite">
     <TransitionGroup name="toast">
       <button v-for="t in toasts" :key="t.id" type="button" class="toast" :class="t.tone" @click="dismiss(t.id)">
-        <Check v-if="t.tone === 'success'" :size="17" aria-hidden="true" />
-        <CircleAlert v-else-if="t.tone === 'error'" :size="17" aria-hidden="true" />
-        <Info v-else :size="17" aria-hidden="true" />
+        <PhCheck v-if="t.tone === 'success'" :size="17" weight="bold" aria-hidden="true" />
+        <PhWarningCircle v-else-if="t.tone === 'error'" :size="17" weight="bold" aria-hidden="true" />
+        <PhInfo v-else :size="17" weight="bold" aria-hidden="true" />
         <span>{{ t.text }}</span>
       </button>
     </TransitionGroup>
@@ -23,7 +23,7 @@ const { toasts, dismiss } = useToast()
   position: fixed;
   z-index: 400;
   left: 50%;
-  bottom: 24px;
+  bottom: calc(var(--rail-h, 0px) + 24px);
   translate: -50% 0;
   display: flex;
   flex-direction: column;

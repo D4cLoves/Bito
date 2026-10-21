@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { computed } from 'vue'
 import { PhUser } from '@phosphor-icons/vue'
+import AvatarGlyph from './AvatarGlyph.vue'
 import StakeChip from './StakeChip.vue'
 import { avatarTone } from '../../composables/avatar'
 

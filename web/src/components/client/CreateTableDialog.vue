@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import AvatarGlyph from './AvatarGlyph.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { motion } from 'motion-v'
+import { useMediaQuery } from '@vueuse/core'
 import { PhCheck, PhGlobeSimple, PhLockSimple, PhX } from '@phosphor-icons/vue'
+import AvatarGlyph from './AvatarGlyph.vue'
 import StakeChip from './StakeChip.vue'
 import { STAKES, TABLE_FEE, bestPayout } from '../../constants/economy'
 import { fitsDeck } from '../../composables/useLobbyPrefs'
@@ -24,6 +25,7 @@ const emit = defineEmits<{ (e: 'close'): void; (e: 'create'): void }>()
 const DECKS: DeckSize[] = [24, 36, 52]
 const withFriends = computed(() => isPrivate.value || invited.value.length > 0)
 const SEATS = computed(() => (withFriends.value ? [2, 3, 4, 5, 6] : [3, 4, 5, 6]))
+const compact = useMediaQuery('(max-width: 560px)')
 const lobbyFriends = computed(() => (props.friends ?? []).filter((f) => f.status === 'online'))
 const roomForFriends = computed(() => players.value - 1)
 const MODES: { id: GameMode; label: string; suit: string }[] = [
@@ -134,11 +136,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
           <PhX :size="20" />
         </button>
       </header>
-      <p v-if="isPrivate" class="sub">Приватный стол не видно в списке. Сесть смогут только те, кого вы позовёте, или у кого есть ссылка.</p>
-      <p v-else-if="invited.length" class="sub">Позванным держим места 45 секунд. Остальные места займут игроки из списка столов.</p>
-      <p v-else class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
-
       <div ref="body" class="body">
+        <p v-if="isPrivate" class="sub">Приватный стол не видно в списке. Сесть смогут только те, кого вы позовёте, или у кого есть ссылка.</p>
+        <p v-else-if="invited.length" class="sub">Позванным держим места 45 секунд. Остальные места займут игроки из списка столов.</p>
+        <p v-else class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
+
         <div class="group">
           <span id="c-stake" class="label">Ставка</span>
           <div class="chips" role="radiogroup" aria-labelledby="c-stake">
@@ -154,7 +156,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
               :title="affordable(s) ? `${s.toLocaleString('ru-RU')} фишек` : 'Не хватает фишек'"
               @click="pickStake(s)"
             >
-              <StakeChip :value="s" :size="52" />
+              <StakeChip :value="s" :size="compact ? 42 : 52" />
               <PhLockSimple v-if="!affordable(s)" class="lock" :size="16" weight="bold" aria-hidden="true" />
             </button>
           </div>
@@ -294,12 +296,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
 .dialog {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   width: min(540px, 100%);
   max-height: calc(100dvh - 32px);
   padding: 24px 26px 22px;
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: hidden;
   border-radius: 28px;
   background: var(--color-paper-raised);
   box-shadow: var(--shadow-panel);
@@ -338,7 +340,7 @@ h2 {
 }
 
 .sub {
-  margin: -8px 0 0;
+  margin: 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-ink-faint);
@@ -346,8 +348,14 @@ h2 {
 
 .body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
+  margin: -4px -26px 0;
+  padding: 4px 26px 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .row {
@@ -624,20 +632,28 @@ h2 {
 
 @media (max-width: 560px) {
   .dialog {
-    padding: 20px 18px 18px;
+    gap: 14px;
+    padding: 18px 18px 16px;
     border-radius: 24px;
   }
 
+  .body {
+    gap: 16px;
+    margin: -4px -18px 0;
+    padding: 4px 18px 4px;
+  }
+
   .chips {
-    gap: 8px;
+    gap: 6px;
   }
 
-  .actions {
-    flex-direction: column-reverse;
+  .odds {
+    gap: 18px;
+    padding: 12px 14px;
   }
 
-  .btn {
-    width: 100%;
+  .btn.primary {
+    flex: 1;
   }
 }
 </style>
