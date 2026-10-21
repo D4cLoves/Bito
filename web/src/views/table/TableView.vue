@@ -49,8 +49,9 @@ const wide = useMediaQuery('(min-width: 1100px)')
 
 const roomId = String(route.params.id)
 const linkKey = typeof route.query.key === 'string' ? route.query.key : ''
-const socket = useGameSocket(roomId, linkKey)
-const { state, gameOver, status, offline, lastError, chat, rematch, rematchCancelled, rematchTable } = socket
+const watching = route.query.watch === '1'
+const socket = useGameSocket(roomId, linkKey, watching)
+const { state, gameOver, status, offline, lastError, chat, rematch, rematchCancelled, rematchTable, watchers } = socket
 
 const me = computed(() => auth.user?.id ?? '')
 const gameEl = ref<HTMLElement | null>(null)
@@ -86,9 +87,12 @@ const isDefender = computed(() => state.value?.defenderId === me.value)
 const isAttacker = computed(() => state.value?.attackerId === me.value)
 const myName = computed(() => meView.value?.name ?? auth.user?.username ?? 'Вы')
 
+const anchorId = computed(() => (watching ? (players.value[0]?.id ?? '') : me.value))
+const anchor = computed(() => players.value.find((p) => p.id === anchorId.value))
+
 const opponents = computed(() => {
   const list = players.value
-  const idx = list.findIndex((p) => p.id === me.value)
+  const idx = list.findIndex((p) => p.id === anchorId.value)
   if (idx < 0) return list
   return [...list.slice(idx + 1), ...list.slice(0, idx)]
 })
@@ -146,6 +150,7 @@ const statusText = computed(() => {
   const s = state.value
   if (!s) return ''
   if (gameOver.value || s.phase === 'finished') return 'Партия окончена'
+  if (watching) return watchText.value
   if (!iAmActive.value) return 'Вы вышли из игры — досмотрите партию'
   const def = nameOf(s.defenderId)
   const atk = nameOf(s.attackerId)
@@ -160,6 +165,16 @@ const statusText = computed(() => {
   }
   if (isDefender.value) return 'Всё побито. Ждём «Бито» от соперников'
   return s.youPassed ? 'Ждём остальных' : 'Всё побито. Подкиньте или скажите «Бито»'
+})
+
+const watchText = computed(() => {
+  const s = state.value
+  if (!s) return ''
+  const def = nameOf(s.defenderId)
+  if (s.phase === 'giving_more') return `${def} берёт, остальные подкидывают`
+  if (!pairs.value.length) return `Ходит ${nameOf(s.attackerId)}`
+  if (unbeaten.value.length) return `${def} отбивается`
+  return 'Всё побито, ждём «Бито»'
 })
 
 const roleText = computed(() => {
@@ -268,6 +283,10 @@ const payoutLine = computed(() => {
 const result = computed(() => {
   const g = gameOver.value
   if (!g) return null
+  if (watching) {
+    if (g.isDraw) return { title: 'Ничья', text: 'Последние вышли одновременно — дураков нет.', tone: 'draw' as const }
+    return { title: 'Партия окончена', text: g.loserId ? `В дураках — ${nameOf(g.loserId)}.` : 'Дураков нет.', tone: 'draw' as const }
+  }
   if (g.isDraw) return { title: 'Ничья', text: 'Последние вышли одновременно — дураков нет.', tone: 'draw' as const }
   if (g.loserId === me.value) return { title: 'Вы — дурак', text: 'Бывает. Отыграетесь в следующей партии.', tone: 'lose' as const }
   const mine = standings.value.find((s) => s.me)
@@ -424,6 +443,8 @@ async function copyLink() {
   }
 }
 
+const chatPlaceholder = watching ? 'Зрители только читают чат' : 'Написать за столом…'
+
 function tableLink() {
   const key = waitingInfo.value?.key || linkKey
   return `${location.origin}/table/${roomId}${key ? `?key=${encodeURIComponent(key)}` : ''}`
@@ -432,7 +453,7 @@ function tableLink() {
 const { friends, refresh: refreshFriends } = useFriends()
 const calledUntil = ref<Record<string, number>>({})
 const seatsLeft = computed(() => (waitingInfo.value ? waitingInfo.value.maxPlayers - Math.max(waitingInfo.value.players, 1) : 0))
-const canCall = computed(() => !state.value && status.value !== 'closed' && !!waitingInfo.value && !waitingInfo.value.matchmaking)
+const canCall = computed(() => !watching && !state.value && status.value !== 'closed' && !!waitingInfo.value && !waitingInfo.value.matchmaking)
 const showCall = computed(() => canCall.value && seatsLeft.value > 0)
 const callable = computed(() => friends.value.filter((f) => f.status === 'online' || isCalled(f.id)))
 
@@ -501,7 +522,7 @@ watch(state, (s, prev) => {
 
 const iVotedRematch = computed(() => !!rematch.value?.votes.includes(me.value))
 const rivalWantsRematch = computed(() => (rematch.value?.votes.length ?? 0) > (iVotedRematch.value ? 1 : 0))
-const rematchOpen = computed(() => !!gameOver.value && status.value === 'open' && !rematchCancelled.value && !rematchTable.value)
+const rematchOpen = computed(() => !watching && !!gameOver.value && status.value === 'open' && !rematchCancelled.value && !rematchTable.value)
 
 function voteRematch() {
   sound.playClick()
@@ -525,6 +546,10 @@ watch(rematchCancelled, (reason) => {
 
 watch(rematchTable, (id) => {
   if (!id) return
+  if (watching) {
+    if (!waitingInfo.value?.private) router.push({ name: 'table', params: { id }, query: { watch: '1' } })
+    return
+  }
   sound.playShuffle()
   router.push({ name: 'table', params: { id } })
 })
@@ -532,6 +557,7 @@ watch(rematchTable, (id) => {
 watch(gameOver, (g) => {
   if (!g) return
   resultOpen.value = true
+  if (watching) return
   if (g.isDraw) sound.playSuccess()
   else if (g.loserId === me.value) sound.playLose()
   else sound.playChipsWin()
@@ -612,8 +638,10 @@ onUnmounted(() => {
         :chat-open="chatOpen"
         :unread="unread"
         :can-surrender="canAct"
-        :waiting="!state"
+        :waiting="!state && !watching"
         :copied="copied"
+        :watchers="watchers"
+        :watching="watching"
         @back="router.push('/lobby')"
         @sound="toggleSound"
         @chat="toggleChat"
@@ -673,7 +701,7 @@ onUnmounted(() => {
               <div v-if="!showCall" class="waiting-cards" aria-hidden="true">
                 <GameCard v-for="i in 3" :key="i" face-down size="sm" :class="`wc wc${i}`" />
               </div>
-              <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
+              <h1>{{ status === 'closed' ? 'Не удалось подключиться' : watching ? 'Партия ещё не началась' : 'Ждём соперников' }}</h1>
               <p v-if="status === 'closed'">Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.</p>
               <p v-else-if="waitingInfo">
                 За столом {{ Math.max(waitingInfo.players, 1) }} из {{ waitingInfo.maxPlayers }}.
@@ -708,6 +736,20 @@ onUnmounted(() => {
       <section class="dock" :class="{ 'my-turn': myTurn }">
         <div class="action-row">
           <TableSeat
+            v-if="watching"
+            class="me-seat"
+            :data-fly-seat="anchorId"
+            bubble-side="up"
+            :name="anchor?.name ?? null"
+            :hand-count="anchor?.handCount ?? 0"
+            :role="anchor ? roleOf(anchor.id) : null"
+            :out="!!anchor && !anchor.isActive"
+            :offline="!!anchor && offline.has(anchor.id)"
+            :turn-fraction="anchor && actorId === anchor.id && turnLeft > 0 ? turnFraction : null"
+            :bubble="anchor ? bubbles[anchor.id] ?? null : null"
+          />
+          <TableSeat
+            v-else
             class="me-seat"
             me
             :data-fly-seat="me"
@@ -721,7 +763,7 @@ onUnmounted(() => {
           <div class="status">
             <span v-if="roleText" class="role">{{ roleText }}</span>
             <span v-if="result && !resultOpen" class="status-text result-line" :class="result.tone">{{ result.title }}</span>
-            <span v-else class="status-text">{{ state ? statusText : 'Садитесь поудобнее — ждём остальных' }}</span>
+            <span v-else class="status-text">{{ state ? statusText : watching ? 'Вы зритель — партия начнётся, когда все сядут' : 'Садитесь поудобнее — ждём остальных' }}</span>
             <div v-if="myTurn && turnLeft > 0" class="timer" :class="{ urgent: turnSeconds <= 5 }">
               <div class="timer-bar" :style="{ transform: `scaleX(${turnFraction})` }"></div>
               <span class="timer-text">{{ turnSeconds }} с</span>
@@ -740,7 +782,8 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="hand" :class="{ crowded: hand.length > 10 }" data-fly-zone="hand">
+        <p v-if="watching" class="watch-note">Вы смотрите партию: карты игроков на руках не видны, ходить и писать в чат нельзя.</p>
+        <div v-else class="hand" :class="{ crowded: hand.length > 10 }" data-fly-zone="hand">
           <TransitionGroup name="hand-slot">
             <div
               v-for="(card, i) in hand"
@@ -767,15 +810,15 @@ onUnmounted(() => {
     </div>
 
     <aside v-if="wide && chatOpen" class="chat-col">
-      <ChatBox class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
-        <template #tools><QuickChat @send="say" /></template>
+      <ChatBox class="chat-box" title="Чат стола" :placeholder="chatPlaceholder" :disabled="watching" :messages="chat" :my-id="me" @send="say">
+        <template v-if="!watching" #tools><QuickChat @send="say" /></template>
       </ChatBox>
     </aside>
 
     <AnimatePresence>
       <OverlayPanel v-if="!wide && chatOpen" key="chat" side="right" :width="380" title="Чат стола" @close="chatOpen = false">
-        <ChatBox class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
-          <template #tools><QuickChat @send="say" /></template>
+        <ChatBox class="chat-box sheet" title="" :placeholder="chatPlaceholder" :disabled="watching" :messages="chat" :my-id="me" @send="say">
+          <template v-if="!watching" #tools><QuickChat @send="say" /></template>
         </ChatBox>
       </OverlayPanel>
     </AnimatePresence>
@@ -818,7 +861,7 @@ onUnmounted(() => {
               <span v-if="s.payout !== null" class="standing-payout" :class="{ plus: s.payout > 0, minus: s.payout < 0 }">{{ chips(s.payout) }}</span>
             </li>
           </ol>
-          <PostGameChat :messages="chat" :my-id="me" @send="say" />
+          <PostGameChat v-if="!watching" :messages="chat" :my-id="me" @send="say" />
           <p v-if="rematchCancelled" class="rematch-note">Реванша не будет: {{ rematchCancelled }}</p>
           <p v-else-if="rematchOpen && rivalWantsRematch && !iVotedRematch" class="rematch-note hot">Соперник хочет реванш</p>
           <div class="dialog-actions center">
@@ -991,6 +1034,14 @@ onUnmounted(() => {
   font-size: clamp(28px, 3.4vw, 42px);
   font-style: italic;
   font-weight: 400;
+}
+
+.watch-note {
+  margin: 0;
+  padding: 18px 20px 22px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--color-ink-muted);
 }
 
 .waiting p {

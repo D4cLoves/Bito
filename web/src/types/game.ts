@@ -80,6 +80,7 @@ export interface TableInfo {
   matchmaking?: boolean
   private?: boolean
   key?: string
+  watchers?: number
 }
 
 export interface LobbyState {

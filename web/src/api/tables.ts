@@ -5,6 +5,10 @@ export function listTables(): Promise<TableInfo[]> {
   return authedFetch<TableInfo[]>('/api/v1/tables')
 }
 
+export function listLiveTables(): Promise<TableInfo[]> {
+  return authedFetch<TableInfo[]>('/api/v1/tables/live')
+}
+
 export function getTable(id: string): Promise<TableInfo> {
   return authedFetch<TableInfo>(`/api/v1/tables/${encodeURIComponent(id)}`)
 }

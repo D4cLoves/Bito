@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
-import { PhPlus } from '@phosphor-icons/vue'
+import { PhEye, PhPlus } from '@phosphor-icons/vue'
 import ToastStack from '../../components/app/ToastStack.vue'
 import InviteCards from '../../components/client/InviteCards.vue'
 import NavRail from '../../components/client/NavRail.vue'
@@ -11,6 +11,7 @@ import ReturnBanner from '../../components/client/ReturnBanner.vue'
 import QuickPlay from '../../components/client/QuickPlay.vue'
 import TablesCarousel from '../../components/client/TablesCarousel.vue'
 import AllTables from '../../components/client/AllTables.vue'
+import LiveGames from '../../components/client/LiveGames.vue'
 import CreateTableDialog from '../../components/client/CreateTableDialog.vue'
 import FriendsList from '../../components/client/FriendsList.vue'
 import FriendsRail from '../../components/client/FriendsRail.vue'
@@ -118,6 +119,13 @@ async function refreshTables() {
     tablesLoaded.value = true
     now.value = Date.now()
   }
+}
+
+const tablesTab = ref<'open' | 'live'>('open')
+
+function watchGame(table: TableInfo) {
+  panels.close()
+  router.push({ name: 'table', params: { id: table.id }, query: { watch: '1' } })
 }
 
 function joinFromList(table: TableInfo) {
@@ -587,7 +595,17 @@ onUnmounted(() => {
             Создать стол
           </button>
         </template>
+        <div class="tabs" role="tablist" aria-label="Какие столы показать">
+          <button type="button" role="tab" :aria-selected="tablesTab === 'open'" :class="{ on: tablesTab === 'open' }" @click="tablesTab = 'open'">
+            Ждут игроков
+          </button>
+          <button type="button" role="tab" :aria-selected="tablesTab === 'live'" :class="{ on: tablesTab === 'live' }" @click="tablesTab = 'live'">
+            <PhEye :size="16" aria-hidden="true" />
+            Идут сейчас
+          </button>
+        </div>
         <AllTables
+          v-if="tablesTab === 'open'"
           :tables="tables"
           :loaded="tablesLoaded"
           :my-id="auth.user?.id"
@@ -596,6 +614,7 @@ onUnmounted(() => {
           @join="joinFromList"
           @create="openCreate"
         />
+        <LiveGames v-else :now="now" @watch="watchGame" />
       </OverlayPanel>
 
       <OverlayPanel
@@ -703,6 +722,38 @@ onUnmounted(() => {
 .friends-sheet {
   height: 100%;
   padding: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tabs button:hover:not(.on) {
+  color: var(--color-ink);
+}
+
+.tabs button.on {
+  background: var(--color-ink-soft);
+  box-shadow: none;
+  color: var(--color-paper);
 }
 
 .head-create {

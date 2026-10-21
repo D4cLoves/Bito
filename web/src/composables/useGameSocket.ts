@@ -17,6 +17,7 @@ const FATAL_ERRORS = new Set([
   'партия уже завершена',
   'стол открыт в другой вкладке',
   'стол закрытый: нужно приглашение',
+  'у стола уже слишком много зрителей',
 ])
 
 interface ServerMessage {
@@ -24,7 +25,7 @@ interface ServerMessage {
   payload?: unknown
 }
 
-export function useGameSocket(roomId: string, key = '') {
+export function useGameSocket(roomId: string, key = '', watch = false) {
   const status = ref<SocketStatus>('connecting')
   const state = shallowRef<GameState | null>(null)
   const gameOver = shallowRef<GameOver | null>(null)
@@ -35,6 +36,7 @@ export function useGameSocket(roomId: string, key = '') {
   const rematch = ref<{ votes: string[]; needed: number } | null>(null)
   const rematchCancelled = ref<string | null>(null)
   const rematchTable = ref<string | null>(null)
+  const watchers = ref(0)
 
   let ws: WebSocket | null = null
   let retries = 0
@@ -64,7 +66,7 @@ export function useGameSocket(roomId: string, key = '') {
     }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}${key ? `&key=${encodeURIComponent(key)}` : ''}`
+    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}${key ? `&key=${encodeURIComponent(key)}` : ''}${watch ? '&watch=1' : ''}`
     const socket = new WebSocket(url)
     ws = socket
 
@@ -149,6 +151,9 @@ export function useGameSocket(roomId: string, key = '') {
       case 'rematch_start':
         rematchTable.value = (msg.payload as { tableId: string }).tableId
         break
+      case 'watchers':
+        watchers.value = (msg.payload as { count: number }).count
+        break
       case 'chat': {
         const m = msg.payload as ChatMessage
         pushChat({ userId: m.senderId, username: m.senderName, text: m.message })
@@ -187,5 +192,5 @@ export function useGameSocket(roomId: string, key = '') {
   connect()
   onUnmounted(disconnect)
 
-  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, rematch, rematchCancelled, rematchTable, ...actions, disconnect }
+  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, rematch, rematchCancelled, rematchTable, watchers, ...actions, disconnect }
 }
