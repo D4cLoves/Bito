@@ -37,6 +37,7 @@ const (
 	TypeRematchState     = "rematch_state"
 	TypeRematchCancelled = "rematch_cancelled"
 	TypeRematchStart     = "rematch_start"
+	TypeWatchers         = "watchers"
 )
 
 type Message[T any] struct {

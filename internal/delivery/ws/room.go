@@ -43,6 +43,7 @@ type RoomInfo struct {
 	Stake       int64     `json:"stake"`
 	Matchmaking bool      `json:"matchmaking"`
 	Private     bool      `json:"private"`
+	Watchers    int       `json:"watchers"`
 	CreatedBy   string    `json:"createdBy"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -73,6 +74,7 @@ type Room struct {
 	key               string
 	bank              Bank
 	clients           map[string]*Client
+	watchers          map[string]*Client
 	seated            map[string]bool
 	reservations      map[string]time.Time
 	invites           map[string]time.Time
@@ -99,6 +101,7 @@ type Room struct {
 	createdBy         string
 	createdAt         time.Time
 	playersCount      atomic.Int32
+	watcherCount      atomic.Int32
 	started           atomic.Bool
 	finished          atomic.Bool
 }
@@ -120,6 +123,7 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		createdBy:         s.CreatedBy,
 		createdAt:         time.Now(),
 		clients:           make(map[string]*Client),
+		watchers:          make(map[string]*Client),
 		seated:            make(map[string]bool),
 		reservations:      make(map[string]time.Time),
 		invites:           make(map[string]time.Time),
@@ -289,6 +293,7 @@ func (r *Room) Info() RoomInfo {
 		Stake:       r.stake,
 		Matchmaking: r.matchmaking,
 		Private:     r.private,
+		Watchers:    r.Watchers(),
 		CreatedBy:   r.createdBy,
 		CreatedAt:   r.createdAt,
 	}
@@ -333,9 +338,7 @@ func (r *Room) Run() {
 			r.handleDisconnectTimeout(playerID)
 
 		case data := <-r.announce:
-			for _, c := range r.clients {
-				c.Send(data)
-			}
+			r.broadcast(data)
 		}
 	}
 }
@@ -350,6 +353,10 @@ func (r *Room) Close() {
 }
 
 func (r *Room) handleRegister(client *Client) {
+	if client.Watching() {
+		r.addWatcher(client)
+		return
+	}
 	playerID := client.ID()
 
 	r.mu.Lock()
@@ -370,16 +377,8 @@ func (r *Room) handleRegister(client *Client) {
 				return
 			}
 
+			r.sendAll(TypePlayerReconnected, PlayerStatusPayload{PlayerID: playerID})
 			r.takeOver(playerID, client)
-
-			notifyMsg, err := NewMessage(TypePlayerReconnected, PlayerStatusPayload{PlayerID: playerID})
-			if err == nil {
-				for id, c := range r.clients {
-					if id != playerID {
-						c.Send(notifyMsg)
-					}
-				}
-			}
 
 			r.sendGameStateTo(client)
 			return
@@ -413,6 +412,10 @@ func (r *Room) takeOver(playerID string, client *Client) {
 }
 
 func (r *Room) handleUnregister(client *Client) {
+	if client.Watching() {
+		r.removeWatcher(client)
+		return
+	}
 	playerID := client.ID()
 	currentClient, exists := r.clients[playerID]
 	if !exists || currentClient != client {
@@ -438,12 +441,7 @@ func (r *Room) handleUnregister(client *Client) {
 
 	log.Printf("[Room %s] игрок %s потерял связь, запущен таймер ожидания 30 сек", r.id, playerID)
 
-	notifyMsg, err := NewMessage(TypePlayerDisconnected, PlayerStatusPayload{PlayerID: playerID})
-	if err == nil {
-		for _, c := range r.clients {
-			c.Send(notifyMsg)
-		}
-	}
+	r.sendAll(TypePlayerDisconnected, PlayerStatusPayload{PlayerID: playerID})
 
 	r.mu.Lock()
 	r.disconnectTimers[playerID] = time.AfterFunc(disconnectGraceDur, func() {
@@ -597,6 +595,12 @@ func (r *Room) refundStakes() {
 }
 
 func (r *Room) handleIncoming(msg IncomingMessage) {
+	if msg.Client.Watching() {
+		if r.watchers[msg.Client.ID()] == msg.Client {
+			r.sendError(msg.Client, errWatcherAction)
+		}
+		return
+	}
 	if r.clients[msg.Client.ID()] != msg.Client {
 		return
 	}
@@ -748,6 +752,9 @@ func (r *Room) broadcastGameState() {
 	for _, client := range r.clients {
 		r.sendGameStateTo(client)
 	}
+	for _, client := range r.watchers {
+		r.sendGameStateTo(client)
+	}
 }
 
 func (r *Room) sendGameStateTo(client *Client) {
@@ -802,26 +809,21 @@ func (r *Room) sendGameStateTo(client *Client) {
 }
 
 func (r *Room) broadcastGameOver() {
+	r.sendAll(TypeGameOver, r.gameOverPayload())
+}
+
+func (r *Room) gameOverPayload() GameOverPayload {
 	places := make([]string, 0, len(r.game.Places()))
 	for _, id := range r.game.Places() {
 		places = append(places, string(id))
 	}
-	payload := GameOverPayload{
+	return GameOverPayload{
 		WinnerID: string(r.game.WinnerID()),
 		LoserID:  string(r.game.LoserID()),
 		Places:   places,
 		Payouts:  r.payouts,
 		Stake:    r.stake,
 		IsDraw:   r.draw,
-	}
-
-	data, err := NewMessage(TypeGameOver, payload)
-	if err != nil {
-		return
-	}
-
-	for _, c := range r.clients {
-		c.Send(data)
 	}
 }
 
@@ -854,10 +856,7 @@ func (r *Room) handleChat(sender *Client, rawData []byte) {
 	if err != nil {
 		return
 	}
-
-	for _, c := range r.clients {
-		c.Send(data)
-	}
+	r.broadcast(data)
 }
 
 func (r *Room) sendError(client *Client, errMsg string) {
@@ -877,6 +876,9 @@ func (r *Room) cleanup() {
 	r.mu.Unlock()
 
 	for _, c := range r.clients {
+		c.Close()
+	}
+	for _, c := range r.watchers {
 		c.Close()
 	}
 }

@@ -25,6 +25,7 @@ type Client struct {
 	name   string
 	conn   *websocket.Conn
 	owner  endpoint
+	watch  bool
 	send   chan []byte
 	mu     sync.Mutex
 	closed bool
@@ -38,6 +39,16 @@ func NewClient(id, name string, conn *websocket.Conn, ep endpoint) *Client {
 		owner: ep,
 		send:  make(chan []byte, sendBufferSize),
 	}
+}
+
+func NewWatcher(id, name string, conn *websocket.Conn, ep endpoint) *Client {
+	c := NewClient(id, name, conn, ep)
+	c.watch = true
+	return c
+}
+
+func (c *Client) Watching() bool {
+	return c.watch
 }
 
 func (c *Client) ID() string {

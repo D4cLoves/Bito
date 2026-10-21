@@ -129,7 +129,5 @@ func (r *Room) sendAll(msgType string, payload any) {
 	if err != nil {
 		return
 	}
-	for _, c := range r.clients {
-		c.Send(data)
-	}
+	r.broadcast(data)
 }

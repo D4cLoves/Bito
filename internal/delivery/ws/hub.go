@@ -267,6 +267,11 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if query.Get("watch") == "1" && !room.Holds(playerID) {
+		h.watch(conn, room, playerID, playerName, query.Get("key"))
+		return
+	}
+
 	if reason := h.admit(room, playerID, query.Get("key")); reason != "" {
 		rejectConn(conn, reason)
 		return

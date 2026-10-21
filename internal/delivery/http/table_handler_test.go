@@ -171,3 +171,22 @@ func TestTables_PrivateKeyOnlyForMembers(t *testing.T) {
 		t.Fatal("a private table is in the public list")
 	}
 }
+
+func TestTables_LiveListsOnlyStartedGames(t *testing.T) {
+	router, token, _ := newTestTablesRouter(t)
+	if w := doTablesRequest(router, http.MethodPost, token, `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`); w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d", w.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tables/live", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "[]" {
+		t.Fatalf("live = %s, want [] while nobody plays", body)
+	}
+}

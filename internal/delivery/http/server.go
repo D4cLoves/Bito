@@ -115,6 +115,7 @@ func (s *Server) setupRoutes() {
 			r.Post("/", s.tableHandler.Create)
 			r.Post("/quick", s.tableHandler.Quick)
 			r.Get("/", s.tableHandler.List)
+			r.Get("/live", s.tableHandler.Live)
 			r.Get("/{id}", s.tableHandler.Get)
 			if s.inviteHandler != nil {
 				r.Post("/{id}/invites", s.inviteHandler.Invite)

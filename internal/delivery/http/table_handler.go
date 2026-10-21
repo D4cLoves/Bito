@@ -244,6 +244,10 @@ func (th *TableHandler) List(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, th.hub.ListOpenRooms())
 }
 
+func (th *TableHandler) Live(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, th.hub.ListLiveRooms())
+}
+
 func (th *TableHandler) userID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, ok := UserIDFromContext(r.Context())
 	if !ok {
