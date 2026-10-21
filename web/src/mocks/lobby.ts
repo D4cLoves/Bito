@@ -9,5 +9,3 @@ export const MOCK_HISTORY: GameHistoryEntry[] = [
   { id: 'g4', finishedAt: ago(60 * 27), mode: 'perevodnoy', deck: 52, players: 5, stake: 1000, place: 1, payout: 380 },
   { id: 'g5', finishedAt: ago(60 * 50), mode: 'podkidnoy', deck: 36, players: 2, stake: 100, place: 1, payout: 95 },
 ]
-
-export const MOCK_OWNED: string[] = ['felt:wine', 'back:grove']

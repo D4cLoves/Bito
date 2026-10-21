@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { PhCheck } from '@phosphor-icons/vue'
 import ChipIcon from '../client/ChipIcon.vue'
 import CosmeticTile from '../cosmetics/CosmeticTile.vue'
@@ -8,7 +8,7 @@ import { ALL_ITEMS, type CatalogEntry, type CosmeticFilterValue } from '../../co
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSound } from '../../composables/useGameSound'
 
-defineProps<{ balance: number | null }>()
+const props = defineProps<{ balance: number | null; buying: string | null }>()
 const emit = defineEmits<{ (e: 'buy', item: CatalogEntry): void }>()
 
 const settings = useSettingsStore()
@@ -25,9 +25,33 @@ const counts = computed(() => ({
   theme: ITEMS.filter((i) => i.kind === 'theme').length,
 }))
 
+const confirming = ref<string | null>(null)
+let confirmTimer: number | null = null
+
+const keyOf = (item: CatalogEntry) => `${item.kind}:${item.id}`
+const priceOf = (item: CatalogEntry) => settings.priceOf(item.kind, item.id)
+const tooPoor = (item: CatalogEntry) => props.balance !== null && priceOf(item) > props.balance
+
 function wear(item: CatalogEntry) {
   if (settings.select(item.kind, item.id)) sound.playClick()
 }
+
+function buy(item: CatalogEntry) {
+  if (props.buying || tooPoor(item)) return
+  if (confirmTimer) clearTimeout(confirmTimer)
+  if (confirming.value !== keyOf(item)) {
+    sound.playClick()
+    confirming.value = keyOf(item)
+    confirmTimer = window.setTimeout(() => (confirming.value = null), 3500)
+    return
+  }
+  confirming.value = null
+  emit('buy', item)
+}
+
+onUnmounted(() => {
+  if (confirmTimer) clearTimeout(confirmTimer)
+})
 </script>
 
 <template>
@@ -40,9 +64,21 @@ function wear(item: CatalogEntry) {
     <ul class="grid">
       <li v-for="item in visible" :key="`${item.kind}:${item.id}`">
         <CosmeticTile :kind="item.kind" :id="item.id" :name="item.name" :active="settings.isActive(item.kind, item.id)">
-          <button v-if="!settings.isOwned(item.kind, item.id)" type="button" class="act buy" @click="emit('buy', item)">
-            <ChipIcon :size="16" />
-            {{ item.price.toLocaleString('ru-RU') }}
+          <button
+            v-if="!settings.isOwned(item.kind, item.id)"
+            type="button"
+            class="act buy"
+            :class="{ confirm: confirming === keyOf(item), poor: tooPoor(item) }"
+            :disabled="buying === keyOf(item) || tooPoor(item)"
+            :title="tooPoor(item) ? 'Не хватает фишек' : ''"
+            @click="buy(item)"
+          >
+            <template v-if="buying === keyOf(item)">Покупаем…</template>
+            <template v-else-if="confirming === keyOf(item)">Купить за {{ priceOf(item).toLocaleString('ru-RU') }}?</template>
+            <template v-else>
+              <ChipIcon :size="16" />
+              {{ priceOf(item).toLocaleString('ru-RU') }}
+            </template>
           </button>
           <span v-else-if="settings.isActive(item.kind, item.id)" class="act worn"><PhCheck :size="14" weight="bold" />Надето</span>
           <button v-else type="button" class="act wear" @click="wear(item)">Надеть</button>
@@ -112,6 +148,23 @@ function wear(item: CatalogEntry) {
 
 .buy:hover {
   transform: translateY(-1px) scale(1.04);
+}
+
+.buy.confirm {
+  padding-left: 14px;
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.buy:disabled {
+  cursor: default;
+  transform: none;
+}
+
+.buy.poor {
+  background: var(--color-paper-sunken);
+  color: var(--color-ink-faint);
+  box-shadow: none;
 }
 
 .buy :deep(.chip) {

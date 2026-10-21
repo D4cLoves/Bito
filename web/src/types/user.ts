@@ -11,7 +11,7 @@ export interface Wallet {
   balance: number
 }
 
-export type TransactionKind = 'signup_bonus' | 'opening' | 'stake_lock' | 'stake_refund' | 'win_payout' | 'top_up'
+export type TransactionKind = 'signup_bonus' | 'opening' | 'stake_lock' | 'stake_refund' | 'win_payout' | 'top_up' | 'purchase'
 
 export interface WalletTransaction {
   id: number

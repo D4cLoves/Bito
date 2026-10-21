@@ -17,8 +17,9 @@ type ShopRepository interface {
 }
 
 type ShopState struct {
-	Owned []string
-	Look  model.Look
+	Owned     []string
+	Look      model.Look
+	LookSaved bool
 }
 
 type ShopService struct {
@@ -49,7 +50,7 @@ func (s *ShopService) State(ctx context.Context, me uuid.UUID) (ShopState, error
 	if !found {
 		look = defaultLook()
 	}
-	return ShopState{Owned: owned, Look: look}, nil
+	return ShopState{Owned: owned, Look: look, LookSaved: found}, nil
 }
 
 func (s *ShopService) Buy(ctx context.Context, me uuid.UUID, key string) (int64, error) {

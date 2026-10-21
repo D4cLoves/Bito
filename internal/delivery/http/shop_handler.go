@@ -32,9 +32,10 @@ type LookPayload struct {
 }
 
 type ShopResponse struct {
-	Items []ShopItemResponse `json:"items"`
-	Owned []string           `json:"owned"`
-	Look  LookPayload        `json:"look"`
+	Items     []ShopItemResponse `json:"items"`
+	Owned     []string           `json:"owned"`
+	Look      LookPayload        `json:"look"`
+	LookSaved bool               `json:"lookSaved"`
 }
 
 type BuyRequest struct {
@@ -71,9 +72,10 @@ func (sh *ShopHandler) State(w http.ResponseWriter, r *http.Request) {
 		items = append(items, ShopItemResponse{Kind: it.Kind, ID: it.ID, Price: it.Price})
 	}
 	respondJSON(w, http.StatusOK, ShopResponse{
-		Items: items,
-		Owned: state.Owned,
-		Look:  LookPayload{Theme: state.Look.Theme, Felt: state.Look.Felt, Back: state.Look.Back},
+		Items:     items,
+		Owned:     state.Owned,
+		Look:      LookPayload{Theme: state.Look.Theme, Felt: state.Look.Felt, Back: state.Look.Back},
+		LookSaved: state.LookSaved,
 	})
 }
 
@@ -125,7 +127,7 @@ func respondShopError(w http.ResponseWriter, me uuid.UUID, err error) {
 	case errors.Is(err, model.ErrAlreadyOwned):
 		respondError(w, http.StatusConflict, "уже куплено")
 	case errors.Is(err, model.ErrInsufficientFunds):
-		respondError(w, http.StatusPaymentRequired, msgNoFunds)
+		respondError(w, http.StatusPaymentRequired, "не хватает фишек на покупку")
 	case errors.Is(err, model.ErrNotOwned):
 		respondError(w, http.StatusForbidden, "сначала купите этот предмет")
 	default:

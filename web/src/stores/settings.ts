@@ -11,7 +11,7 @@ import {
   type FeltId,
   type ThemeId,
 } from '../constants/cosmetics'
-import { MOCK_OWNED } from '../mocks/lobby'
+import { buyItem, getShop, saveLook, type Look } from '../api/shop'
 
 export type { CardBackId, FeltId, ThemeId } from '../constants/cosmetics'
 export type InvitePolicy = 'all' | 'friends' | 'nobody'
@@ -60,11 +60,17 @@ export const useSettingsStore = defineStore('settings', () => {
   const invites = ref<InvitePolicy>(saved.invites)
   const music = ref(saved.music)
   const soundOn = ref(localStorage.getItem(SOUND_KEY) !== 'true')
-  const owned = ref(new Set<string>(MOCK_OWNED))
+  const owned = ref(new Set<string>())
+  const prices = ref(new Map<string, number>())
+  const shopLoaded = ref(false)
+
+  function priceOf(kind: CosmeticKind, id: string) {
+    return prices.value.get(`${kind}:${id}`) ?? CATALOG[kind].find((i) => i.id === id)?.price ?? 0
+  }
 
   function isOwned(kind: CosmeticKind, id: string) {
     const item = CATALOG[kind].find((i) => i.id === id)
-    return !!item && (item.price === 0 || owned.value.has(`${kind}:${id}`))
+    return !!item && (priceOf(kind, id) === 0 || owned.value.has(`${kind}:${id}`))
   }
 
   function isActive(kind: CosmeticKind, id: string) {
@@ -73,12 +79,49 @@ export const useSettingsStore = defineStore('settings', () => {
     return theme.value === id
   }
 
-  function select(kind: CosmeticKind, id: string) {
-    if (!isOwned(kind, id)) return false
+  function apply(kind: CosmeticKind, id: string) {
     if (kind === 'back' && isKnown(CARD_BACKS, id)) cardBack.value = id
     else if (kind === 'felt' && isKnown(FELTS, id)) felt.value = id
     else if (kind === 'theme' && isKnown(THEMES, id)) theme.value = id
+  }
+
+  function look(): Look {
+    return { theme: theme.value, felt: felt.value, back: cardBack.value }
+  }
+
+  function pushLook() {
+    saveLook(look()).catch(() => loadShop().catch(() => {}))
+  }
+
+  function select(kind: CosmeticKind, id: string) {
+    if (!isOwned(kind, id)) return false
+    apply(kind, id)
+    if (shopLoaded.value) pushLook()
     return true
+  }
+
+  async function loadShop() {
+    const state = await getShop()
+    prices.value = new Map(state.items.map((i) => [`${i.kind}:${i.id}`, i.price]))
+    owned.value = new Set(state.owned)
+    shopLoaded.value = true
+
+    if (state.lookSaved) {
+      apply('theme', state.look.theme)
+      apply('felt', state.look.felt)
+      apply('back', state.look.back)
+      return
+    }
+    if (!isOwned('theme', theme.value)) theme.value = DEFAULTS.theme
+    if (!isOwned('felt', felt.value)) felt.value = DEFAULTS.felt
+    if (!isOwned('back', cardBack.value)) cardBack.value = DEFAULTS.cardBack
+    pushLook()
+  }
+
+  async function buy(kind: CosmeticKind, id: string) {
+    const result = await buyItem(`${kind}:${id}`)
+    owned.value = new Set(result.owned)
+    return result.balance
   }
 
   watch([theme, felt, cardBack, invites, music], () => {
@@ -94,5 +137,5 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(soundOn, (on) => localStorage.setItem(SOUND_KEY, on ? 'false' : 'true'))
 
-  return { theme, felt, cardBack, invites, music, soundOn, owned, isOwned, isActive, select }
+  return { theme, felt, cardBack, invites, music, soundOn, owned, shopLoaded, priceOf, isOwned, isActive, select, loadShop, buy }
 })

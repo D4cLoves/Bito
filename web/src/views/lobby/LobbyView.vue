@@ -39,6 +39,7 @@ import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
 import type { TableInfo, TableInvite } from '../../types/game'
 import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, PlayerProfile } from '../../types/social'
 import type { TablePreset } from '../../composables/tableList'
+import type { CatalogEntry } from '../../constants/cosmetics'
 
 const POLL_MS = 3000
 
@@ -56,6 +57,7 @@ useSmoothScroll(mainEl)
 const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
 const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
+const buying = ref<string | null>(null)
 const creating = ref(false)
 const invitingFriend = ref<Friend | null>(null)
 const invitePlayers = ref(2)
@@ -263,6 +265,23 @@ function removeFromFriends(friend: Friend) {
   dropLink(friend.id, `${friend.username} больше не в друзьях`)
 }
 
+async function buyCosmetic(item: CatalogEntry) {
+  buying.value = `${item.kind}:${item.id}`
+  try {
+    await settings.buy(item.kind, item.id)
+    settings.select(item.kind, item.id)
+    sound.playChips()
+    toast.show(`«${item.name}» куплено и надето`, 'success')
+    await profileStore.load(true)
+  } catch (err) {
+    sound.playError()
+    toast.show(err instanceof ApiError ? err.message : 'Не удалось купить', 'error')
+    settings.loadShop().catch(() => {})
+  } finally {
+    buying.value = null
+  }
+}
+
 function openAddFriend() {
   addingFriend.value = true
   panels.open('friends')
@@ -401,6 +420,7 @@ function onVisibility() {
 
 onMounted(() => {
   profileStore.load(true)
+  settings.loadShop().catch(() => {})
   loadHistory()
   refreshAll()
   refreshFriends()
@@ -535,7 +555,8 @@ onUnmounted(() => {
         <ShopPanel
           v-else-if="panels.panel.value === 'shop'"
           :balance="balance"
-          @buy="(item) => soon(`«${item.name}» можно будет купить, когда заработают покупки на сервере`)"
+          :buying="buying"
+          @buy="buyCosmetic"
         />
         <PlayerPanel
           v-else-if="panels.panel.value === 'player'"
