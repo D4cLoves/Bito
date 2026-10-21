@@ -20,6 +20,8 @@ type stubShop struct {
 	err     error
 	lastKey string
 	look    model.Look
+	avatar  string
+	asked   []uuid.UUID
 }
 
 func (s *stubShop) State(context.Context, uuid.UUID) (service.ShopState, error) {
@@ -34,6 +36,20 @@ func (s *stubShop) Buy(_ context.Context, _ uuid.UUID, key string) (int64, error
 func (s *stubShop) Wear(_ context.Context, _ uuid.UUID, look model.Look) error {
 	s.look = look
 	return s.err
+}
+
+func (s *stubShop) SetAvatar(_ context.Context, _ uuid.UUID, id string) error {
+	s.avatar = id
+	return s.err
+}
+
+func (s *stubShop) Avatars(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	s.asked = ids
+	out := map[uuid.UUID]string{}
+	for _, id := range ids {
+		out[id] = "cat"
+	}
+	return out, s.err
 }
 
 func newShopRouter(t *testing.T, stub *stubShop) (http.Handler, string) {
@@ -101,5 +117,46 @@ func TestShop_Wear(t *testing.T) {
 	stub.err = model.ErrNotOwned
 	if w := doUsersRequest(router, http.MethodPut, "/api/v1/shop/look", token, `{"theme":"noir","felt":"wine","back":"bito"}`); w.Code != http.StatusForbidden {
 		t.Fatalf("not owned status = %d, want 403", w.Code)
+	}
+}
+
+func TestShop_SetAvatar(t *testing.T) {
+	stub := &stubShop{}
+	router, token := newShopRouter(t, stub)
+	if w := doUsersRequest(router, http.MethodPut, "/api/v1/shop/avatar", token, `{"avatar":"cat"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if stub.avatar != "cat" {
+		t.Fatalf("service got %q", stub.avatar)
+	}
+	stub.err = model.ErrNotOwned
+	if w := doUsersRequest(router, http.MethodPut, "/api/v1/shop/avatar", token, `{"avatar":"crown"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("not owned status = %d, want 403", w.Code)
+	}
+}
+
+func TestShop_AvatarsSkipsBrokenIDs(t *testing.T) {
+	stub := &stubShop{}
+	router, token := newShopRouter(t, stub)
+	a, b := uuid.New(), uuid.New()
+
+	w := doUsersRequest(router, http.MethodGet, "/api/v1/shop/avatars?ids="+a.String()+",oops,,"+b.String(), token, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.asked) != 2 || got[a.String()] != "cat" || got[b.String()] != "cat" {
+		t.Fatalf("asked %v, got %v", stub.asked, got)
+	}
+
+	stub.asked = nil
+	if w := doUsersRequest(router, http.MethodGet, "/api/v1/shop/avatars?ids=nope", token, ""); w.Code != http.StatusOK || w.Body.String() != "{}\n" && w.Body.String() != "{}" {
+		t.Fatalf("no valid ids: %d %q", w.Code, w.Body.String())
+	}
+	if stub.asked != nil {
+		t.Fatal("service called without ids")
 	}
 }

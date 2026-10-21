@@ -132,6 +132,29 @@ func TestShop_SameItemTwiceAtOnceChargesOnce(t *testing.T) {
 	assertJournalMatchesBalances(t, pool)
 }
 
+func TestShop_AvatarsAreSavedAndLookedUp(t *testing.T) {
+	pool := setupTestDB(t)
+	shop := NewShopRepository(pool)
+	ctx := context.Background()
+	ids := createUsers(t, pool, 2)
+
+	if _, found, err := shop.Avatar(ctx, ids[0]); err != nil || found {
+		t.Fatalf("new user avatar found = %v, err = %v", found, err)
+	}
+	for _, avatar := range []string{"cat", "crown"} {
+		if err := shop.SaveAvatar(ctx, ids[0], avatar); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := shop.Avatars(ctx, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[ids[0]] != "crown" {
+		t.Fatalf("avatars = %v, want only the replaced choice of the first user", got)
+	}
+}
+
 func TestShop_LookIsSavedAndReplaced(t *testing.T) {
 	pool := setupTestDB(t)
 	shop := NewShopRepository(pool)

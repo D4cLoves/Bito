@@ -100,6 +100,53 @@ func (r *ShopRepository) Look(ctx context.Context, userID uuid.UUID) (model.Look
 	return look, true, nil
 }
 
+func (r *ShopRepository) Avatar(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	var avatar string
+	err := r.pool.QueryRow(ctx, `SELECT avatar FROM user_avatars WHERE user_id = $1`, userID).Scan(&avatar)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("shop repo: avatar: %w", err)
+	}
+	return avatar, true, nil
+}
+
+func (r *ShopRepository) SaveAvatar(ctx context.Context, userID uuid.UUID, avatar string) error {
+	const saveSQL = `
+		INSERT INTO user_avatars (user_id, avatar)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE
+		SET avatar = EXCLUDED.avatar, updated_at = NOW()
+	`
+	if _, err := r.pool.Exec(ctx, saveSQL, userID, avatar); err != nil {
+		return fmt.Errorf("shop repo: save avatar: %w", err)
+	}
+	return nil
+}
+
+func (r *ShopRepository) Avatars(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT user_id, avatar FROM user_avatars WHERE user_id = ANY($1)`, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("shop repo: avatars: %w", err)
+	}
+	defer rows.Close()
+
+	avatars := make(map[uuid.UUID]string, len(userIDs))
+	for rows.Next() {
+		var id uuid.UUID
+		var avatar string
+		if err = rows.Scan(&id, &avatar); err != nil {
+			return nil, fmt.Errorf("shop repo: scan avatar: %w", err)
+		}
+		avatars[id] = avatar
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("shop repo: read avatars: %w", err)
+	}
+	return avatars, nil
+}
+
 func (r *ShopRepository) SaveLook(ctx context.Context, userID uuid.UUID, look model.Look) error {
 	const saveSQL = `
 		INSERT INTO user_looks (user_id, theme, felt, back)

@@ -148,6 +148,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.shopHandler.State)
 			r.Post("/buy", s.shopHandler.Buy)
 			r.Put("/look", s.shopHandler.Wear)
+			r.Put("/avatar", s.shopHandler.SetAvatar)
+			r.Get("/avatars", s.shopHandler.Avatars)
 		})
 	}
 

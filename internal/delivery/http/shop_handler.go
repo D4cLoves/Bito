@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"bito/internal/economy"
 	"bito/internal/model"
@@ -17,6 +18,8 @@ type ShopService interface {
 	State(ctx context.Context, me uuid.UUID) (service.ShopState, error)
 	Buy(ctx context.Context, me uuid.UUID, key string) (int64, error)
 	Wear(ctx context.Context, me uuid.UUID, look model.Look) error
+	SetAvatar(ctx context.Context, me uuid.UUID, id string) error
+	Avatars(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]string, error)
 }
 
 type ShopItemResponse struct {
@@ -36,6 +39,7 @@ type ShopResponse struct {
 	Owned     []string           `json:"owned"`
 	Look      LookPayload        `json:"look"`
 	LookSaved bool               `json:"lookSaved"`
+	Avatar    string             `json:"avatar"`
 }
 
 type BuyRequest struct {
@@ -76,6 +80,7 @@ func (sh *ShopHandler) State(w http.ResponseWriter, r *http.Request) {
 		Owned:     state.Owned,
 		Look:      LookPayload{Theme: state.Look.Theme, Felt: state.Look.Felt, Back: state.Look.Back},
 		LookSaved: state.LookSaved,
+		Avatar:    state.Avatar,
 	})
 }
 
@@ -118,6 +123,56 @@ func (sh *ShopHandler) Wear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type AvatarRequest struct {
+	Avatar string `json:"avatar"`
+}
+
+func (sh *ShopHandler) SetAvatar(w http.ResponseWriter, r *http.Request) {
+	me, ok := UserIDFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req AvatarRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if err := sh.shop.SetAvatar(r.Context(), me, req.Avatar); err != nil {
+		respondShopError(w, me, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (sh *ShopHandler) Avatars(w http.ResponseWriter, r *http.Request) {
+	me, ok := UserIDFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var ids []uuid.UUID
+	for _, raw := range strings.Split(r.URL.Query().Get("ids"), ",") {
+		if id, err := uuid.Parse(strings.TrimSpace(raw)); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		respondJSON(w, http.StatusOK, map[string]string{})
+		return
+	}
+
+	avatars, err := sh.shop.Avatars(r.Context(), ids)
+	if err != nil {
+		respondShopError(w, me, err)
+		return
+	}
+	out := make(map[string]string, len(avatars))
+	for id, avatar := range avatars {
+		out[id.String()] = avatar
+	}
+	respondJSON(w, http.StatusOK, out)
 }
 
 func respondShopError(w http.ResponseWriter, me uuid.UUID, err error) {
