@@ -26,6 +26,9 @@ func setupRedis(t *testing.T) *redis.Client {
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
+		if os.Getenv("BITO_REQUIRE_INTEGRATION") == "1" {
+			t.Fatalf("redis is not reachable: %v", err)
+		}
 		t.Skipf("redis is not reachable (%v); start docker compose to run integration tests", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })

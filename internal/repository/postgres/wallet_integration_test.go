@@ -34,6 +34,9 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 
 	admin, err := pgx.Connect(ctx, adminDSN())
 	if err != nil {
+		if os.Getenv("BITO_REQUIRE_INTEGRATION") == "1" {
+			t.Fatalf("postgres is not reachable: %v", err)
+		}
 		t.Skipf("postgres is not reachable (%v); start docker compose to run integration tests", err)
 	}
 	defer admin.Close(ctx)
