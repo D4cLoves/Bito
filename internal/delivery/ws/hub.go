@@ -103,7 +103,7 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	h.mu.RLock()
 	rooms := make([]RoomInfo, 0, len(h.rooms))
 	for _, room := range h.rooms {
-		if !room.Started() && !room.matchmaking && room.Occupancy() > 0 {
+		if !room.Started() && !room.matchmaking && !room.private && room.Occupancy() > 0 {
 			rooms = append(rooms, room.Info())
 		}
 	}
@@ -267,7 +267,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reason := h.admit(room, playerID); reason != "" {
+	if reason := h.admit(room, playerID, query.Get("key")); reason != "" {
 		rejectConn(conn, reason)
 		return
 	}
@@ -327,9 +327,12 @@ func (h *Hub) authenticate(w http.ResponseWriter, r *http.Request) (id, name str
 	return id, name, true
 }
 
-func (h *Hub) admit(room *Room, playerID string) string {
+func (h *Hub) admit(room *Room, playerID, key string) string {
 	if room.Holds(playerID) {
 		return ""
+	}
+	if !room.MayEnter(playerID, key) {
+		return errPrivateTable
 	}
 	if !h.claimSeat(room, playerID) {
 		return errOtherTable

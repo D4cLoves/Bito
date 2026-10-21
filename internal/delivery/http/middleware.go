@@ -24,10 +24,11 @@ type redactingFormatter struct {
 
 func (f redactingFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
 	query := r.URL.Query()
-	if !query.Has("token") {
+	if !query.Has("token") && !query.Has("key") {
 		return f.next.NewLogEntry(r)
 	}
 	query.Del("token")
+	query.Del("key")
 	safeURL := *r.URL
 	safeURL.RawQuery = query.Encode()
 

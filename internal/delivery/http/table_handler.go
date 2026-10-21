@@ -41,6 +41,7 @@ type CreateTableRequest struct {
 	Deck       int    `json:"deck"`
 	MaxPlayers int    `json:"maxPlayers"`
 	Stake      int64  `json:"stake"`
+	Private    bool   `json:"private"`
 }
 
 type QuickMatchRequest struct {
@@ -100,6 +101,7 @@ func (req CreateTableRequest) validate() (ws.RoomSettings, error) {
 		return s, err
 	}
 	s.Stake = stake
+	s.Private = req.Private
 	return s, nil
 }
 
@@ -164,7 +166,7 @@ func (th *TableHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, msgOtherTable)
 		return
 	}
-	respondJSON(w, http.StatusCreated, room.Info())
+	respondJSON(w, http.StatusCreated, tableView(room, userID))
 }
 
 func (th *TableHandler) Quick(w http.ResponseWriter, r *http.Request) {
@@ -199,12 +201,29 @@ func (th *TableHandler) Quick(w http.ResponseWriter, r *http.Request) {
 }
 
 func (th *TableHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID, ok := th.userID(w, r)
+	if !ok {
+		return
+	}
 	room, found := th.hub.GetRoom(chi.URLParam(r, "id"))
 	if !found {
 		respondError(w, http.StatusNotFound, "table not found")
 		return
 	}
-	respondJSON(w, http.StatusOK, room.Info())
+	respondJSON(w, http.StatusOK, tableView(room, userID))
+}
+
+type TableResponse struct {
+	ws.RoomInfo
+	Key string `json:"key,omitempty"`
+}
+
+func tableView(room *ws.Room, userID string) TableResponse {
+	resp := TableResponse{RoomInfo: room.Info()}
+	if room.Private() && room.Member(userID) {
+		resp.Key = room.Key()
+	}
+	return resp
 }
 
 func (th *TableHandler) Active(w http.ResponseWriter, r *http.Request) {

@@ -295,10 +295,10 @@ func TestHub_CreatorReservesSeat(t *testing.T) {
 
 	other := hub.CreateRoom(testSettings(3))
 	defer other.Close()
-	if reason := hub.admit(other, "p1"); reason != errOtherTable {
+	if reason := hub.admit(other, "p1", ""); reason != errOtherTable {
 		t.Errorf("joining another table: reason = %q, want %q", reason, errOtherTable)
 	}
-	if reason := hub.admit(table, "p1"); reason != "" {
+	if reason := hub.admit(table, "p1", ""); reason != "" {
 		t.Errorf("joining own table: reason = %q, want none", reason)
 	}
 }

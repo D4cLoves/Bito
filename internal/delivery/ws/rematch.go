@@ -87,6 +87,7 @@ func (r *Room) checkRematch() {
 		MaxPlayers: len(voters),
 		Stake:      r.stake,
 		CreatedBy:  voters[0],
+		Private:    r.private,
 	}
 	tableID, err := r.rematch(settings, voters)
 	if err != nil {

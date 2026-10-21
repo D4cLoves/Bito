@@ -88,3 +88,12 @@ func TestRedactingLogger_DropsTokenFromLog(t *testing.T) {
 		t.Errorf("log lost the rest of the address: %s", logged)
 	}
 }
+
+func TestRedactingLogger_DropsTableKeyFromLog(t *testing.T) {
+	var out bytes.Buffer
+	handler := RedactingLogger(log.New(&out, "", 0))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ws?room_id=abc&key=secret-table-key", nil))
+	if strings.Contains(out.String(), "secret-table-key") {
+		t.Errorf("table key leaked into the log: %s", out.String())
+	}
+}

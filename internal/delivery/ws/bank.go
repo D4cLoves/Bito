@@ -17,6 +17,7 @@ const (
 	errBankUnavailable = "касса недоступна, попробуйте позже"
 	errStakesRefunded  = "не удалось провести расчёт, ставки возвращены"
 	errOtherTab        = "стол открыт в другой вкладке"
+	errPrivateTable    = "стол закрытый: нужно приглашение"
 	errRematchClosed   = "реванш уже недоступен"
 	errRematchTooEarly = "партия ещё не закончилась"
 	errRematchFailed   = "не удалось начать реванш"

@@ -42,6 +42,7 @@ type RoomInfo struct {
 	Players     int       `json:"players"`
 	Stake       int64     `json:"stake"`
 	Matchmaking bool      `json:"matchmaking"`
+	Private     bool      `json:"private"`
 	CreatedBy   string    `json:"createdBy"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -53,6 +54,7 @@ type RoomSettings struct {
 	Stake       int64
 	CreatedBy   string
 	Matchmaking bool
+	Private     bool
 }
 
 type IncomingMessage struct {
@@ -67,6 +69,8 @@ type Room struct {
 	maxUsers          int
 	stake             int64
 	matchmaking       bool
+	private           bool
+	key               string
 	bank              Bank
 	clients           map[string]*Client
 	seated            map[string]bool
@@ -110,6 +114,8 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		maxUsers:          s.MaxPlayers,
 		stake:             s.Stake,
 		matchmaking:       s.Matchmaking,
+		private:           s.Private,
+		key:               tableKey(s.Private),
 		bank:              bank,
 		createdBy:         s.CreatedBy,
 		createdAt:         time.Now(),
@@ -282,6 +288,7 @@ func (r *Room) Info() RoomInfo {
 		Players:     r.Occupancy(),
 		Stake:       r.stake,
 		Matchmaking: r.matchmaking,
+		Private:     r.private,
 		CreatedBy:   r.createdBy,
 		CreatedAt:   r.createdAt,
 	}
