@@ -31,11 +31,3 @@ export interface ChangePasswordRequest {
   oldPassword: string
   newPassword: string
 }
-
-export interface LeaderboardEntry {
-  id: string
-  username: string
-  elo: number
-  wins: number
-  losses: number
-}

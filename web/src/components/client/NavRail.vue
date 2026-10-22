@@ -4,7 +4,6 @@ import { motion } from 'motion-v'
 import {
   PhCardsThree,
   PhUserCircle,
-  PhTrophy,
   PhStorefront,
   PhGearSix,
   PhSpeakerHigh,
@@ -21,11 +20,10 @@ const emit = defineEmits<{
   (e: 'logout'): void
 }>()
 
-const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree; soon?: boolean }[] = [
+const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree }[] = [
   { id: 'home', label: 'Играть', icon: PhCardsThree },
   { id: 'profile', label: 'Профиль', icon: PhUserCircle },
-  { id: 'leaderboard', label: 'Рейтинг', icon: PhTrophy, soon: true },
-  { id: 'shop', label: 'Магазин', icon: PhStorefront, soon: true },
+  { id: 'shop', label: 'Магазин', icon: PhStorefront },
   { id: 'settings', label: 'Настройки', icon: PhGearSix },
 ]
 
@@ -66,7 +64,6 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
           <motion.span v-if="current === item.id" layout-id="rail-pill" class="pill" :transition="spring" />
           <component :is="item.icon" :size="24" :weight="current === item.id ? 'fill' : 'regular'" class="icon" aria-hidden="true" />
           <span class="label">{{ item.label }}</span>
-          <span v-if="item.soon" class="soon" aria-label="скоро"></span>
         </button>
       </li>
     </ul>
@@ -186,16 +183,6 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
 .label {
   font-size: 11px;
   letter-spacing: 0.01em;
-}
-
-.soon {
-  position: absolute;
-  top: 10px;
-  right: 16px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-ink-ghost);
 }
 
 .bottom {

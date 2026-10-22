@@ -42,7 +42,6 @@ const loaders = {
   settings: () => import('../../components/panels/SettingsPanel.vue'),
   shop: () => import('../../components/panels/ShopPanel.vue'),
   player: () => import('../../components/panels/PlayerPanel.vue'),
-  leaderboard: () => import('../../components/lobby/Leaderboard.vue'),
 }
 
 const AllTables = defineAsyncComponent(loaders.tables)
@@ -53,7 +52,6 @@ const ProfilePanel = defineAsyncComponent(loaders.profile)
 const SettingsPanel = defineAsyncComponent(loaders.settings)
 const ShopPanel = defineAsyncComponent(loaders.shop)
 const PlayerPanel = defineAsyncComponent(loaders.player)
-const Leaderboard = defineAsyncComponent(loaders.leaderboard)
 
 const clientEl = ref<HTMLElement | null>(null)
 
@@ -383,7 +381,6 @@ function logout() {
 const PANEL_TITLES = {
   profile: 'Профиль',
   settings: 'Настройки',
-  leaderboard: 'Рейтинг',
   shop: 'Магазин',
   friends: 'Друзья',
   tables: 'Все столы',
@@ -564,7 +561,7 @@ onUnmounted(() => {
         v-if="panels.panel.value && panels.panel.value !== 'friends' && panels.panel.value !== 'tables'"
         :key="panels.panel.value"
         :title="PANEL_TITLES[panels.panel.value]"
-        :width="panels.panel.value === 'leaderboard' ? 520 : 880"
+        :width="880"
         @close="panels.close()"
       >
         <ProfilePanel
@@ -582,7 +579,6 @@ onUnmounted(() => {
           @section="panels.setSection"
           @shop="panels.open('shop')"
         />
-        <Leaderboard v-else-if="panels.panel.value === 'leaderboard'" :my-id="auth.user?.id" />
         <ShopPanel
           v-else-if="panels.panel.value === 'shop'"
           :balance="balance"

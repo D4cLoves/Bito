@@ -1,6 +1,6 @@
 import { authedFetch } from './http'
 import type { UserResponse } from '../types/auth'
-import type { ChangePasswordRequest, LeaderboardEntry, Profile } from '../types/user'
+import type { ChangePasswordRequest, Profile } from '../types/user'
 import type { GameHistoryEntry } from '../types/social'
 
 const ME = '/api/v1/users/me'
@@ -29,8 +29,4 @@ export async function getGameHistory(limit = 20): Promise<GameHistoryEntry[]> {
 
 export async function deleteAccount(): Promise<void> {
   await authedFetch<null>(ME, { method: 'DELETE' })
-}
-
-export function getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
-  return authedFetch<LeaderboardEntry[]>(`/api/v1/users/top?limit=${limit}`)
 }
