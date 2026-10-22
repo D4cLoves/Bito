@@ -42,6 +42,7 @@ const loaders = {
   settings: () => import('../../components/panels/SettingsPanel.vue'),
   shop: () => import('../../components/panels/ShopPanel.vue'),
   player: () => import('../../components/panels/PlayerPanel.vue'),
+  wallet: () => import('../../components/panels/WalletPanel.vue'),
 }
 
 const AllTables = defineAsyncComponent(loaders.tables)
@@ -52,6 +53,7 @@ const ProfilePanel = defineAsyncComponent(loaders.profile)
 const SettingsPanel = defineAsyncComponent(loaders.settings)
 const ShopPanel = defineAsyncComponent(loaders.shop)
 const PlayerPanel = defineAsyncComponent(loaders.player)
+const WalletPanel = defineAsyncComponent(loaders.wallet)
 
 const clientEl = ref<HTMLElement | null>(null)
 
@@ -381,6 +383,7 @@ function logout() {
 const PANEL_TITLES = {
   profile: 'Профиль',
   settings: 'Настройки',
+  wallet: 'Кошелёк',
   shop: 'Магазин',
   friends: 'Друзья',
   tables: 'Все столы',
@@ -579,6 +582,7 @@ onUnmounted(() => {
           @section="panels.setSection"
           @shop="panels.open('shop')"
         />
+        <WalletPanel v-else-if="panels.panel.value === 'wallet'" :balance="balance" />
         <ShopPanel
           v-else-if="panels.panel.value === 'shop'"
           :balance="balance"

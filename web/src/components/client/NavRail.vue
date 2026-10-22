@@ -4,6 +4,7 @@ import { motion } from 'motion-v'
 import {
   PhCardsThree,
   PhUserCircle,
+  PhWallet,
   PhStorefront,
   PhGearSix,
   PhSpeakerHigh,
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree }[] = [
   { id: 'home', label: 'Играть', icon: PhCardsThree },
   { id: 'profile', label: 'Профиль', icon: PhUserCircle },
+  { id: 'wallet', label: 'Кошелёк', icon: PhWallet },
   { id: 'shop', label: 'Магазин', icon: PhStorefront },
   { id: 'settings', label: 'Настройки', icon: PhGearSix },
 ]

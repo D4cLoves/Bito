@@ -7,6 +7,6 @@ export function topUp(): Promise<{ balance: number }> {
   return authedFetch<{ balance: number }>(`${WALLET}/top-up`, { method: 'POST' })
 }
 
-export function getTransactions(limit = 50): Promise<WalletTransaction[]> {
-  return authedFetch<WalletTransaction[]>(`${WALLET}/transactions?limit=${limit}`)
+export async function getTransactions(limit = 50): Promise<WalletTransaction[]> {
+  return (await authedFetch<WalletTransaction[] | null>(`${WALLET}/transactions?limit=${limit}`)) ?? []
 }
