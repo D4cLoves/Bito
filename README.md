@@ -12,9 +12,39 @@
 
 Подкидной и переводной · колоды 24 / 36 / 52 · от 2 до 6 игроков · ставки, друзья, магазин
 
+<br>
+
+<img src="docs/screenshots/table.jpg" alt="Партия в переводного: рука игрока, колода с козырем, таймер хода и чат стола" width="100%">
+
 </div>
 
 ---
+
+## Скриншоты
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/landing.jpg" alt="Лендинг с формой входа"></td>
+    <td width="50%"><img src="docs/screenshots/lobby.jpg" alt="Лобби: быстрая игра один на один, карточка игрока и столы-компании"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Лендинг</b> · правила, режимы и вход</sub></td>
+    <td align="center"><sub><b>Лобби</b> · быстрая игра, профиль, столы</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/wallet.jpg" alt="Кошелёк: график баланса и журнал операций"></td>
+    <td width="50%"><img src="docs/screenshots/shop.jpg" alt="Магазин аватаров, рубашек, сукон и тем"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Кошелёк</b> · график баланса и журнал</sub></td>
+    <td align="center"><sub><b>Магазин</b> · оформление за фишки</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/mobile.jpg" alt="Лобби на телефоне" width="300"><br>
+  <sub><b>На телефоне</b> · то же лобби с нижним меню</sub>
+</p>
 
 ## Что умеет
 
