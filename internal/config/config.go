@@ -36,9 +36,11 @@ type Config struct {
 	RedisPassword string `env:"REDIS_PASSWORD" env-default:""`
 	RedisDB       int    `env:"REDIS_DB" env-default:"0"`
 
-	SMTPHost string `env:"SMTP_HOST" env-default:"localhost"`
-	SMTPPort string `env:"SMTP_PORT" env-default:"1025"`
-	SMTPFrom string `env:"SMTP_FROM" env-default:"no-reply@bito.local"`
+	SMTPHost     string `env:"SMTP_HOST" env-default:"localhost"`
+	SMTPPort     string `env:"SMTP_PORT" env-default:"1025"`
+	SMTPFrom     string `env:"SMTP_FROM" env-default:"no-reply@bito.local"`
+	SMTPUser     string `env:"SMTP_USER" env-default:""`
+	SMTPPassword string `env:"SMTP_PASSWORD" env-default:""`
 
 	JWTSecret     string        `env:"JWT_SECRET" env-default:"secretkeysecretkeysecretkey"`
 	JWTAccessTTL  time.Duration `env:"JWT_ACCESS_EXPIRY" env-default:"15m"`

@@ -124,7 +124,19 @@ npm --prefix web ci
 make web       # клиент на http://localhost:5173
 ```
 
-Письма с кодом подтверждения смотрите в Mailpit: http://localhost:8025
+Письма с кодом подтверждения по умолчанию попадают в Mailpit: http://localhost:8025
+
+Чтобы коды приходили на настоящую почту, укажите в `.env` SMTP своего ящика и пароль приложения. Например, для mail.ru:
+
+```env
+SMTP_HOST=smtp.mail.ru
+SMTP_PORT=465
+SMTP_USER=you@mail.ru
+SMTP_PASSWORD=пароль-для-внешнего-приложения
+SMTP_FROM=you@mail.ru
+```
+
+Порт 465 шифрует соединение сразу, 587 переходит на TLS через STARTTLS.
 
 ## Тесты
 
