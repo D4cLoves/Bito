@@ -77,12 +77,31 @@ export interface TableInfo {
   createdBy: string
   createdAt: string
   stake?: number
+  matchmaking?: boolean
+  private?: boolean
+  key?: string
+  watchers?: number
+}
+
+export interface LobbyState {
+  online: number
+  tables: TableInfo[]
 }
 
 export interface CreateTableRequest {
   mode: GameMode
   deck: DeckSize
   maxPlayers: number
+  stake: number
+  private?: boolean
+}
+
+export type AnyMode = GameMode | 'any'
+export type AnyDeck = DeckSize | 0
+
+export interface QuickMatchRequest {
+  mode: AnyMode
+  deck: AnyDeck
   stake: number
 }
 
@@ -138,4 +157,15 @@ export function cardKey(c: Card): string {
 export function canBeat(attack: Card, defend: Card, trumpSuit: number): boolean {
   if (defend.suit === trumpSuit && attack.suit !== trumpSuit) return true
   return defend.suit === attack.suit && defend.rank > attack.rank
+}
+
+export interface TableInvite {
+  tableId: string
+  fromId: string
+  fromName: string
+  mode: GameMode
+  deck: DeckSize
+  maxPlayers: number
+  stake: number
+  expiresAt: string
 }

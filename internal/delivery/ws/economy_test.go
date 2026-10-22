@@ -23,12 +23,15 @@ type lockCall struct {
 }
 
 type fakeBank struct {
-	mu        sync.Mutex
-	balances  map[string]int64
-	lockErr   error
-	settleErr error
-	locks     []lockCall
-	settles   []economy.Result
+	mu             sync.Mutex
+	balances       map[string]int64
+	lockErr        error
+	settleErr      error
+	settleFailures int
+	refundErr      error
+	locks          []lockCall
+	settles        []economy.Result
+	refunds        []string
 }
 
 func (b *fakeBank) Balance(_ context.Context, userID string) (int64, error) {
@@ -55,10 +58,24 @@ func (b *fakeBank) Settle(_ context.Context, _ string, stake int64, r economy.Re
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.settles = append(b.settles, r)
+	if b.settleFailures > 0 {
+		b.settleFailures--
+		return economy.Settlement{}, errors.New("db is busy")
+	}
 	if b.settleErr != nil {
 		return economy.Settlement{}, b.settleErr
 	}
 	return economy.Settle(stake, r), nil
+}
+
+func (b *fakeBank) RefundGame(_ context.Context, gameID string) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.refundErr != nil {
+		return false, b.refundErr
+	}
+	b.refunds = append(b.refunds, gameID)
+	return true, nil
 }
 
 func (b *fakeBank) counts() (locks, settles int) {
@@ -238,12 +255,9 @@ func TestRoom_SeatIsKeptWhileGameRuns(t *testing.T) {
 	}
 }
 
-func TestHub_SeatedElsewhereAndQuickMatch(t *testing.T) {
+func TestHub_SeatedElsewhere(t *testing.T) {
 	hub := NewHub(nil, nil, nil)
-	settings := testSettings(2)
-	settings.Stake = 250
-
-	first := hub.CreateRoom(settings)
+	first := hub.CreateRoom(testSettings(3))
 	defer first.Close()
 	first.RegisterClient(createTestClient("p1", "Alice", first))
 	time.Sleep(20 * time.Millisecond)
@@ -254,22 +268,275 @@ func TestHub_SeatedElsewhereAndQuickMatch(t *testing.T) {
 	if hub.SeatedElsewhere("p1", first.ID()) {
 		t.Error("the player's own table does not count as elsewhere")
 	}
+}
 
-	if room, ok := hub.FindOpenRoom(settings, "p2"); !ok || room != first {
-		t.Error("quick match must find the open table with the same settings")
+func TestHub_CreatorReservesSeat(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("create table: %v", err)
 	}
-	if room, ok := hub.FindOpenRoom(settings, "p1"); !ok || room != first {
-		t.Error("quick match must return the table the player already sits at")
+	defer table.Close()
+
+	if !hub.SeatedElsewhere("p1", "") {
+		t.Error("the creator's reservation must count as a seat")
+	}
+	if info := table.Info(); info.Players != 1 {
+		t.Errorf("players = %d, want the creator's reserved seat", info.Players)
+	}
+	if _, err = hub.CreateTable(s); !errors.Is(err, ErrSeatedElsewhere) {
+		t.Errorf("second table err = %v, want ErrSeatedElsewhere", err)
+	}
+	if _, _, err = hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1"); !errors.Is(err, ErrSeatedElsewhere) {
+		t.Errorf("quick play err = %v, want ErrSeatedElsewhere", err)
 	}
 
-	other := settings
-	other.Stake = 500
-	if _, ok := hub.FindOpenRoom(other, "p2"); ok {
-		t.Error("a table with another stake must not match")
+	other := hub.CreateRoom(testSettings(3))
+	defer other.Close()
+	if reason := hub.admit(other, "p1", ""); reason != errOtherTable {
+		t.Errorf("joining another table: reason = %q, want %q", reason, errOtherTable)
 	}
-	other = settings
-	other.Mode = game.ModePerevodnoy
-	if _, ok := hub.FindOpenRoom(other, "p2"); ok {
-		t.Error("a table with another mode must not match")
+	if reason := hub.admit(table, "p1", ""); reason != "" {
+		t.Errorf("joining own table: reason = %q, want none", reason)
+	}
+}
+
+func TestHub_NewSearchReleasesOldDuelReservation(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	cheap, _, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
+	defer cheap.Close()
+
+	rich, _, err := hub.MatchOrCreate(MatchQuery{Stake: 500}, "p1")
+	if err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	defer rich.Close()
+	if cheap.Reserved("p1") {
+		t.Error("a new search must release the previous duel reservation")
+	}
+	if !rich.Reserved("p1") {
+		t.Error("the new duel must hold the reservation")
+	}
+
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("a pending duel search must not block creating a table: %v", err)
+	}
+	defer table.Close()
+	if rich.Reserved("p1") {
+		t.Error("creating a table must release the duel reservation")
+	}
+}
+
+func TestHub_TableWithoutPlayersLeavesList(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	s := testSettings(3)
+	s.CreatedBy = "p1"
+	table, err := hub.CreateTable(s)
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if len(hub.ListOpenRooms()) != 1 {
+		t.Fatal("a reserved table must be listed")
+	}
+
+	table.Unreserve("p1")
+	if list := hub.ListOpenRooms(); len(list) != 0 {
+		t.Errorf("open rooms = %+v, want none without players or reservations", list)
+	}
+}
+
+func duelSettings(mode game.GameMode, deck game.DeckType, stake int64) RoomSettings {
+	return RoomSettings{Mode: mode, Deck: deck, MaxPlayers: 2, Stake: stake, Matchmaking: true}
+}
+
+func TestHub_MatchOrCreate(t *testing.T) {
+	cases := []struct {
+		name  string
+		query MatchQuery
+		reuse bool
+	}{
+		{"exact settings", MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, true},
+		{"any mode and deck", MatchQuery{Stake: 500}, true},
+		{"any deck", MatchQuery{Mode: game.ModePerevodnoy, Stake: 500}, true},
+		{"other mode", MatchQuery{Mode: game.ModePodkidnoy, Stake: 500}, false},
+		{"other deck", MatchQuery{Deck: game.Deck36, Stake: 500}, false},
+		{"other stake", MatchQuery{Stake: 250}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := NewHub(nil, nil, nil)
+			duel, created, _ := hub.MatchOrCreate(MatchQuery{Mode: game.ModePerevodnoy, Deck: game.Deck24, Stake: 500}, "p1")
+			defer duel.Close()
+			if !created {
+				t.Fatal("the first search must open a table")
+			}
+			company := hub.CreateRoom(RoomSettings{Mode: game.ModePerevodnoy, Deck: game.Deck24, MaxPlayers: 3, Stake: 500})
+			defer company.Close()
+
+			room, created, _ := hub.MatchOrCreate(tc.query, "p2")
+			defer room.Close()
+			if tc.reuse && (created || room != duel) {
+				t.Errorf("want the waiting duel, got created=%v", created)
+			}
+			if !tc.reuse && (!created || room == duel) {
+				t.Errorf("want a new duel, got created=%v", created)
+			}
+			if room == company {
+				t.Error("quick play must never seat a player at a company table")
+			}
+		})
+	}
+}
+
+func TestHub_MatchOrCreateFillsMissingSettings(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	room, _, _ := hub.MatchOrCreate(MatchQuery{Stake: 100}, "p1")
+	defer room.Close()
+
+	info := room.Info()
+	if info.Mode != "podkidnoy" || info.Deck != 36 || info.MaxPlayers != 2 || !info.Matchmaking || info.CreatedBy != "p1" {
+		t.Errorf("created duel = %+v, want podkidnoy, 36, 2 players, matchmaking", info)
+	}
+}
+
+func TestHub_ReservationKeepsDuelForTwo(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	query := MatchQuery{Stake: 100}
+
+	first, _, _ := hub.MatchOrCreate(query, "p1")
+	defer first.Close()
+	second, created, _ := hub.MatchOrCreate(query, "p2")
+	if created || second != first {
+		t.Fatal("the second player must get the waiting duel")
+	}
+	third, created, _ := hub.MatchOrCreate(query, "p3")
+	defer third.Close()
+	if !created || third == first {
+		t.Error("two reserved seats fill a duel even before anyone connects; the third player needs a new table")
+	}
+
+	again, created, _ := hub.MatchOrCreate(query, "p1")
+	if created || again != first {
+		t.Error("a repeated search must return the table the player already reserved")
+	}
+}
+
+func TestHub_SimultaneousSearchesMeet(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		hub := NewHub(nil, nil, nil)
+		rooms := make([]*Room, 2)
+		var wg sync.WaitGroup
+		for p := range rooms {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rooms[p], _, _ = hub.MatchOrCreate(MatchQuery{Stake: 250}, string(rune('a'+p)))
+			}()
+		}
+		wg.Wait()
+		if rooms[0] != rooms[1] {
+			t.Fatalf("run %d: two players searching at once ended up at different tables", i)
+		}
+		rooms[0].Close()
+	}
+}
+
+func TestHub_DuelTablesAreHiddenFromList(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	duel := hub.CreateRoom(duelSettings(game.ModePodkidnoy, game.Deck36, 100))
+	defer duel.Close()
+	company := hub.CreateRoom(testSettings(3))
+	defer company.Close()
+	company.Reserve("creator")
+
+	list := hub.ListOpenRooms()
+	if len(list) != 1 || list[0].ID != company.ID() {
+		t.Errorf("open rooms = %+v, want only the company table", list)
+	}
+}
+
+func finishBySurrender(t *testing.T, bank *fakeBank, id string) (*Room, *Client) {
+	t.Helper()
+	room := NewRoom(id, stakedSettings(100), bank)
+	room.settleRetryDelay = time.Millisecond
+	go room.Run()
+	t.Cleanup(room.Close)
+
+	c1 := createTestClient("p1", "Alice", room)
+	c2 := createTestClient("p2", "Bob", room)
+	room.RegisterClient(c1)
+	room.RegisterClient(c2)
+	time.Sleep(50 * time.Millisecond)
+
+	surrender, _ := json.Marshal(map[string]string{"type": TypeSurrender})
+	room.incoming <- IncomingMessage{Client: c1, Data: surrender}
+	time.Sleep(50 * time.Millisecond)
+	return room, c2
+}
+
+func TestRoom_SettleRetriesTransientFailure(t *testing.T) {
+	bank := &fakeBank{settleFailures: 2}
+	_, c2 := finishBySurrender(t, bank, "room-retry")
+
+	if _, settles := bank.counts(); settles != settleAttempts {
+		t.Fatalf("settle calls = %d, want %d", settles, settleAttempts)
+	}
+	if len(bank.refunds) != 0 {
+		t.Errorf("refunds = %v, want none after a successful retry", bank.refunds)
+	}
+	over, ok := lastOfType[GameOverPayload](t, c2, TypeGameOver)
+	if !ok || over.Payload.Payouts["p2"] != 95 || over.Payload.Payouts["p1"] != -100 {
+		t.Errorf("payouts = %v, want the settled result", over.Payload.Payouts)
+	}
+}
+
+func TestRoom_RefundsStakesWhenSettleKeepsFailing(t *testing.T) {
+	bank := &fakeBank{settleErr: errors.New("db is down")}
+	_, c2 := finishBySurrender(t, bank, "room-refund")
+
+	if _, settles := bank.counts(); settles != settleAttempts {
+		t.Fatalf("settle calls = %d, want %d", settles, settleAttempts)
+	}
+	if len(bank.refunds) != 1 || bank.refunds[0] != "room-refund" {
+		t.Fatalf("refunds = %v, want exactly this game", bank.refunds)
+	}
+
+	var gotNotice bool
+	var over Message[GameOverPayload]
+	for len(c2.send) > 0 {
+		raw := <-c2.send
+		var probe Message[json.RawMessage]
+		_ = json.Unmarshal(raw, &probe)
+		switch probe.Type {
+		case TypeError:
+			var msg Message[ErrorPayload]
+			_ = json.Unmarshal(raw, &msg)
+			gotNotice = gotNotice || msg.Payload.Message == errStakesRefunded
+		case TypeGameOver:
+			_ = json.Unmarshal(raw, &over)
+		}
+	}
+	if !gotNotice {
+		t.Error("players must be told that stakes were returned")
+	}
+	if len(over.Payload.Payouts) != 2 || over.Payload.Payouts["p1"] != 0 || over.Payload.Payouts["p2"] != 0 {
+		t.Errorf("payouts = %v, want zero for both players", over.Payload.Payouts)
+	}
+}
+
+func TestRoom_FailedRefundStillFinishesGame(t *testing.T) {
+	bank := &fakeBank{settleErr: errors.New("db is down"), refundErr: errors.New("still down")}
+	room, c2 := finishBySurrender(t, bank, "room-refund-down")
+
+	if _, ok := lastOfType[GameOverPayload](t, c2, TypeGameOver); !ok {
+		t.Fatal("game_over must be sent even when the bank is unreachable")
+	}
+	if room.Holds("p1") {
+		t.Error("a finished table must release seats")
 	}
 }

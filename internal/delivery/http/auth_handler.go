@@ -4,7 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
+	"math"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"bito/internal/model"
 	"bito/internal/pkg/jwt"
@@ -58,19 +65,83 @@ type AuthService interface {
 	Logout(ctx context.Context, refreshToken string) error
 }
 
-type AuthHandler struct {
-	authService AuthService
+type RateLimiter interface {
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, time.Duration, error)
 }
 
-func NewAuthHandler(authService AuthService) *AuthHandler {
+const (
+	authLimitWindow   = 15 * time.Minute
+	authLimitPerEmail = 10
+	authLimitPerIP    = 50
+)
+
+type CookieConfig struct {
+	Secure     bool
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
+}
+
+type AuthHandler struct {
+	authService AuthService
+	limiter     RateLimiter
+	cookies     CookieConfig
+}
+
+func NewAuthHandler(authService AuthService, limiter RateLimiter, cookies CookieConfig) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
+		limiter:     limiter,
+		cookies:     cookies,
 	}
+}
+
+func (ah *AuthHandler) allow(w http.ResponseWriter, r *http.Request, action, email string) bool {
+	if ah.limiter == nil {
+		return true
+	}
+
+	type rule struct {
+		key   string
+		limit int
+	}
+	rules := []rule{{action + ":ip:" + clientIP(r), authLimitPerIP}}
+	if email = strings.ToLower(strings.TrimSpace(email)); email != "" {
+		rules = append(rules, rule{action + ":email:" + email, authLimitPerEmail})
+	}
+
+	for _, rl := range rules {
+		ok, retryAfter, err := ah.limiter.Allow(r.Context(), rl.key, rl.limit, authLimitWindow)
+		if err != nil {
+			log.Printf("auth: rate limit %s: %v", action, err)
+			continue
+		}
+		if !ok {
+			respondTooManyAttempts(w, retryAfter)
+			return false
+		}
+	}
+	return true
+}
+
+func respondTooManyAttempts(w http.ResponseWriter, retryAfter time.Duration) {
+	minutes := max(int(math.Ceil(retryAfter.Minutes())), 1)
+	w.Header().Set("Retry-After", strconv.Itoa(minutes*60))
+	respondError(w, http.StatusTooManyRequests, fmt.Sprintf("Слишком много попыток. Попробуйте снова через %d мин.", minutes))
+}
+
+func clientIP(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func (ah *AuthHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if !ah.allow(w, r, "send-code", req.Email) {
 		return
 	}
 
@@ -107,6 +178,8 @@ func (ah *AuthHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, model.ErrPendingNotFound):
 			respondError(w, http.StatusGone, "код подтверждения истек или не найден")
+		case errors.Is(err, model.ErrCodeAttempts):
+			respondError(w, http.StatusTooManyRequests, "Слишком много неверных попыток. Код больше не действует, запросите новый.")
 		case errors.Is(err, model.ErrCodeMismatch), errors.Is(err, service.ErrInvalidCode):
 			respondError(w, http.StatusBadRequest, "неверный проверочный код")
 		case errors.Is(err, service.ErrInvalidEmail):
@@ -123,6 +196,9 @@ func (ah *AuthHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 func (ah *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if !ah.allow(w, r, "login", req.Email) {
 		return
 	}
 
@@ -194,6 +270,7 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   ah.cookies.Secure,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refreshToken",
@@ -201,6 +278,7 @@ func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/api/v1/auth",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   ah.cookies.Secure,
 	})
 
 	respondJSON(w, http.StatusOK, map[string]string{
@@ -222,8 +300,9 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Name:     "accessToken",
 		Value:    tokens.AccessToken,
 		Path:     "/",
+		MaxAge:   int(ah.cookies.AccessTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   ah.cookies.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -231,8 +310,9 @@ func (ah *AuthHandler) setTokenCookies(w http.ResponseWriter, tokens *jwt.TokenP
 		Name:     "refreshToken",
 		Value:    tokens.RefreshToken,
 		Path:     "/api/v1/auth",
+		MaxAge:   int(ah.cookies.RefreshTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   ah.cookies.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }

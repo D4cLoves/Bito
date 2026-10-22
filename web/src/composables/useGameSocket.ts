@@ -15,6 +15,9 @@ const FATAL_ERRORS = new Set([
   'партия уже идет, стол заполнен',
   'стол уже заполнен',
   'партия уже завершена',
+  'стол открыт в другой вкладке',
+  'стол закрытый: нужно приглашение',
+  'у стола уже слишком много зрителей',
 ])
 
 interface ServerMessage {
@@ -22,7 +25,7 @@ interface ServerMessage {
   payload?: unknown
 }
 
-export function useGameSocket(roomId: string) {
+export function useGameSocket(roomId: string, key = '', watch = false) {
   const status = ref<SocketStatus>('connecting')
   const state = shallowRef<GameState | null>(null)
   const gameOver = shallowRef<GameOver | null>(null)
@@ -30,6 +33,10 @@ export function useGameSocket(roomId: string) {
   const chat = ref<ChatEntry[]>([])
   const lastError = ref<{ text: string; at: number } | null>(null)
   const stateReceivedAt = ref(0)
+  const rematch = ref<{ votes: string[]; needed: number } | null>(null)
+  const rematchCancelled = ref<string | null>(null)
+  const rematchTable = ref<string | null>(null)
+  const watchers = ref(0)
 
   let ws: WebSocket | null = null
   let retries = 0
@@ -50,16 +57,16 @@ export function useGameSocket(roomId: string) {
   }
 
   async function connect() {
-    const token = await freshAccessToken()
+    const hasSession = await freshAccessToken()
     if (stopped) return
-    if (!token) {
+    if (!hasSession) {
       status.value = 'closed'
       lastError.value = { text: 'Сессия истекла. Войдите заново.', at: Date.now() }
       return
     }
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`
+    const url = `${proto}://${location.host}/ws?room_id=${encodeURIComponent(roomId)}${key ? `&key=${encodeURIComponent(key)}` : ''}${watch ? '&watch=1' : ''}`
     const socket = new WebSocket(url)
     ws = socket
 
@@ -130,6 +137,23 @@ export function useGameSocket(roomId: string) {
         system(`${nameOf(id)} вернулся`)
         break
       }
+      case 'invite_declined': {
+        const name = (msg.payload as { username?: string })?.username ?? 'Друг'
+        system(`${name} не принял приглашение`)
+        break
+      }
+      case 'rematch_state':
+        rematch.value = msg.payload as { votes: string[]; needed: number }
+        break
+      case 'rematch_cancelled':
+        rematchCancelled.value = (msg.payload as { reason: string }).reason
+        break
+      case 'rematch_start':
+        rematchTable.value = (msg.payload as { tableId: string }).tableId
+        break
+      case 'watchers':
+        watchers.value = (msg.payload as { count: number }).count
+        break
       case 'chat': {
         const m = msg.payload as ChatMessage
         pushChat({ userId: m.senderId, username: m.senderName, text: m.message })
@@ -154,6 +178,8 @@ export function useGameSocket(roomId: string) {
     pass: () => send('pass'),
     surrender: () => send('surrender'),
     say: (message: string) => send('chat', { message }),
+    rematchVote: () => send('rematch'),
+    rematchDecline: () => send('rematch_decline'),
   }
 
   function disconnect() {
@@ -166,5 +192,5 @@ export function useGameSocket(roomId: string) {
   connect()
   onUnmounted(disconnect)
 
-  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, ...actions, disconnect }
+  return { status, state, gameOver, offline, chat, lastError, stateReceivedAt, rematch, rematchCancelled, rematchTable, watchers, ...actions, disconnect }
 }

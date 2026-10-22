@@ -13,6 +13,8 @@ const (
 	TypePass      = "pass"
 	TypeSurrender = "surrender"
 	TypeChat      = "chat"
+	TypeRematch   = "rematch"
+	TypeRematchNo = "rematch_decline"
 )
 
 const (
@@ -22,6 +24,20 @@ const (
 	TypeTimerTick          = "timer_tick"
 	TypePlayerDisconnected = "player_disconnected"
 	TypePlayerReconnected  = "player_reconnected"
+	TypeLobbyState         = "lobby_state"
+	TypeFriendsChanged     = "friends_changed"
+)
+
+const (
+	TypeTableInvite    = "table_invite"
+	TypeInviteDeclined = "invite_declined"
+)
+
+const (
+	TypeRematchState     = "rematch_state"
+	TypeRematchCancelled = "rematch_cancelled"
+	TypeRematchStart     = "rematch_start"
+	TypeWatchers         = "watchers"
 )
 
 type Message[T any] struct {
@@ -54,6 +70,11 @@ type ErrorPayload struct {
 
 type PlayerStatusPayload struct {
 	PlayerID string `json:"playerId"`
+}
+
+type LobbyStatePayload struct {
+	Online int        `json:"online"`
+	Tables []RoomInfo `json:"tables"`
 }
 
 type TimerTickPayload struct {
@@ -92,6 +113,21 @@ type GameStatePayload struct {
 	TurnLeftMs  int64           `json:"turnLeftMs"`
 	YouPassed   bool            `json:"youPassed"`
 	Stake       int64           `json:"stake"`
+}
+
+type TableInvitePayload struct {
+	TableID    string `json:"tableId"`
+	FromID     string `json:"fromId"`
+	FromName   string `json:"fromName"`
+	Mode       string `json:"mode"`
+	Deck       int    `json:"deck"`
+	MaxPlayers int    `json:"maxPlayers"`
+	Stake      int64  `json:"stake"`
+	ExpiresAt  string `json:"expiresAt"`
+}
+
+type InviteDeclinedPayload struct {
+	Username string `json:"username"`
 }
 
 func NewMessage(msgType string, payload any) ([]byte, error) {

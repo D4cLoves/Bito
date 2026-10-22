@@ -280,6 +280,15 @@ func (r *WalletRepository) Transactions(ctx context.Context, userID uuid.UUID, l
 }
 
 func (r *WalletRepository) RefundUnfinished(ctx context.Context) (int, error) {
+	return r.refundPlaying(ctx, nil)
+}
+
+func (r *WalletRepository) RefundGame(ctx context.Context, gameID uuid.UUID) (bool, error) {
+	n, err := r.refundPlaying(ctx, &gameID)
+	return n > 0, err
+}
+
+func (r *WalletRepository) refundPlaying(ctx context.Context, gameID *uuid.UUID) (int, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("wallet repo: begin tx: %w", err)
@@ -292,11 +301,11 @@ func (r *WalletRepository) RefundUnfinished(ctx context.Context) (int, error) {
 		SELECT g.id, g.stake, gp.user_id
 		FROM games g
 		JOIN game_players gp ON gp.game_id = g.id
-		WHERE g.status = 'playing'
+		WHERE g.status = 'playing' AND ($1::uuid IS NULL OR g.id = $1)
 		ORDER BY gp.user_id, g.id
 		FOR UPDATE OF g
 	`
-	rows, err := tx.Query(ctx, pendingSQL)
+	rows, err := tx.Query(ctx, pendingSQL, gameID)
 	if err != nil {
 		return 0, fmt.Errorf("wallet repo: select unfinished: %w", err)
 	}
@@ -333,9 +342,9 @@ func (r *WalletRepository) RefundUnfinished(ctx context.Context) (int, error) {
 	const closeSQL = `
 		UPDATE games
 		SET status = 'refunded', finished_at = NOW()
-		WHERE status = 'playing'
+		WHERE status = 'playing' AND ($1::uuid IS NULL OR id = $1)
 	`
-	tag, err := tx.Exec(ctx, closeSQL)
+	tag, err := tx.Exec(ctx, closeSQL, gameID)
 	if err != nil {
 		return 0, fmt.Errorf("wallet repo: close unfinished: %w", err)
 	}

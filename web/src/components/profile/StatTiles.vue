@@ -6,7 +6,7 @@ import { plural } from '../../composables/useLanding'
 import { winRate } from '../../composables/usePlayerRank'
 import type { Profile } from '../../types/user'
 
-const props = defineProps<{ profile: Profile | null }>()
+const props = defineProps<{ profile: Profile | null; hideWallet?: boolean }>()
 
 const RING = 2 * Math.PI * 30
 
@@ -22,7 +22,7 @@ onMounted(() => window.setTimeout(() => (ringReady.value = true), 250))
 </script>
 
 <template>
-  <div class="tiles">
+  <div class="tiles" :class="{ 'no-wallet': hideWallet }">
     <div class="tile rate rise" style="--d: 2">
       <svg viewBox="0 0 72 72" class="ring-svg" aria-hidden="true">
         <circle cx="36" cy="36" r="30" class="track" />
@@ -59,7 +59,7 @@ onMounted(() => window.setTimeout(() => (ringReady.value = true), 250))
       <span class="label">{{ plural(games, ['партия', 'партии', 'партий']) }} сыграно</span>
     </div>
 
-    <div class="tile wallet rise" style="--d: 6">
+    <div v-if="!hideWallet" class="tile wallet rise" style="--d: 6">
       <PhCoins :size="24" weight="duotone" class="icon" aria-hidden="true" />
       <div>
         <span class="value">{{ balance.toLocaleString('ru-RU') }}</span>
@@ -95,6 +95,14 @@ onMounted(() => window.setTimeout(() => (ringReady.value = true), 250))
 
 .rate {
   grid-column: span 2;
+}
+
+.no-wallet {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.no-wallet .rate {
+  grid-column: span 3;
 }
 
 .wallet {

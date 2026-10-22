@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"bito/internal/economy"
 	"bito/internal/model"
+	"bito/migrations"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -35,6 +34,9 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 
 	admin, err := pgx.Connect(ctx, adminDSN())
 	if err != nil {
+		if os.Getenv("BITO_REQUIRE_INTEGRATION") == "1" {
+			t.Fatalf("postgres is not reachable: %v", err)
+		}
 		t.Skipf("postgres is not reachable (%v); start docker compose to run integration tests", err)
 	}
 	defer admin.Close(ctx)
@@ -64,19 +66,8 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 		}
 	})
 
-	files, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("migrations not found: %v", err)
-	}
-	for _, f := range files {
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		up, _, _ := strings.Cut(string(raw), "-- +migrate Down")
-		if _, err = pool.Exec(ctx, up); err != nil {
-			t.Fatalf("apply %s: %v", filepath.Base(f), err)
-		}
+	if _, err = Migrate(ctx, pool, migrations.FS); err != nil {
+		t.Fatalf("apply migrations: %v", err)
 	}
 	return pool
 }
@@ -281,4 +272,92 @@ func TestWallet_RefundUnfinished(t *testing.T) {
 	if err != nil || len(list) != 3 || list[0].Kind != model.TxStakeRefund {
 		t.Errorf("journal = %+v, %v; want refund on top of 3 records", list, err)
 	}
+}
+
+func TestGames_History(t *testing.T) {
+	pool := setupTestDB(t)
+	wallet := NewWalletRepository(pool)
+	games := NewGameRepository(pool)
+	ctx := context.Background()
+	users := createUsers(t, pool, 3)
+
+	finished := uuid.New()
+	if err := wallet.LockStakes(ctx, model.GameRecord{ID: finished, Mode: "perevodnoy", Deck: 36, Stake: 250}, users); err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+	places := []string{users[1].String(), users[0].String(), users[2].String()}
+	s := economy.Settle(250, economy.Result{Places: places, Losers: map[string]bool{users[2].String(): true}})
+	if err := wallet.Settle(ctx, finished, s); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+
+	running := uuid.New()
+	if err := wallet.LockStakes(ctx, model.GameRecord{ID: running, Mode: "podkidnoy", Deck: 24, Stake: 100}, users[:2]); err != nil {
+		t.Fatalf("lock running: %v", err)
+	}
+
+	list, err := games.History(ctx, users[0], 10)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("history = %+v, want only the finished game", list)
+	}
+	g := list[0]
+	if g.ID != finished || g.Mode != "perevodnoy" || g.Deck != 36 || g.Players != 3 || g.Stake != 250 || g.Place != 2 || g.Payout != 79 {
+		t.Errorf("entry = %+v, want perevodnoy/36/3 players/250/2nd place/+79", g)
+	}
+	if g.FinishedAt.IsZero() || g.Outcome != "win" {
+		t.Errorf("finishedAt = %v outcome = %q, want a time and win", g.FinishedAt, g.Outcome)
+	}
+
+	loser, _ := games.History(ctx, users[2], 10)
+	if len(loser) != 1 || loser[0].Payout != -250 || loser[0].Place != 3 || loser[0].Outcome != "lose" {
+		t.Errorf("loser entry = %+v, want 3rd place and -250", loser)
+	}
+}
+
+func TestWallet_RefundGameTouchesOnlyThatGame(t *testing.T) {
+	pool := setupTestDB(t)
+	repo := NewWalletRepository(pool)
+	ctx := context.Background()
+	users := createUsers(t, pool, 4)
+
+	failed, other := uuid.New(), uuid.New()
+	if err := repo.LockStakes(ctx, model.GameRecord{ID: failed, Mode: "podkidnoy", Deck: 36, Stake: 100}, users[:2]); err != nil {
+		t.Fatalf("lock failed game: %v", err)
+	}
+	if err := repo.LockStakes(ctx, model.GameRecord{ID: other, Mode: "podkidnoy", Deck: 36, Stake: 100}, users[2:]); err != nil {
+		t.Fatalf("lock other game: %v", err)
+	}
+
+	refunded, err := repo.RefundGame(ctx, failed)
+	if err != nil || !refunded {
+		t.Fatalf("refund = %v, %v; want the game refunded", refunded, err)
+	}
+	for _, id := range users[:2] {
+		if b := balanceOf(t, repo, id); b != economy.StartBalance {
+			t.Errorf("refunded player balance = %d, want %d", b, economy.StartBalance)
+		}
+	}
+	for _, id := range users[2:] {
+		if b := balanceOf(t, repo, id); b != economy.StartBalance-100 {
+			t.Errorf("other game's stake must stay locked, balance = %d", b)
+		}
+	}
+	assertJournalMatchesBalances(t, pool)
+
+	if refunded, err = repo.RefundGame(ctx, failed); err != nil || refunded {
+		t.Errorf("second refund = %v, %v; want a no-op", refunded, err)
+	}
+
+	places := []string{users[2].String(), users[3].String()}
+	s := economy.Settle(100, economy.Result{Places: places, Losers: map[string]bool{users[3].String(): true}})
+	if err = repo.Settle(ctx, other, s); err != nil {
+		t.Fatalf("settle other: %v", err)
+	}
+	if refunded, err = repo.RefundGame(ctx, other); err != nil || refunded {
+		t.Errorf("refund of a settled game = %v, %v; want a no-op", refunded, err)
+	}
+	assertJournalMatchesBalances(t, pool)
 }

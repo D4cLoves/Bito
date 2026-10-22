@@ -2,8 +2,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
-import { useMediaQuery } from '@vueuse/core'
+import { useElementSize, useMediaQuery } from '@vueuse/core'
 import { PhX } from '@phosphor-icons/vue'
+import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import ToastStack from '../../components/app/ToastStack.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
 import ChatBox from '../../components/client/ChatBox.vue'
@@ -14,7 +15,7 @@ import BattleArea from '../../components/game/BattleArea.vue'
 import QuickChat from '../../components/game/QuickChat.vue'
 import PostGameChat from '../../components/game/PostGameChat.vue'
 import FlightLayer from '../../components/game/FlightLayer.vue'
-import { listTables } from '../../api/tables'
+import { getTable, inviteToTable } from '../../api/tables'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useGameSocket } from '../../composables/useGameSocket'
@@ -23,9 +24,12 @@ import { useGameSound } from '../../composables/useGameSound'
 import { useTurnAlert } from '../../composables/useTurnAlert'
 import { useLoungeMusic } from '../../composables/useLoungeMusic'
 import { useToast } from '../../composables/useToast'
+import { useThemeColor } from '../../composables/useThemeColor'
+import { useFriends } from '../../composables/useFriends'
+import { avatarTone } from '../../composables/avatar'
 import { MIN_STAKE } from '../../constants/economy'
 import { canBeat, cardKey, sameCard, type Card, type CardPair, type PlayerView, type TableInfo } from '../../types/game'
-import type { ChatEntry } from '../../types/social'
+import type { ChatEntry, Friend } from '../../types/social'
 
 const TURN_MS = 20_000
 const BUBBLE_MS = 4500
@@ -44,13 +48,18 @@ const settings = useSettingsStore()
 const sound = useGameSound()
 const toast = useToast()
 const wide = useMediaQuery('(min-width: 1100px)')
+const phone = useMediaQuery('(max-width: 767px)')
+const short = useMediaQuery('(max-height: 820px) and (min-width: 768px)')
 
 const roomId = String(route.params.id)
-const socket = useGameSocket(roomId)
-const { state, gameOver, status, offline, lastError, chat } = socket
+const linkKey = typeof route.query.key === 'string' ? route.query.key : ''
+const watching = route.query.watch === '1'
+const socket = useGameSocket(roomId, linkKey, watching)
+const { state, gameOver, status, offline, lastError, chat, rematch, rematchCancelled, rematchTable, watchers } = socket
 
 const me = computed(() => auth.user?.id ?? '')
 const gameEl = ref<HTMLElement | null>(null)
+useThemeColor(gameEl, () => settings.theme)
 const { flights, reveal: flightReveal, done: flightDone, enabled: flightsEnabled } = useCardFlights(gameEl, state, me)
 const launching = ref<string | null>(null)
 const landedAt: Partial<Record<FlightKind, number>> = {}
@@ -83,9 +92,12 @@ const isDefender = computed(() => state.value?.defenderId === me.value)
 const isAttacker = computed(() => state.value?.attackerId === me.value)
 const myName = computed(() => meView.value?.name ?? auth.user?.username ?? 'Вы')
 
+const anchorId = computed(() => (watching ? (players.value[0]?.id ?? '') : me.value))
+const anchor = computed(() => players.value.find((p) => p.id === anchorId.value))
+
 const opponents = computed(() => {
   const list = players.value
-  const idx = list.findIndex((p) => p.id === me.value)
+  const idx = list.findIndex((p) => p.id === anchorId.value)
   if (idx < 0) return list
   return [...list.slice(idx + 1), ...list.slice(0, idx)]
 })
@@ -143,6 +155,7 @@ const statusText = computed(() => {
   const s = state.value
   if (!s) return ''
   if (gameOver.value || s.phase === 'finished') return 'Партия окончена'
+  if (watching) return watchText.value
   if (!iAmActive.value) return 'Вы вышли из игры — досмотрите партию'
   const def = nameOf(s.defenderId)
   const atk = nameOf(s.attackerId)
@@ -157,6 +170,16 @@ const statusText = computed(() => {
   }
   if (isDefender.value) return 'Всё побито. Ждём «Бито» от соперников'
   return s.youPassed ? 'Ждём остальных' : 'Всё побито. Подкиньте или скажите «Бито»'
+})
+
+const watchText = computed(() => {
+  const s = state.value
+  if (!s) return ''
+  const def = nameOf(s.defenderId)
+  if (s.phase === 'giving_more') return `${def} берёт, остальные подкидывают`
+  if (!pairs.value.length) return `Ходит ${nameOf(s.attackerId)}`
+  if (unbeaten.value.length) return `${def} отбивается`
+  return 'Всё побито, ждём «Бито»'
 })
 
 const roleText = computed(() => {
@@ -265,6 +288,10 @@ const payoutLine = computed(() => {
 const result = computed(() => {
   const g = gameOver.value
   if (!g) return null
+  if (watching) {
+    if (g.isDraw) return { title: 'Ничья', text: 'Последние вышли одновременно — дураков нет.', tone: 'draw' as const }
+    return { title: 'Партия окончена', text: g.loserId ? `В дураках — ${nameOf(g.loserId)}.` : 'Дураков нет.', tone: 'draw' as const }
+  }
   if (g.isDraw) return { title: 'Ничья', text: 'Последние вышли одновременно — дураков нет.', tone: 'draw' as const }
   if (g.loserId === me.value) return { title: 'Вы — дурак', text: 'Бывает. Отыграетесь в следующей партии.', tone: 'lose' as const }
   const mine = standings.value.find((s) => s.me)
@@ -282,6 +309,23 @@ const result = computed(() => {
 
 const modeLabel = computed(() => (mode.value === 'perevodnoy' ? 'Переводной' : mode.value === 'podkidnoy' ? 'Подкидной' : 'Стол'))
 const deckSize = computed(() => waitingInfo.value?.deck ?? null)
+
+const searching = computed(
+  () => !state.value && status.value !== 'closed' && (waitingInfo.value?.matchmaking ?? route.query.search === '1'),
+)
+
+const searchStartedAt = Date.now()
+
+const elapsedText = computed(() => {
+  const since = waitingInfo.value ? Math.min(new Date(waitingInfo.value.createdAt).getTime(), searchStartedAt) : searchStartedAt
+  const sec = Math.max(0, Math.floor((tick.value - since) / 1000))
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+})
+
+function cancelSearch() {
+  sound.playClick()
+  router.push('/lobby')
+}
 const stake = computed(() => gameOver.value?.stake ?? state.value?.stake ?? waitingInfo.value?.stake ?? MIN_STAKE)
 
 const battleHint = computed(() => {
@@ -300,13 +344,42 @@ function sortHand(cards: Card[]): Card[] {
   })
 }
 
-function fanStyle(i: number, n: number) {
-  const mid = (n - 1) / 2
-  const spread = Math.min(5, 40 / Math.max(n, 1))
-  const angle = (i - mid) * spread
-  const lift = Math.abs(i - mid) * Math.abs(i - mid) * 0.9
-  return { transform: `rotate(${angle}deg) translateY(${lift}px)` }
+const FAN_MAX_LIFT = 4
+
+function fanAngle(i: number, n: number) {
+  return (i - (n - 1) / 2) * Math.min(5, 40 / Math.max(n, 1))
 }
+
+function fanLift(i: number, n: number) {
+  const d = Math.min(Math.abs(i - (n - 1) / 2), FAN_MAX_LIFT)
+  return d * d * 0.9
+}
+
+function fanStyle(i: number, n: number) {
+  return { transform: `rotate(${fanAngle(i, n)}deg) translateY(${fanLift(i, n)}px)` }
+}
+
+const handEl = ref<HTMLElement | null>(null)
+const { width: handWidth } = useElementSize(handEl)
+const handCardW = computed(() => (phone.value ? 66 : short.value ? 84 : wide.value ? 104 : 88))
+
+const handOverlap = computed(() => {
+  const n = hand.value.length
+  const w = handCardW.value
+  const roomy = phone.value ? 16 : 14
+  if (n < 2 || !handWidth.value) return roomy
+  const step = (handWidth.value - 24 - w * 1.6) / (n - 1)
+  return Math.min(Math.max(roomy, (w - step) / 2), (w - 18) / 2)
+})
+
+const handStyle = computed(() => {
+  const n = hand.value.length
+  const w = handCardW.value
+  const edge = Math.max(0, n - 1)
+  const angle = (Math.abs(fanAngle(edge, n)) * Math.PI) / 180
+  const drop = (w / 2) * Math.sin(angle) + fanLift(edge, n)
+  return { paddingBottom: `${Math.ceil(10 + drop)}px` }
+})
 
 function lift(card: Card) {
   launching.value = cardKey(card)
@@ -396,11 +469,41 @@ function say(text: string) {
 
 async function copyLink() {
   try {
-    await navigator.clipboard.writeText(location.href)
+    await navigator.clipboard.writeText(tableLink())
     copied.value = true
     setTimeout(() => (copied.value = false), 1600)
   } catch {
     toast.show('Не удалось скопировать ссылку', 'error')
+  }
+}
+
+const chatPlaceholder = watching ? 'Зрители только читают чат' : 'Написать за столом…'
+
+function tableLink() {
+  const key = waitingInfo.value?.key || linkKey
+  return `${location.origin}/table/${roomId}${key ? `?key=${encodeURIComponent(key)}` : ''}`
+}
+
+const { friends, refresh: refreshFriends } = useFriends()
+const calledUntil = ref<Record<string, number>>({})
+const seatsLeft = computed(() => (waitingInfo.value ? waitingInfo.value.maxPlayers - Math.max(waitingInfo.value.players, 1) : 0))
+const canCall = computed(() => !watching && !state.value && status.value !== 'closed' && !!waitingInfo.value && !waitingInfo.value.matchmaking)
+const showCall = computed(() => canCall.value && seatsLeft.value > 0)
+const callable = computed(() => friends.value.filter((f) => f.status === 'online' || isCalled(f.id)))
+
+function isCalled(id: string) {
+  return (calledUntil.value[id] ?? 0) > tick.value
+}
+
+async function callFriend(friend: Friend) {
+  if (isCalled(friend.id)) return
+  try {
+    const { expiresAt } = await inviteToTable(roomId, friend.id)
+    calledUntil.value = { ...calledUntil.value, [friend.id]: new Date(expiresAt).getTime() }
+    toast.show(`Позвали ${friend.username}, место держим 45 секунд`, 'success')
+    pollWaiting()
+  } catch (err) {
+    toast.show(err instanceof Error ? err.message : 'Не удалось позвать', 'error')
   }
 }
 
@@ -451,9 +554,44 @@ watch(state, (s, prev) => {
   if (prev && s.defenderId !== prev.defenderId) selected.value = null
 })
 
+const iVotedRematch = computed(() => !!rematch.value?.votes.includes(me.value))
+const rivalWantsRematch = computed(() => (rematch.value?.votes.length ?? 0) > (iVotedRematch.value ? 1 : 0))
+const rematchOpen = computed(() => !watching && !!gameOver.value && status.value === 'open' && !rematchCancelled.value && !rematchTable.value)
+
+function voteRematch() {
+  sound.playClick()
+  socket.rematchVote()
+}
+
+function declineRematch() {
+  sound.playClick()
+  socket.rematchDecline()
+}
+
+watch(rivalWantsRematch, (wants) => {
+  if (!wants || iVotedRematch.value) return
+  resultOpen.value = true
+  sound.playYourTurn()
+})
+
+watch(rematchCancelled, (reason) => {
+  if (reason) toast.show(`Реванша не будет: ${reason}`)
+})
+
+watch(rematchTable, (id) => {
+  if (!id) return
+  if (watching) {
+    if (!waitingInfo.value?.private) router.push({ name: 'table', params: { id }, query: { watch: '1' } })
+    return
+  }
+  sound.playShuffle()
+  router.push({ name: 'table', params: { id } })
+})
+
 watch(gameOver, (g) => {
   if (!g) return
   resultOpen.value = true
+  if (watching) return
   if (g.isDraw) sound.playSuccess()
   else if (g.loserId === me.value) sound.playLose()
   else sound.playChipsWin()
@@ -498,11 +636,11 @@ function showBubble(entry: ChatEntry) {
 async function pollWaiting() {
   if (state.value && waitingInfo.value) return
   try {
-    const list = await listTables()
-    waitingInfo.value = list.find((t) => t.id === roomId) ?? waitingInfo.value
+    waitingInfo.value = await getTable(roomId)
   } catch {
     return
   }
+  if (!state.value && !waitingInfo.value.matchmaking) refreshFriends()
 }
 
 onMounted(() => {
@@ -534,8 +672,10 @@ onUnmounted(() => {
         :chat-open="chatOpen"
         :unread="unread"
         :can-surrender="canAct"
-        :waiting="!state"
+        :waiting="!state && !watching"
         :copied="copied"
+        :watchers="watchers"
+        :watching="watching"
         @back="router.push('/lobby')"
         @sound="toggleSound"
         @chat="toggleChat"
@@ -553,6 +693,7 @@ onUnmounted(() => {
               :key="s.key"
               class="seat-pos"
               :data-fly-seat="s.player?.id"
+              :user-id="s.player?.id"
               :style="{ '--x': `${s.x}%`, '--y': `${s.y}%` }"
               :name="s.player?.name ?? s.waitingName"
               :hand-count="s.player?.handCount ?? 0"
@@ -577,16 +718,50 @@ onUnmounted(() => {
               @pair="onPairClick"
             />
 
+            <div v-else-if="searching" class="waiting searching" role="status">
+              <div class="radar" aria-hidden="true">
+                <span class="pulse p1"></span>
+                <span class="pulse p2"></span>
+                <span class="pulse p3"></span>
+                <GameCard face-down size="sm" class="radar-card" />
+              </div>
+              <h1>Ищем соперника</h1>
+              <p v-if="waitingInfo">{{ modeLabel }} · {{ waitingInfo.deck }} карт · ставка {{ stake.toLocaleString('ru-RU') }}</p>
+              <p v-else>Подбираем стол с вашими настройками</p>
+              <span class="elapsed" aria-hidden="true">{{ elapsedText }}</span>
+              <button type="button" class="felt-btn ghost" @click="cancelSearch">Отменить поиск</button>
+            </div>
+
             <div v-else class="waiting">
-              <div class="waiting-cards" aria-hidden="true">
+              <div v-if="!showCall" class="waiting-cards" aria-hidden="true">
                 <GameCard v-for="i in 3" :key="i" face-down size="sm" :class="`wc wc${i}`" />
               </div>
-              <h1>{{ status === 'closed' ? 'Не удалось подключиться' : 'Ждём соперников' }}</h1>
+              <h1>{{ status === 'closed' ? 'Не удалось подключиться' : watching ? 'Партия ещё не началась' : 'Ждём соперников' }}</h1>
               <p v-if="status === 'closed'">Стол закрыт или сервер недоступен. Вернитесь в лобби и выберите другой стол.</p>
               <p v-else-if="waitingInfo">
-                За столом {{ waitingInfo.players }} из {{ waitingInfo.maxPlayers }}. Партия начнётся сама, когда все сядут.
+                За столом {{ Math.max(waitingInfo.players, 1) }} из {{ waitingInfo.maxPlayers }}.
+                {{ waitingInfo.private ? 'Стол закрытый: сядут только позванные и те, у кого есть ссылка.' : 'Партия начнётся сама, когда все сядут.' }}
               </p>
               <p v-else>Партия начнётся сама, когда все сядут.</p>
+              <div v-if="showCall" class="call">
+                <span class="call-label">Позвать друзей · свободно мест: {{ seatsLeft }}</span>
+                <div v-if="callable.length" class="call-list">
+                  <button
+                    v-for="f in callable"
+                    :key="f.id"
+                    type="button"
+                    class="call-friend"
+                    :class="{ on: isCalled(f.id) }"
+                    :disabled="isCalled(f.id)"
+                    @click="callFriend(f)"
+                  >
+                    <span class="avatar" :style="{ '--tone': avatarTone(f.username) }"><AvatarGlyph :name="f.username" :user-id="f.id" /></span>
+                    {{ f.username }}
+                    <span class="call-state">{{ isCalled(f.id) ? 'позван' : 'позвать' }}</span>
+                  </button>
+                </div>
+                  <span v-else class="call-none">Друзей в лобби сейчас нет. Позовите по ссылке сверху.</span>
+              </div>
               <button v-if="status === 'closed'" type="button" class="felt-btn" @click="router.push('/lobby')">В лобби</button>
             </div>
           </div>
@@ -596,6 +771,21 @@ onUnmounted(() => {
       <section class="dock" :class="{ 'my-turn': myTurn }">
         <div class="action-row">
           <TableSeat
+            v-if="watching"
+            class="me-seat"
+            :data-fly-seat="anchorId"
+            :user-id="anchorId"
+            bubble-side="up"
+            :name="anchor?.name ?? null"
+            :hand-count="anchor?.handCount ?? 0"
+            :role="anchor ? roleOf(anchor.id) : null"
+            :out="!!anchor && !anchor.isActive"
+            :offline="!!anchor && offline.has(anchor.id)"
+            :turn-fraction="anchor && actorId === anchor.id && turnLeft > 0 ? turnFraction : null"
+            :bubble="anchor ? bubbles[anchor.id] ?? null : null"
+          />
+          <TableSeat
+            v-else
             class="me-seat"
             me
             :data-fly-seat="me"
@@ -609,7 +799,7 @@ onUnmounted(() => {
           <div class="status">
             <span v-if="roleText" class="role">{{ roleText }}</span>
             <span v-if="result && !resultOpen" class="status-text result-line" :class="result.tone">{{ result.title }}</span>
-            <span v-else class="status-text">{{ state ? statusText : 'Садитесь поудобнее — ждём остальных' }}</span>
+            <span v-else class="status-text">{{ state ? statusText : watching ? 'Вы зритель — партия начнётся, когда все сядут' : 'Садитесь поудобнее — ждём остальных' }}</span>
             <div v-if="myTurn && turnLeft > 0" class="timer" :class="{ urgent: turnSeconds <= 5 }">
               <div class="timer-bar" :style="{ transform: `scaleX(${turnFraction})` }"></div>
               <span class="timer-text">{{ turnSeconds }} с</span>
@@ -628,14 +818,15 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="hand" :class="{ crowded: hand.length > 10 }">
+        <p v-if="watching" class="watch-note">Вы смотрите партию: карты игроков на руках не видны, ходить и писать в чат нельзя.</p>
+        <div v-else ref="handEl" class="hand" :style="handStyle" data-fly-zone="hand">
           <TransitionGroup name="hand-slot">
             <div
               v-for="(card, i) in hand"
               :key="cardKey(card)"
               class="hand-slot"
               :class="{ launching: launching === cardKey(card) }"
-              :style="{ zIndex: i }"
+              :style="{ zIndex: i, margin: `0 -${handOverlap}px` }"
             >
               <div class="fan" :style="fanStyle(i, hand.length)">
                 <GameCard
@@ -655,15 +846,15 @@ onUnmounted(() => {
     </div>
 
     <aside v-if="wide && chatOpen" class="chat-col">
-      <ChatBox class="chat-box" title="Чат стола" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
-        <template #tools><QuickChat @send="say" /></template>
+      <ChatBox class="chat-box" title="Чат стола" :placeholder="chatPlaceholder" :disabled="watching" :messages="chat" :my-id="me" @send="say">
+        <template v-if="!watching" #tools><QuickChat @send="say" /></template>
       </ChatBox>
     </aside>
 
     <AnimatePresence>
       <OverlayPanel v-if="!wide && chatOpen" key="chat" side="right" :width="380" title="Чат стола" @close="chatOpen = false">
-        <ChatBox class="chat-box sheet" title="" placeholder="Написать за столом…" :messages="chat" :my-id="me" @send="say">
-          <template #tools><QuickChat @send="say" /></template>
+        <ChatBox class="chat-box sheet" title="" :placeholder="chatPlaceholder" :disabled="watching" :messages="chat" :my-id="me" @send="say">
+          <template v-if="!watching" #tools><QuickChat @send="say" /></template>
         </ChatBox>
       </OverlayPanel>
     </AnimatePresence>
@@ -706,10 +897,21 @@ onUnmounted(() => {
               <span v-if="s.payout !== null" class="standing-payout" :class="{ plus: s.payout > 0, minus: s.payout < 0 }">{{ chips(s.payout) }}</span>
             </li>
           </ol>
-          <PostGameChat :messages="chat" :my-id="me" @send="say" />
+          <PostGameChat v-if="!watching" :messages="chat" :my-id="me" @send="say" />
+          <p v-if="rematchCancelled" class="rematch-note">Реванша не будет: {{ rematchCancelled }}</p>
+          <p v-else-if="rematchOpen && rivalWantsRematch && !iVotedRematch" class="rematch-note hot">Соперник хочет реванш</p>
           <div class="dialog-actions center">
-            <button type="button" class="btn ghost" @click="resultOpen = false">Остаться за столом</button>
-            <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
+            <template v-if="rematchOpen">
+              <button v-if="rivalWantsRematch && !iVotedRematch" type="button" class="btn ghost" @click="declineRematch">Нет, спасибо</button>
+              <button v-else type="button" class="btn ghost" @click="router.push('/lobby')">В лобби</button>
+              <button type="button" class="btn primary" :disabled="iVotedRematch" @click="voteRematch">
+                {{ iVotedRematch ? `Ждём соперника… ${rematch?.votes.length ?? 1} из ${rematch?.needed ?? 2}` : 'Реванш' }}
+              </button>
+            </template>
+            <template v-else>
+              <button type="button" class="btn ghost" @click="resultOpen = false">Остаться за столом</button>
+              <button type="button" class="btn primary" @click="router.push('/lobby')">В лобби</button>
+            </template>
           </div>
         </div>
       </div>
@@ -814,6 +1016,7 @@ onUnmounted(() => {
   inset: 18% 9% 12%;
   z-index: 2;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 
@@ -870,11 +1073,158 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
+.watch-note {
+  margin: 0;
+  padding: 18px 20px 22px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--color-ink-muted);
+}
+
 .waiting p {
   margin: 8px 0 0;
   font-size: 15px;
   line-height: 1.45;
   color: var(--color-on-felt-muted);
+}
+
+.call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.call-label,
+.call-none {
+  font-size: 13px;
+  color: var(--color-on-felt-muted);
+}
+
+.call-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.call-friend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
+  color: var(--color-on-felt);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.call-friend:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1.5px var(--color-gold);
+}
+
+.call-friend:disabled {
+  cursor: default;
+}
+
+.call-friend .avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.call-state {
+  font-size: 12px;
+  color: var(--color-gold);
+}
+
+.call-friend.on .call-state {
+  color: var(--color-on-felt-faint);
+}
+
+.radar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  margin-bottom: 8px;
+}
+
+.pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--color-on-felt-faint);
+  opacity: 0;
+  animation: radar 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.p2 {
+  animation-delay: 0.8s;
+}
+
+.p3 {
+  animation-delay: 1.6s;
+}
+
+@keyframes radar {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.radar-card {
+  position: relative;
+  rotate: -6deg;
+  animation: shuffle 2.4s ease-in-out infinite;
+}
+
+.elapsed {
+  margin-top: 10px;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.felt-btn.ghost {
+  background: var(--color-felt-well);
+  box-shadow: inset 0 0 0 1px var(--color-felt-line);
+  color: var(--color-on-felt);
+}
+
+.felt-btn.ghost:hover {
+  box-shadow: inset 0 0 0 1.5px var(--color-on-felt-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .radar-card {
+    animation: none;
+  }
+
+  .pulse.p1 {
+    opacity: 0.5;
+    transform: scale(0.7);
+  }
 }
 
 .felt-btn {
@@ -1018,22 +1368,19 @@ onUnmounted(() => {
   justify-content: center;
   align-items: flex-end;
   min-height: 184px;
-  padding: 30px 8px 14px;
+  padding: 30px 12px 14px;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
 }
 
-.hand-slot {
-  margin: 0 -14px;
+.hand::-webkit-scrollbar {
+  display: none;
 }
 
 .fan {
   transform-origin: 50% 160%;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hand.crowded .hand-slot {
-  margin: 0 -26px;
 }
 
 .hand-slot:hover {
@@ -1138,6 +1485,18 @@ onUnmounted(() => {
   justify-content: center;
 }
 
+.rematch-note {
+  margin: 18px 0 0;
+  color: var(--color-ink-faint);
+  font-size: 14px;
+  text-align: center;
+}
+
+.rematch-note.hot {
+  color: var(--color-gold-ink);
+  font-weight: 500;
+}
+
 .btn {
   height: 46px;
   padding: 0 22px;
@@ -1145,7 +1504,20 @@ onUnmounted(() => {
   border-radius: 999px;
   font: inherit;
   font-size: 15px;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .dialog-actions {
+    flex-wrap: wrap;
+  }
+
+  .dialog-actions .btn {
+    flex: 1 1 auto;
+    padding: 0 14px;
+    font-size: 14px;
+  }
 }
 
 .btn.ghost {
@@ -1489,12 +1861,28 @@ onUnmounted(() => {
     padding-top: 22px;
   }
 
-  .hand-slot {
-    margin: 0 -16px;
+  .hand-slot :deep(.game-card) {
+    --w: 66px;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 768px) {
+  .arena {
+    padding-top: 62px;
+    padding-bottom: 14px;
+  }
+
+  .me-seat {
+    zoom: 0.8;
+  }
+
+  .hand {
+    min-height: 146px;
+    padding-top: 22px;
   }
 
   .hand-slot :deep(.game-card) {
-    --w: 66px;
+    --w: 84px;
   }
 }
 </style>

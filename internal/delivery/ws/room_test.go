@@ -16,10 +16,10 @@ func testSettings(maxPlayers int) RoomSettings {
 // Helper to create a test client with a monitored send channel.
 func createTestClient(id, name string, room *Room) *Client {
 	return &Client{
-		id:   id,
-		name: name,
-		room: room,
-		send: make(chan []byte, 100),
+		id:    id,
+		name:  name,
+		owner: room,
+		send:  make(chan []byte, 100),
 	}
 }
 
@@ -391,5 +391,87 @@ func TestRoom_GameOverIncludesPlaces(t *testing.T) {
 	}
 	if len(over.Payload.Places) != 2 || over.Payload.Places[0] != "p2" || over.Payload.Places[1] != "p1" {
 		t.Errorf("Places = %v, want [p2 p1]", over.Payload.Places)
+	}
+}
+
+func TestRoom_TurnTimerRestartsWhenAutoMoveFails(t *testing.T) {
+	room := NewRoom("room-stuck", testSettings(2), nil)
+	g, err := game.NewGame(game.ModePodkidnoy, game.Deck36, []*game.Player{game.NewPlayer("p1", "Alice"), game.NewPlayer("p2", "Bob")})
+	if err != nil {
+		t.Fatalf("new game: %v", err)
+	}
+	room.game = g
+	g.Attacker().ClearHand()
+
+	room.handleTurnTimeout()
+	defer room.stopTurnTimer()
+
+	if room.turnTimer == nil || !room.turnEndsAt.After(time.Now()) {
+		t.Error("the turn timer must run again even when no automatic move was possible")
+	}
+}
+
+func TestRoom_TurnTimeoutAutoAttacks(t *testing.T) {
+	room := NewRoom("room-auto", testSettings(2), nil)
+	g, err := game.NewGame(game.ModePodkidnoy, game.Deck36, []*game.Player{game.NewPlayer("p1", "Alice"), game.NewPlayer("p2", "Bob")})
+	if err != nil {
+		t.Fatalf("new game: %v", err)
+	}
+	room.game = g
+
+	room.handleTurnTimeout()
+	defer room.stopTurnTimer()
+
+	if g.Table().PairsCount() != 1 {
+		t.Errorf("pairs on table = %d, want the automatic attack", g.Table().PairsCount())
+	}
+	if room.turnTimer == nil {
+		t.Error("the turn timer must run for the defender")
+	}
+}
+
+func TestRoom_SecondTabTakesOverAndOldTabIsIgnored(t *testing.T) {
+	room := NewRoom("room-tabs", testSettings(3), nil)
+	go room.Run()
+	defer room.Close()
+
+	oldTab := createTestClient("p1", "Alice", room)
+	room.RegisterClient(oldTab)
+	bob := createTestClient("p2", "Bob", room)
+	room.RegisterClient(bob)
+	newTab := createTestClient("p1", "Alice", room)
+	room.RegisterClient(newTab)
+
+	deadline := time.Now().Add(time.Second)
+	for !isClosed(oldTab) {
+		if time.Now().After(deadline) {
+			t.Fatal("the old tab was not closed after the new one connected")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if msg, ok := lastOfType[ErrorPayload](t, oldTab, TypeError); !ok || msg.Payload.Message != errOtherTab {
+		t.Fatalf("old tab error = %+v, %v; want %q", msg.Payload, ok, errOtherTab)
+	}
+
+	ghost, _ := NewMessage(TypeChat, ChatPayload{Message: "from the old tab"})
+	room.incoming <- IncomingMessage{Client: oldTab, Data: ghost}
+	fresh, _ := NewMessage(TypeChat, ChatPayload{Message: "from the new tab"})
+	room.incoming <- IncomingMessage{Client: newTab, Data: fresh}
+
+	deadline = time.Now().Add(time.Second)
+	for {
+		if msg, ok := lastOfType[ChatPayload](t, bob, TypeChat); ok {
+			if msg.Payload.Message != "from the new tab" {
+				t.Fatalf("bob got %q, the old tab must be ignored", msg.Payload.Message)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bob got no chat from the new tab")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if room.Occupancy() != 2 {
+		t.Fatalf("occupancy = %d, want 2: one seat per player", room.Occupancy())
 	}
 }

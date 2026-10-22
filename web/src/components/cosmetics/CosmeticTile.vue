@@ -3,7 +3,7 @@ import { PhCheck } from '@phosphor-icons/vue'
 import CosmeticPreview from './CosmeticPreview.vue'
 import type { CosmeticKind } from '../../constants/cosmetics'
 
-const KIND_LABEL: Record<CosmeticKind, string> = { back: 'Рубашка', felt: 'Сукно', theme: 'Тема' }
+const KIND_LABEL: Record<CosmeticKind, string> = { avatar: 'Аватарка', back: 'Рубашка', felt: 'Сукно', theme: 'Тема' }
 
 withDefaults(defineProps<{ kind: CosmeticKind; id: string; name: string; note?: string; active?: boolean; clickable?: boolean }>(), {
   note: undefined,
@@ -32,6 +32,7 @@ defineEmits<{ (e: 'pick'): void }>()
 
 <style scoped>
 .tile {
+  container: tile / inline-size;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -116,6 +117,19 @@ defineEmits<{ (e: 'pick'): void }>()
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px 14px;
+}
+
+@container tile (max-width: 230px) {
+  .foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px 12px;
+  }
+
+  .foot > :slotted(*) {
+    width: 100%;
+  }
 }
 
 .meta {

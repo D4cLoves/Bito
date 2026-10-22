@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { GameHistoryEntry } from '../../types/social'
 
-defineProps<{ games: GameHistoryEntry[] }>()
+type ShownGame = Omit<GameHistoryEntry, 'payout'> & { payout?: number }
+
+withDefaults(defineProps<{ games: ShownGame[]; hidePayout?: boolean; emptyText?: string }>(), {
+  hidePayout: false,
+  emptyText: 'Сыгранные партии появятся здесь.',
+})
 
 function when(iso: string) {
   const d = new Date(iso)
@@ -14,7 +19,25 @@ function when(iso: string) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
-const isLoss = (g: GameHistoryEntry) => g.payout < 0
+function outcomeOf(g: ShownGame) {
+  if (g.outcome) return g.outcome
+  const p = g.payout ?? 0
+  return p > 0 ? 'win' : p < 0 ? 'lose' : 'draw'
+}
+
+const isLoss = (g: ShownGame) => outcomeOf(g) === 'lose'
+
+function placeText(g: ShownGame) {
+  const o = outcomeOf(g)
+  if (o === 'draw') return 'ничья'
+  if (o === 'lose') return 'дурак'
+  return `${g.place} место`
+}
+
+function payoutText(p: number) {
+  if (p === 0) return '0'
+  return `${p > 0 ? '+' : '−'}${Math.abs(p).toLocaleString('ru-RU')}`
+}
 </script>
 
 <template>
@@ -28,11 +51,11 @@ const isLoss = (g: GameHistoryEntry) => g.payout < 0
           <b>{{ g.mode === 'perevodnoy' ? 'Переводной' : 'Подкидной' }}</b>
           <small>{{ when(g.finishedAt) }} · {{ g.deck }} карт · {{ g.players }} игр. · ставка {{ g.stake.toLocaleString('ru-RU') }}</small>
         </span>
-        <span class="place">{{ isLoss(g) ? 'дурак' : `${g.place} место` }}</span>
-        <span class="payout">{{ g.payout > 0 ? '+' : '−' }}{{ Math.abs(g.payout).toLocaleString('ru-RU') }}</span>
+        <span class="place">{{ placeText(g) }}</span>
+        <span v-if="!hidePayout" class="payout">{{ payoutText(g.payout ?? 0) }}</span>
       </li>
     </ol>
-    <p v-else class="empty">Сыгранные партии появятся здесь.</p>
+    <p v-else class="empty">{{ emptyText }}</p>
   </section>
 </template>
 

@@ -3,12 +3,40 @@ package http
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"bito/internal/pkg/jwt"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
+
+func RedactingLogger(logger middleware.LoggerInterface) func(http.Handler) http.Handler {
+	return middleware.RequestLogger(redactingFormatter{
+		next: &middleware.DefaultLogFormatter{Logger: logger, NoColor: runtime.GOOS == "windows"},
+	})
+}
+
+type redactingFormatter struct {
+	next middleware.LogFormatter
+}
+
+func (f redactingFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
+	query := r.URL.Query()
+	if !query.Has("token") && !query.Has("key") {
+		return f.next.NewLogEntry(r)
+	}
+	query.Del("token")
+	query.Del("key")
+	safeURL := *r.URL
+	safeURL.RawQuery = query.Encode()
+
+	safe := r.WithContext(r.Context())
+	safe.URL = &safeURL
+	safe.RequestURI = safeURL.RequestURI()
+	return f.next.NewLogEntry(safe)
+}
 
 type TokenValidator interface {
 	ValidateAccessToken(token string) (*jwt.Claims, error)

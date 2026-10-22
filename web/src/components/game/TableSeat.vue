@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { motion, AnimatePresence } from 'motion-v'
+import AvatarGlyph from '../client/AvatarGlyph.vue'
 import GameCard from './GameCard.vue'
 import AnimatedEmoji from './AnimatedEmoji.vue'
 import { emojiOf } from '../../constants/emoji'
@@ -19,6 +20,7 @@ const props = withDefaults(
     turnFraction?: number | null
     bubble?: ChatEntry | null
     me?: boolean
+    userId?: string
     bubbleSide?: 'up' | 'down'
   }>(),
   { handCount: 0, role: null, out: false, offline: false, turnFraction: null, bubble: null, me: false, bubbleSide: 'down' },
@@ -46,7 +48,7 @@ const urgent = computed(() => props.turnFraction !== null && props.turnFraction 
         <circle cx="30" cy="30" r="27" class="ring-track" />
         <circle cx="30" cy="30" r="27" class="ring-bar" :stroke-dasharray="RING" :stroke-dashoffset="RING * (1 - turnFraction)" />
       </svg>
-      <span class="avatar">{{ name ? name[0].toUpperCase() : '' }}</span>
+      <span class="avatar"><AvatarGlyph v-if="name" :name="name" :user-id="userId" :self="me" /></span>
       <span v-if="offline" class="dot warn" title="Нет связи" aria-hidden="true"></span>
     </div>
 

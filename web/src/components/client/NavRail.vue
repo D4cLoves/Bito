@@ -4,7 +4,7 @@ import { motion } from 'motion-v'
 import {
   PhCardsThree,
   PhUserCircle,
-  PhTrophy,
+  PhWallet,
   PhStorefront,
   PhGearSix,
   PhSpeakerHigh,
@@ -21,15 +21,16 @@ const emit = defineEmits<{
   (e: 'logout'): void
 }>()
 
-const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree; soon?: boolean }[] = [
+const ITEMS: { id: PanelId | 'home'; label: string; icon: typeof PhCardsThree }[] = [
   { id: 'home', label: 'Играть', icon: PhCardsThree },
   { id: 'profile', label: 'Профиль', icon: PhUserCircle },
-  { id: 'leaderboard', label: 'Рейтинг', icon: PhTrophy, soon: true },
-  { id: 'shop', label: 'Магазин', icon: PhStorefront, soon: true },
+  { id: 'wallet', label: 'Кошелёк', icon: PhWallet },
+  { id: 'shop', label: 'Магазин', icon: PhStorefront },
   { id: 'settings', label: 'Настройки', icon: PhGearSix },
 ]
 
-const current = computed(() => (props.active && props.active !== 'social' ? props.active : 'home'))
+const OVER_LOBBY: (PanelId | null)[] = [null, 'friends', 'tables']
+const current = computed(() => (OVER_LOBBY.includes(props.active) ? 'home' : props.active))
 
 function pick(id: PanelId | 'home') {
   if (id === 'home') emit('home')
@@ -65,7 +66,6 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
           <motion.span v-if="current === item.id" layout-id="rail-pill" class="pill" :transition="spring" />
           <component :is="item.icon" :size="24" :weight="current === item.id ? 'fill' : 'regular'" class="icon" aria-hidden="true" />
           <span class="label">{{ item.label }}</span>
-          <span v-if="item.soon" class="soon" aria-label="скоро"></span>
         </button>
       </li>
     </ul>
@@ -93,11 +93,15 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100%;
-  padding: 16px 0;
+  height: calc(100% - 28px);
+  margin: 14px 0 14px 14px;
+  padding: 14px 0;
   box-sizing: border-box;
-  border-right: 1px solid var(--color-line);
-  background: var(--color-paper-sunken);
+  border-radius: 30px;
+  background: var(--color-paper-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--color-line),
+    0 24px 48px -36px rgba(0, 0, 0, 0.5);
 }
 
 .brand {
@@ -105,7 +109,7 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
   place-items: center;
   width: 52px;
   height: 52px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   border: 0;
   border-radius: 16px;
   background: transparent;
@@ -119,7 +123,7 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
 }
 
 .brand-front {
-  fill: var(--color-paper-sunken);
+  fill: var(--color-paper-raised);
 }
 
 .items {
@@ -138,10 +142,10 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 68px;
-  height: 62px;
+  width: 64px;
+  height: 60px;
   border: 0;
-  border-radius: 16px;
+  border-radius: 18px;
   background: transparent;
   color: var(--color-ink-faint);
   font: inherit;
@@ -154,7 +158,7 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
 }
 
 .item.on {
-  color: var(--color-ink);
+  color: var(--color-gold-ink);
 }
 
 .item.small {
@@ -165,9 +169,8 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
 .pill {
   position: absolute;
   inset: 0;
-  border-radius: 16px;
-  background: var(--color-paper-hover);
-  box-shadow: inset 3px 0 0 var(--color-gold);
+  border-radius: 18px;
+  background: var(--color-gold-tint);
 }
 
 .icon,
@@ -176,22 +179,12 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
 }
 
 .item.on .icon {
-  color: var(--color-gold);
+  color: var(--color-gold-ink);
 }
 
 .label {
   font-size: 11px;
   letter-spacing: 0.01em;
-}
-
-.soon {
-  position: absolute;
-  top: 10px;
-  right: 16px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-ink-ghost);
 }
 
 .bottom {
@@ -206,9 +199,11 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
   .rail {
     flex-direction: row;
     justify-content: space-around;
+    height: auto;
+    margin: 0;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-    border-right: 0;
-    border-top: 1px solid var(--color-line);
+    border-radius: 0;
+    box-shadow: inset 0 1px 0 var(--color-line);
   }
 
   .brand,
@@ -233,7 +228,7 @@ const spring = { type: 'spring', stiffness: 420, damping: 34 } as const
   }
 
   .pill {
-    box-shadow: inset 0 -3px 0 var(--color-gold);
+    inset: 4px 6px;
   }
 }
 </style>

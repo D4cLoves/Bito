@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import CardBack from '../client/CardBack.vue'
+import AvatarGlyph from '../client/AvatarGlyph.vue'
+import { avatarTone } from '../../composables/avatar'
+import { useAuthStore } from '../../stores/auth'
 import type { CardBackId, CosmeticKind } from '../../constants/cosmetics'
 
 defineProps<{ kind: CosmeticKind; id: string }>()
+
+const auth = useAuthStore()
+const myName = auth.user?.username ?? 'Bito'
 </script>
 
 <template>
   <div class="preview" :class="`is-${kind}`" :data-theme="kind === 'theme' ? id : undefined" aria-hidden="true">
-    <div v-if="kind === 'back'" class="fan">
+    <span v-if="kind === 'avatar'" class="face" :style="{ '--tone': avatarTone(myName) }"><AvatarGlyph :name="myName" :avatar="id" /></span>
+
+    <div v-else-if="kind === 'back'" class="fan">
       <span v-for="i in 3" :key="i" class="fan-card" :class="`c${i}`"><CardBack :variant="id as CardBackId" /></span>
     </div>
 
@@ -36,6 +44,21 @@ defineProps<{ kind: CosmeticKind; id: string }>()
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.face {
+  display: grid;
+  place-items: center;
+  width: 42%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-gold) var(--tone, 52%), #000);
+  box-shadow:
+    0 0 0 6px var(--color-paper-raised),
+    0 18px 30px -18px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 500;
 }
 
 .fan {

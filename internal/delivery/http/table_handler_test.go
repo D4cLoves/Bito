@@ -107,3 +107,86 @@ func TestTables_CreateAndList(t *testing.T) {
 		t.Errorf("list = %+v, want only %s", tables, created.ID)
 	}
 }
+
+func TestTables_OneOpenTablePerPlayer(t *testing.T) {
+	router, token, _ := newTestTablesRouter(t)
+	body := `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`
+
+	if w := doTablesRequest(router, http.MethodPost, token, body); w.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201 (%s)", w.Code, w.Body.String())
+	}
+
+	w := doTablesRequest(router, http.MethodPost, token, body)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("second create status = %d, want 409 (%s)", w.Code, w.Body.String())
+	}
+	var resp ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil || resp.Error != msgOtherTable {
+		t.Errorf("error = %q, want %q", resp.Error, msgOtherTable)
+	}
+
+	var tables []ws.RoomInfo
+	_ = json.Unmarshal(doTablesRequest(router, http.MethodGet, token, "").Body.Bytes(), &tables)
+	if len(tables) != 1 || tables[0].Players != 1 {
+		t.Errorf("list = %+v, want one table with the creator's reserved seat", tables)
+	}
+}
+
+func TestTables_PrivateKeyOnlyForMembers(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", 15*time.Minute, time.Hour)
+	hub := ws.NewHub(tokenManager, nil, nil)
+	router := NewServer(":0", hub, Handlers{Table: NewTableHandler(hub, nil)}, tokenManager).httpServer.Handler
+	alice, _ := tokenManager.GenerateAccessToken(uuid.New(), "Alice")
+	eve, _ := tokenManager.GenerateAccessToken(uuid.New(), "Eve")
+
+	w := doTablesRequest(router, http.MethodPost, alice, `{"mode":"podkidnoy","deck":36,"maxPlayers":3,"private":true}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d (%s)", w.Code, w.Body.String())
+	}
+	var created TableResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if !created.Private || created.Key == "" {
+		t.Fatalf("creator got %+v, want a private table with a key", created)
+	}
+
+	get := func(token string) TableResponse {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/tables/"+created.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		var resp TableResponse
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		return resp
+	}
+	if get(alice).Key != created.Key {
+		t.Fatal("the creator lost the key")
+	}
+	if strangers := get(eve); strangers.Key != "" || !strangers.Private {
+		t.Fatalf("a stranger saw %+v", strangers)
+	}
+
+	if list := doTablesRequest(router, http.MethodGet, eve, ""); strings.Contains(list.Body.String(), created.ID) {
+		t.Fatal("a private table is in the public list")
+	}
+}
+
+func TestTables_LiveListsOnlyStartedGames(t *testing.T) {
+	router, token, _ := newTestTablesRouter(t)
+	if w := doTablesRequest(router, http.MethodPost, token, `{"mode":"podkidnoy","deck":36,"maxPlayers":3}`); w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d", w.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tables/live", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "[]" {
+		t.Fatalf("live = %s, want [] while nobody plays", body)
+	}
+}

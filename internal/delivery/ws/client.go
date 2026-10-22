@@ -15,24 +15,40 @@ const (
 	sendBufferSize = 256
 )
 
+type endpoint interface {
+	deliver(IncomingMessage) bool
+	leave(*Client)
+}
+
 type Client struct {
 	id     string
 	name   string
 	conn   *websocket.Conn
-	room   *Room
+	owner  endpoint
+	watch  bool
 	send   chan []byte
 	mu     sync.Mutex
 	closed bool
 }
 
-func NewClient(id, name string, conn *websocket.Conn, room *Room) *Client {
+func NewClient(id, name string, conn *websocket.Conn, ep endpoint) *Client {
 	return &Client{
-		id:   id,
-		name: name,
-		conn: conn,
-		room: room,
-		send: make(chan []byte, sendBufferSize),
+		id:    id,
+		name:  name,
+		conn:  conn,
+		owner: ep,
+		send:  make(chan []byte, sendBufferSize),
 	}
+}
+
+func NewWatcher(id, name string, conn *websocket.Conn, ep endpoint) *Client {
+	c := NewClient(id, name, conn, ep)
+	c.watch = true
+	return c
+}
+
+func (c *Client) Watching() bool {
+	return c.watch
 }
 
 func (c *Client) ID() string {
@@ -71,10 +87,7 @@ func (c *Client) Close() {
 
 func (c *Client) ReadPump() {
 	defer func() {
-		select {
-		case c.room.unregister <- c:
-		case <-c.room.stop:
-		}
+		c.owner.leave(c)
 		if c.conn != nil {
 			c.conn.Close()
 		}
@@ -96,9 +109,7 @@ func (c *Client) ReadPump() {
 		if err != nil {
 			break
 		}
-		select {
-		case c.room.incoming <- IncomingMessage{Client: c, Data: message}:
-		case <-c.room.stop:
+		if !c.owner.deliver(IncomingMessage{Client: c, Data: message}) {
 			return
 		}
 	}

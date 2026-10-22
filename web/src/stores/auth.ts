@@ -91,7 +91,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function refreshSession(): Promise<boolean> {
+  let refreshing: Promise<boolean> | null = null
+
+  async function rotateSession(): Promise<boolean> {
     if (!refreshToken.value) return false
     try {
       const data = await refreshAccessToken(refreshToken.value)
@@ -101,6 +103,13 @@ export const useAuthStore = defineStore('auth', () => {
       logout()
       return false
     }
+  }
+
+  function refreshSession(): Promise<boolean> {
+    refreshing ??= rotateSession().finally(() => {
+      refreshing = null
+    })
+    return refreshing
   }
 
   function setUser(next: UserResponse) {

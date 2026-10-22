@@ -1,4 +1,4 @@
-.PHONY: help up down logs test test-race lint build run
+.PHONY: help up down logs test test-race build run web
 
 help: ## Show help for each of the Makefile recipes.
 	@echo "Available commands:"
@@ -9,9 +9,10 @@ help: ## Show help for each of the Makefile recipes.
 	@echo "  make test-race  - Run unit tests with Go data race detector"
 	@echo "  make run        - Run backend server locally"
 	@echo "  make build      - Build server binary"
+	@echo "  make web        - Run the Vue dev server"
 
 up:
-	docker compose up -d
+	docker compose up -d postgres redis mailpit
 
 down:
 	docker compose down
@@ -30,3 +31,6 @@ build:
 
 run:
 	go run cmd/server/main.go
+
+web:
+	npm --prefix web run dev

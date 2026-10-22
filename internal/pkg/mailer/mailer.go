@@ -2,7 +2,10 @@ package mailer
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/smtp"
@@ -12,17 +15,26 @@ import (
 	"bito/internal/config"
 )
 
+const (
+	implicitTLSPort = "465"
+	sendTimeout     = 20 * time.Second
+)
+
 type Mailer struct {
-	host string
-	port string
-	from string
+	host     string
+	port     string
+	from     string
+	user     string
+	password string
 }
 
 func New(cfg *config.Config) *Mailer {
 	return &Mailer{
-		host: cfg.SMTPHost,
-		port: cfg.SMTPPort,
-		from: cfg.SMTPFrom,
+		host:     cfg.SMTPHost,
+		port:     cfg.SMTPPort,
+		from:     cfg.SMTPFrom,
+		user:     cfg.SMTPUser,
+		password: cfg.SMTPPassword,
 	}
 }
 
@@ -51,12 +63,13 @@ func (m *Mailer) SendEmail(ctx context.Context, to, subject, htmlBody string) er
 
 	// Формируем MIME заголовки и тело письма
 	header := make(map[string]string)
-	header["From"] = m.from
+	header["From"] = "Bito <" + m.from + ">"
 	header["To"] = to
 	header["Subject"] = "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(subject)) + "?="
 	header["MIME-Version"] = "1.0"
 	header["Content-Type"] = "text/html; charset=UTF-8"
 	header["Date"] = time.Now().Format(time.RFC1123Z)
+	header["Message-ID"] = m.messageID()
 
 	var messageBuilder strings.Builder
 	for k, v := range header {
@@ -68,10 +81,15 @@ func (m *Mailer) SendEmail(ctx context.Context, to, subject, htmlBody string) er
 	msg := []byte(messageBuilder.String())
 
 	// Поддержка context таймаута для безопасной отправки
-	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+
+	conn, err := m.dial(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("mailer: connect to smtp %s: %w", addr, err)
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
 	}
 
 	client, err := smtp.NewClient(conn, m.host)
@@ -82,6 +100,20 @@ func (m *Mailer) SendEmail(ctx context.Context, to, subject, htmlBody string) er
 	defer func() {
 		_ = client.Close()
 	}()
+
+	if m.port != implicitTLSPort {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err = client.StartTLS(&tls.Config{ServerName: m.host}); err != nil {
+				return fmt.Errorf("mailer: starttls: %w", err)
+			}
+		}
+	}
+
+	if m.user != "" {
+		if err = client.Auth(smtp.PlainAuth("", m.user, m.password, m.host)); err != nil {
+			return fmt.Errorf("mailer: auth as %s: %w", m.user, err)
+		}
+	}
 
 	if err = client.Mail(m.from); err != nil {
 		return fmt.Errorf("mailer: mail from %s: %w", m.from, err)
@@ -106,4 +138,23 @@ func (m *Mailer) SendEmail(ctx context.Context, to, subject, htmlBody string) er
 	}
 
 	return client.Quit()
+}
+
+func (m *Mailer) dial(ctx context.Context, addr string) (net.Conn, error) {
+	if m.port == implicitTLSPort {
+		dialer := tls.Dialer{Config: &tls.Config{ServerName: m.host}}
+		return dialer.DialContext(ctx, "tcp", addr)
+	}
+	var dialer net.Dialer
+	return dialer.DialContext(ctx, "tcp", addr)
+}
+
+func (m *Mailer) messageID() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	domain := "bito.local"
+	if at := strings.LastIndex(m.from, "@"); at >= 0 {
+		domain = m.from[at+1:]
+	}
+	return "<" + hex.EncodeToString(b) + "@" + domain + ">"
 }

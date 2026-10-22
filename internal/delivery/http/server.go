@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"bito/internal/delivery/ws"
@@ -21,6 +22,11 @@ type Server struct {
 	tableHandler  *TableHandler
 	userHandler   *UserHandler
 	walletHandler *WalletHandler
+	gameHandler   *GameHandler
+	friendHandler *FriendHandler
+	playerHandler *PlayerHandler
+	inviteHandler *InviteHandler
+	shopHandler   *ShopHandler
 	tokens        TokenValidator
 }
 
@@ -29,6 +35,11 @@ type Handlers struct {
 	Table  *TableHandler
 	User   *UserHandler
 	Wallet *WalletHandler
+	Game   *GameHandler
+	Friend *FriendHandler
+	Player *PlayerHandler
+	Invite *InviteHandler
+	Shop   *ShopHandler
 }
 
 func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
@@ -39,6 +50,11 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		tableHandler:  h.Table,
 		userHandler:   h.User,
 		walletHandler: h.Wallet,
+		gameHandler:   h.Game,
+		friendHandler: h.Friend,
+		playerHandler: h.Player,
+		inviteHandler: h.Invite,
+		shopHandler:   h.Shop,
 		tokens:        tokens,
 	}
 
@@ -59,7 +75,7 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 func (s *Server) setupMiddlewares() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(middleware.RealIP)
-	s.router.Use(middleware.Logger)
+	s.router.Use(RedactingLogger(log.New(os.Stdout, "", log.LstdFlags)))
 	s.router.Use(middleware.Recoverer)
 
 	s.router.Use(cors.Handler(cors.Options{
@@ -74,6 +90,7 @@ func (s *Server) setupMiddlewares() {
 
 func (s *Server) setupRoutes() {
 	s.router.Get("/ws", s.hub.ServeWS)
+	s.router.Get("/ws/lobby", s.hub.ServeLobby)
 
 	s.router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -98,10 +115,16 @@ func (s *Server) setupRoutes() {
 			r.Post("/", s.tableHandler.Create)
 			r.Post("/quick", s.tableHandler.Quick)
 			r.Get("/", s.tableHandler.List)
+			r.Get("/live", s.tableHandler.Live)
+			r.Get("/{id}", s.tableHandler.Get)
+			if s.inviteHandler != nil {
+				r.Post("/{id}/invites", s.inviteHandler.Invite)
+				r.Post("/{id}/invites/decline", s.inviteHandler.Decline)
+			}
 		})
 	}
 
-	if s.userHandler != nil || s.tableHandler != nil {
+	if s.userHandler != nil || s.tableHandler != nil || s.gameHandler != nil {
 		s.router.Route("/api/v1/users/me", func(r chi.Router) {
 			r.Use(AuthMiddleware(s.tokens))
 			if s.userHandler != nil {
@@ -113,6 +136,20 @@ func (s *Server) setupRoutes() {
 			if s.tableHandler != nil {
 				r.Get("/active-table", s.tableHandler.Active)
 			}
+			if s.gameHandler != nil {
+				r.Get("/games", s.gameHandler.History)
+			}
+		})
+	}
+
+	if s.shopHandler != nil {
+		s.router.Route("/api/v1/shop", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Get("/", s.shopHandler.State)
+			r.Post("/buy", s.shopHandler.Buy)
+			r.Put("/look", s.shopHandler.Wear)
+			r.Put("/avatar", s.shopHandler.SetAvatar)
+			r.Get("/avatars", s.shopHandler.Avatars)
 		})
 	}
 
@@ -122,6 +159,20 @@ func (s *Server) setupRoutes() {
 			r.Post("/top-up", s.walletHandler.TopUp)
 			r.Get("/transactions", s.walletHandler.Transactions)
 		})
+	}
+
+	if s.friendHandler != nil {
+		s.router.Route("/api/v1/friends", func(r chi.Router) {
+			r.Use(AuthMiddleware(s.tokens))
+			r.Get("/", s.friendHandler.List)
+			r.Post("/requests", s.friendHandler.Request)
+			r.Post("/requests/{id}/accept", s.friendHandler.Accept)
+			r.Delete("/{id}", s.friendHandler.Remove)
+		})
+	}
+
+	if s.playerHandler != nil {
+		s.router.With(AuthMiddleware(s.tokens)).Get("/api/v1/players/{id}", s.playerHandler.Profile)
 	}
 }
 

@@ -1,33 +1,67 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
+import { PhEye, PhPlus } from '@phosphor-icons/vue'
 import ToastStack from '../../components/app/ToastStack.vue'
+import InviteCards from '../../components/client/InviteCards.vue'
 import NavRail from '../../components/client/NavRail.vue'
 import TopBar from '../../components/client/TopBar.vue'
 import ReturnBanner from '../../components/client/ReturnBanner.vue'
-import PlayPanel from '../../components/client/PlayPanel.vue'
-import TablesBoard from '../../components/client/TablesBoard.vue'
-import SocialPanel from '../../components/client/SocialPanel.vue'
+import QuickPlay from '../../components/client/QuickPlay.vue'
+import TablesCarousel from '../../components/client/TablesCarousel.vue'
+import FriendsRail from '../../components/client/FriendsRail.vue'
+import LobbyPlayerCard from '../../components/client/LobbyPlayerCard.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
-import ProfilePanel from '../../components/panels/ProfilePanel.vue'
-import SettingsPanel from '../../components/panels/SettingsPanel.vue'
-import ShopPanel from '../../components/panels/ShopPanel.vue'
-import Leaderboard from '../../components/lobby/Leaderboard.vue'
-import { createTable, getActiveTable, listTables, quickMatch } from '../../api/tables'
+import { createTable, declineInvite, getActiveTable, inviteToTable, listTables, quickMatch } from '../../api/tables'
 import { ApiError, isNotImplemented } from '../../api/http'
 import { topUp as requestTopUp } from '../../api/wallet'
+import { getGameHistory } from '../../api/users'
 import { useAuthStore } from '../../stores/auth'
 import { useProfileStore } from '../../stores/profile'
 import { useSettingsStore } from '../../stores/settings'
 import { usePanel } from '../../composables/usePanel'
-import { useSmoothScroll } from '../../composables/useSmoothScroll'
 import { useGameSound } from '../../composables/useGameSound'
 import { useToast } from '../../composables/useToast'
+import { useThemeColor } from '../../composables/useThemeColor'
+import { useLobbySocket } from '../../composables/useLobbySocket'
+import { useFriends } from '../../composables/useFriends'
+import { bestAffordable, useCreatePrefs, useQuickPrefs } from '../../composables/useLobbyPrefs'
 import { MIN_STAKE, TOP_UP_THRESHOLD, TOP_UP_TO } from '../../constants/economy'
-import { MOCK_FRIENDS, MOCK_HISTORY, MOCK_MESSAGES, MOCK_ONLINE, MOCK_REQUESTS } from '../../mocks/lobby'
-import type { DeckSize, GameMode, TableInfo } from '../../types/game'
-import type { ActiveTable, Friend, FriendRequest, ChatEntry } from '../../types/social'
+import type { TableInfo, TableInvite } from '../../types/game'
+import type { ActiveTable, Friend, FriendRequest, GameHistoryEntry, PlayerProfile } from '../../types/social'
+import type { TablePreset } from '../../composables/tableList'
+import type { CatalogEntry } from '../../constants/cosmetics'
+
+const loaders = {
+  tables: () => import('../../components/client/AllTables.vue'),
+  live: () => import('../../components/client/LiveGames.vue'),
+  create: () => import('../../components/client/CreateTableDialog.vue'),
+  friends: () => import('../../components/client/FriendsList.vue'),
+  profile: () => import('../../components/panels/ProfilePanel.vue'),
+  settings: () => import('../../components/panels/SettingsPanel.vue'),
+  shop: () => import('../../components/panels/ShopPanel.vue'),
+  player: () => import('../../components/panels/PlayerPanel.vue'),
+  wallet: () => import('../../components/panels/WalletPanel.vue'),
+}
+
+const AllTables = defineAsyncComponent(loaders.tables)
+const LiveGames = defineAsyncComponent(loaders.live)
+const CreateTableDialog = defineAsyncComponent(loaders.create)
+const FriendsList = defineAsyncComponent(loaders.friends)
+const ProfilePanel = defineAsyncComponent(loaders.profile)
+const SettingsPanel = defineAsyncComponent(loaders.settings)
+const ShopPanel = defineAsyncComponent(loaders.shop)
+const PlayerPanel = defineAsyncComponent(loaders.player)
+const WalletPanel = defineAsyncComponent(loaders.wallet)
+
+const clientEl = ref<HTMLElement | null>(null)
+
+function preloadPanels() {
+  const run = () => Object.values(loaders).forEach((load) => load().catch(() => {}))
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 4000 })
+  else window.setTimeout(run, 1500)
+}
 
 const POLL_MS = 3000
 
@@ -35,28 +69,49 @@ const router = useRouter()
 const auth = useAuthStore()
 const profileStore = useProfileStore()
 const settings = useSettingsStore()
+useThemeColor(clientEl, () => settings.theme)
 const panels = usePanel()
 const sound = useGameSound()
 const toast = useToast()
-const mainEl = ref<HTMLElement | null>(null)
 
-useSmoothScroll(mainEl)
 
-const mode = ref<GameMode>('podkidnoy')
-const deck = ref<DeckSize>(36)
-const players = ref(2)
-const stake = ref(MIN_STAKE)
+const { stake: quickStake, mode: quickMode, deck: quickDeck } = useQuickPrefs()
+const createPrefs = useCreatePrefs()
 const busy = ref<'find' | 'create' | null>(null)
+const buying = ref<string | null>(null)
+const creating = ref(false)
+const createPrivate = ref(false)
+const createInvited = ref<string[]>([])
 
 const tables = ref<TableInfo[]>([])
 const tablesLoaded = ref(false)
+const companyTables = computed(() => tables.value.filter((t) => t.maxPlayers >= 3))
 const tablesError = ref('')
-const refreshing = ref(false)
 const now = ref(Date.now())
+const { status: lobbyStatus, tables: liveTables, online, friendsVersion, invites, dismissInvite } = useLobbySocket()
 
-const friends = ref<Friend[]>([...MOCK_FRIENDS])
-const requests = ref<FriendRequest[]>([...MOCK_REQUESTS])
-const messages = ref<ChatEntry[]>([...MOCK_MESSAGES])
+watch(liveTables, (list) => {
+  if (!list) return
+  tables.value = list
+  tablesError.value = ''
+  tablesLoaded.value = true
+  now.value = Date.now()
+})
+
+const { friends, incoming, outgoing, refresh: refreshFriends, add: addFriendByName, accept: acceptFriend, remove: removeFriend } = useFriends()
+const addingFriend = ref(false)
+const playerRevision = ref(0)
+
+watch([online, friendsVersion], () => refreshFriends())
+watch([friends, incoming, outgoing], () => playerRevision.value++)
+watch(
+  () => panels.panel.value,
+  (panel) => {
+    if (panel !== 'friends') addingFriend.value = false
+  },
+)
+const history = ref<GameHistoryEntry[]>([])
+const historyLoaded = ref(false)
 const activeTable = ref<ActiveTable | null>(null)
 const dismissedTable = ref<string | null>(null)
 
@@ -67,35 +122,68 @@ const username = computed(() => profile.value?.username ?? auth.user?.username ?
 const balance = computed(() => profile.value?.wallet.balance ?? null)
 
 watch(balance, (b) => {
-  if (b !== null && stake.value > b) stake.value = MIN_STAKE
+  quickStake.value = bestAffordable(b, quickStake.value)
+  createPrefs.stake.value = bestAffordable(b, createPrefs.stake.value)
 })
 
-async function refreshTables(manual = false) {
-  if (manual) refreshing.value = true
+async function refreshTables() {
   try {
-    tables.value = await listTables()
+    const list = await listTables()
+    if (lobbyStatus.value === 'open' && liveTables.value) return
+    tables.value = list
     tablesError.value = ''
   } catch (err) {
     tablesError.value = err instanceof Error ? err.message : 'Не удалось загрузить столы'
     if (!auth.isAuthenticated) router.push({ name: 'landing', query: { auth: 'login' } })
   } finally {
     tablesLoaded.value = true
-    refreshing.value = false
     now.value = Date.now()
   }
 }
 
-function goToTable(id: string) {
+const tablesTab = ref<'open' | 'live'>('open')
+
+function watchGame(table: TableInfo) {
+  panels.close()
+  router.push({ name: 'table', params: { id: table.id }, query: { watch: '1' } })
+}
+
+function joinFromList(table: TableInfo) {
+  if (panels.panel.value === 'tables') panels.close()
+  goToTable(table.id)
+}
+
+function goToTable(id: string, search = false) {
   sound.playChips()
-  router.push({ name: 'table', params: { id } })
+  router.push({ name: 'table', params: { id }, query: search ? { search: '1' } : undefined })
+}
+
+function openCreate() {
+  sound.playClick()
+  createPrivate.value = false
+  createInvited.value = []
+  if (createPrefs.players.value < 3) createPrefs.players.value = 3
+  creating.value = true
+}
+
+function closeCreate() {
+  creating.value = false
 }
 
 async function create() {
   if (busy.value) return
-  sound.playClick()
   busy.value = 'create'
   try {
-    const table = await createTable({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
+    const guests = [...createInvited.value]
+    const table = await createTable({
+      mode: createPrefs.mode.value,
+      deck: createPrefs.deck.value,
+      maxPlayers: createPrefs.players.value,
+      stake: createPrefs.stake.value,
+      private: createPrivate.value,
+    })
+    closeCreate()
+    if (guests.length) await inviteFriends(table.id, guests)
     goToTable(table.id)
   } catch (err) {
     sound.playError()
@@ -105,13 +193,21 @@ async function create() {
   }
 }
 
+function createFromPreset(p: TablePreset) {
+  createPrefs.mode.value = p.mode
+  createPrefs.deck.value = p.deck
+  createPrefs.players.value = p.players
+  createPrefs.stake.value = p.stake
+  create()
+}
+
 async function find() {
   if (busy.value) return
   sound.playClick()
   busy.value = 'find'
   try {
-    const table = await quickMatch({ mode: mode.value, deck: deck.value, maxPlayers: players.value, stake: stake.value })
-    goToTable(table.id)
+    const table = await quickMatch({ mode: quickMode.value, deck: quickDeck.value, stake: quickStake.value })
+    goToTable(table.id, true)
   } catch (err) {
     sound.playError()
     if (isNotImplemented(err)) toast.show('Быстрый поиск скоро заработает — пока соберите свой стол')
@@ -148,26 +244,130 @@ async function topUp() {
   }
 }
 
-function sendMessage(text: string) {
-  messages.value = [
-    ...messages.value,
-    { id: `local-${Date.now()}`, userId: auth.user?.id ?? 'me', username: username.value, text, at: new Date().toISOString() },
-  ]
+function friendError(err: unknown) {
+  sound.playError()
+  toast.show(err instanceof ApiError ? err.message : 'Не получилось, попробуйте ещё раз', 'error')
 }
 
-function acceptRequest(req: FriendRequest) {
-  requests.value = requests.value.filter((r) => r.id !== req.id)
-  friends.value = [...friends.value, { id: req.id, username: req.username, status: 'online' }]
+async function addFriend(username: string) {
+  const status = await addFriendByName(username)
   sound.playSuccess()
+  return status === 'accepted' ? `${username} теперь в друзьях` : `Заявка отправлена: ${username}`
+}
+
+async function acceptRequest(req: FriendRequest) {
+  try {
+    await acceptFriend(req.id)
+    sound.playSuccess()
+    toast.show(`${req.username} теперь в друзьях`)
+  } catch (err) {
+    friendError(err)
+  }
+}
+
+async function dropLink(id: string, done: string) {
+  try {
+    await removeFriend(id)
+    sound.playClick()
+    toast.show(done)
+  } catch (err) {
+    friendError(err)
+  }
 }
 
 function declineRequest(req: FriendRequest) {
-  requests.value = requests.value.filter((r) => r.id !== req.id)
+  dropLink(req.id, `Заявка от ${req.username} отклонена`)
+}
+
+function cancelRequest(req: FriendRequest) {
+  dropLink(req.id, `Заявка для ${req.username} отменена`)
+}
+
+function removeFromFriends(friend: Friend) {
+  if (!window.confirm(`Удалить ${friend.username} из друзей?`)) return
+  dropLink(friend.id, `${friend.username} больше не в друзьях`)
+}
+
+async function buyCosmetic(item: CatalogEntry) {
+  buying.value = `${item.kind}:${item.id}`
+  try {
+    await settings.buy(item.kind, item.id)
+    settings.select(item.kind, item.id)
+    sound.playChips()
+    toast.show(`«${item.name}» куплено и надето`, 'success')
+    await profileStore.load(true)
+  } catch (err) {
+    sound.playError()
+    toast.show(err instanceof ApiError ? err.message : 'Не удалось купить', 'error')
+    settings.loadShop().catch(() => {})
+  } finally {
+    buying.value = null
+  }
+}
+
+function openAddFriend() {
+  addingFriend.value = true
+  panels.open('friends')
+}
+
+function openPlayer(id: string) {
+  sound.playClick()
+  if (id === auth.user?.id) panels.open('profile')
+  else panels.open('player', id)
+}
+
+async function addFromProfile(username: string) {
+  try {
+    toast.show(await addFriend(username))
+  } catch (err) {
+    friendError(err)
+  }
+}
+
+function asFriend(p: PlayerProfile): Friend {
+  return { id: p.id, username: p.username, status: p.status ?? 'offline' }
 }
 
 function invite(friend: Friend) {
-  soon(`Приглашения скоро заработают — ${friend.username} пока не узнает`)
+  sound.playClick()
+  if (panels.panel.value) panels.close()
+  createPrivate.value = true
+  createInvited.value = [friend.id]
+  createPrefs.players.value = 2
+  creating.value = true
 }
+
+async function inviteFriends(tableId: string, ids: string[]) {
+  const nameOf = (id: string) => friends.value.find((f) => f.id === id)?.username ?? 'друг'
+  const results = await Promise.allSettled(ids.map((id) => inviteToTable(tableId, id)))
+  const failed = results
+    .map((r, i) => (r.status === 'rejected' ? `${nameOf(ids[i])}: ${r.reason instanceof Error ? r.reason.message : 'ошибка'}` : null))
+    .filter((x): x is string => !!x)
+  const ok = ids.length - failed.length
+  if (!failed.length) {
+    toast.show(ok === 1 ? `Позвали ${nameOf(ids[0])}, место держим 45 секунд` : `Позвали ${ok} друзей, места держим 45 секунд`, 'success')
+    return
+  }
+  toast.show(`Позвали ${ok} из ${ids.length}. ${failed.join('; ')}`, 'error', 6000)
+}
+
+function acceptInvite(inv: TableInvite) {
+  dismissInvite(inv.tableId)
+  goToTable(inv.tableId)
+}
+
+function rejectInvite(inv: TableInvite) {
+  sound.playClick()
+  dismissInvite(inv.tableId)
+  declineInvite(inv.tableId).catch(() => {})
+}
+
+watch(
+  () => invites.value.length,
+  (n, prev) => {
+    if (n > prev) sound.playYourTurn()
+  },
+)
 
 function toggleSound() {
   settings.soundOn = !settings.soundOn
@@ -183,9 +383,11 @@ function logout() {
 const PANEL_TITLES = {
   profile: 'Профиль',
   settings: 'Настройки',
-  leaderboard: 'Рейтинг',
+  wallet: 'Кошелёк',
   shop: 'Магазин',
-  social: 'Друзья и чат',
+  friends: 'Друзья',
+  tables: 'Все столы',
+  player: 'Игрок',
 } as const
 
 async function refreshActiveTable() {
@@ -198,8 +400,36 @@ async function refreshActiveTable() {
   }
 }
 
+async function loadHistory() {
+  try {
+    history.value = await getGameHistory(20)
+  } catch {
+    history.value = []
+  } finally {
+    historyLoaded.value = true
+  }
+}
+
+function playAgain(g: GameHistoryEntry) {
+  if (g.players === 2) {
+    quickMode.value = g.mode
+    quickDeck.value = g.deck
+    quickStake.value = bestAffordable(balance.value, g.stake)
+    find()
+    return
+  }
+  createPrefs.mode.value = g.mode
+  createPrefs.deck.value = g.deck
+  createPrefs.players.value = g.players
+  createPrefs.stake.value = bestAffordable(balance.value, g.stake)
+  openCreate()
+}
+
 function refreshAll() {
-  refreshTables()
+  if (lobbyStatus.value !== 'open') {
+    refreshTables()
+    refreshFriends()
+  }
   refreshActiveTable()
 }
 
@@ -220,7 +450,11 @@ function onVisibility() {
 
 onMounted(() => {
   profileStore.load(true)
+  settings.loadShop().catch(() => {})
+  loadHistory()
   refreshAll()
+  refreshFriends()
+  preloadPanels()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') refreshAll()
   }, POLL_MS)
@@ -234,7 +468,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="client" :data-theme="settings.theme" :data-felt="settings.felt">
+  <div ref="clientEl" class="client" :data-theme="settings.theme" :data-felt="settings.felt">
     <div class="glow" aria-hidden="true"></div>
 
     <NavRail
@@ -247,15 +481,15 @@ onUnmounted(() => {
       @logout="logout"
     />
 
-    <main ref="mainEl" class="main">
+    <main class="main">
       <div class="main-inner">
         <TopBar
           :username="username"
           :balance="balance"
-          :online="MOCK_ONLINE"
-          :social-badge="requests.length"
+          :online="online"
+          :friends-badge="incoming.length"
           @profile="panels.open('profile')"
-          @social="panels.open('social')"
+          @friends="panels.open('friends')"
           @top-up="topUp"
         />
 
@@ -268,66 +502,76 @@ onUnmounted(() => {
           @dismiss="dismissActiveTable"
         />
 
-        <PlayPanel
-          v-model:mode="mode"
-          v-model:deck="deck"
-          v-model:players="players"
-          v-model:stake="stake"
-          class="rise"
-          style="--d: 2"
-          :busy="busy"
-          :balance="balance"
-          :card-back="settings.cardBack"
-          @find="find"
-          @create="create"
-          @private="soon('Приватные столы по ссылке скоро появятся')"
-        />
+        <div class="duo">
+          <QuickPlay
+            v-model:stake="quickStake"
+            v-model:mode="quickMode"
+            v-model:deck="quickDeck"
+            class="rise"
+            style="--d: 2"
+            :busy="busy === 'find'"
+            :balance="balance"
+            :card-back="settings.cardBack"
+            @play="find"
+            @top-up="topUp"
+          />
 
-        <TablesBoard
+          <LobbyPlayerCard
+            class="rise"
+            style="--d: 3"
+            :username="username"
+            :profile="profile"
+            :history="history"
+            :loaded="historyLoaded"
+            :now="now"
+            @profile="panels.open('profile')"
+            @again="playAgain"
+          />
+        </div>
+
+        <TablesCarousel
           class="rise"
-          style="--d: 3"
-          :tables="tables"
+          style="--d: 4"
+          :tables="companyTables"
           :loaded="tablesLoaded"
-          :refreshing="refreshing"
           :error="tablesError"
           :my-id="auth.user?.id"
+          :me="username"
           :now="now"
-          :stake="stake"
           :balance="balance"
-          @join="(t) => goToTable(t.id)"
-          @refresh="refreshTables(true)"
-          @create="create"
+          :busy="busy === 'create'"
+          @join="joinFromList"
+          @create="openCreate"
+          @preset="createFromPreset"
+          @all="panels.open('tables')"
         />
       </div>
     </main>
 
-    <SocialPanel
-      class="social-col"
+    <FriendsRail
+      class="friends-slot"
+      :username="username"
       :friends="friends"
-      :requests="requests"
-      :messages="messages"
-      :my-id="auth.user?.id"
-      :show-chat="settings.showChat"
-      @add-friend="soon('Поиск друзей по имени скоро появится')"
-      @invite="invite"
-      @accept="acceptRequest"
-      @decline="declineRequest"
-      @send="sendMessage"
+      :requests="incoming"
+      @profile="panels.open('profile')"
+      @friends="panels.open('friends')"
+      @add="openAddFriend"
+      @open="openPlayer"
     />
 
     <AnimatePresence>
       <OverlayPanel
-        v-if="panels.panel.value && panels.panel.value !== 'social'"
+        v-if="panels.panel.value && panels.panel.value !== 'friends' && panels.panel.value !== 'tables'"
         :key="panels.panel.value"
         :title="PANEL_TITLES[panels.panel.value]"
-        :width="panels.panel.value === 'leaderboard' ? 520 : 880"
+        :width="880"
         @close="panels.close()"
       >
         <ProfilePanel
           v-if="panels.panel.value === 'profile'"
           :profile="profile"
           :error="profileStore.error"
-          :history="MOCK_HISTORY"
+          :history="history"
           @settings="(s) => panels.open('settings', s)"
           @retry="profileStore.load(true)"
         />
@@ -338,50 +582,118 @@ onUnmounted(() => {
           @section="panels.setSection"
           @shop="panels.open('shop')"
         />
-        <Leaderboard v-else-if="panels.panel.value === 'leaderboard'" :my-id="auth.user?.id" />
+        <WalletPanel v-else-if="panels.panel.value === 'wallet'" :balance="balance" />
         <ShopPanel
           v-else-if="panels.panel.value === 'shop'"
           :balance="balance"
-          @buy="(item) => soon(`«${item.name}» можно будет купить, когда заработают покупки на сервере`)"
+          :buying="buying"
+          @buy="buyCosmetic"
+        />
+        <PlayerPanel
+          v-else-if="panels.panel.value === 'player'"
+          :id="panels.section.value"
+          :revision="playerRevision"
+          @add="addFromProfile"
+          @accept="(p) => acceptRequest(p)"
+          @decline="(p) => declineRequest(p)"
+          @cancel="(p) => cancelRequest(p)"
+          @remove="(p) => removeFromFriends(asFriend(p))"
+          @invite="(p) => invite(asFriend(p))"
+          @own="panels.open('profile')"
         />
       </OverlayPanel>
 
       <OverlayPanel
-        v-if="panels.panel.value === 'social'"
-        key="social"
-        side="right"
-        :width="380"
-        :title="PANEL_TITLES.social"
+        v-if="panels.panel.value === 'tables'"
+        key="tables"
+        :title="PANEL_TITLES.tables"
+        :width="920"
         @close="panels.close()"
       >
-        <SocialPanel
-          class="social-sheet"
-          :friends="friends"
-          :requests="requests"
-          :messages="messages"
+        <template #head>
+          <button type="button" class="head-create" @click="openCreate">
+            <PhPlus :size="16" weight="bold" aria-hidden="true" />
+            Создать стол
+          </button>
+        </template>
+        <div class="tabs" role="tablist" aria-label="Какие столы показать">
+          <button type="button" role="tab" :aria-selected="tablesTab === 'open'" :class="{ on: tablesTab === 'open' }" @click="tablesTab = 'open'">
+            Ждут игроков
+          </button>
+          <button type="button" role="tab" :aria-selected="tablesTab === 'live'" :class="{ on: tablesTab === 'live' }" @click="tablesTab = 'live'">
+            <PhEye :size="16" aria-hidden="true" />
+            Идут сейчас
+          </button>
+        </div>
+        <AllTables
+          v-if="tablesTab === 'open'"
+          :tables="tables"
+          :loaded="tablesLoaded"
           :my-id="auth.user?.id"
-          :show-chat="settings.showChat"
-          @add-friend="soon('Поиск друзей по имени скоро появится')"
+          :now="now"
+          :balance="balance"
+          @join="joinFromList"
+          @create="openCreate"
+        />
+        <LiveGames v-else :now="now" @watch="watchGame" />
+      </OverlayPanel>
+
+      <OverlayPanel
+        v-if="panels.panel.value === 'friends'"
+        key="friends"
+        side="right"
+        :width="380"
+        :title="PANEL_TITLES.friends"
+        @close="panels.close()"
+      >
+        <FriendsList
+          class="friends-sheet"
+          v-model:adding="addingFriend"
+          :friends="friends"
+          :requests="incoming"
+          :outgoing="outgoing"
+          :add="addFriend"
           @invite="invite"
           @accept="acceptRequest"
           @decline="declineRequest"
-          @send="sendMessage"
+          @cancel="cancelRequest"
+          @remove="removeFromFriends"
+          @open="openPlayer"
         />
       </OverlayPanel>
     </AnimatePresence>
 
+    <AnimatePresence>
+      <CreateTableDialog
+        v-if="creating"
+        v-model:stake="createPrefs.stake.value"
+        v-model:mode="createPrefs.mode.value"
+        v-model:deck="createPrefs.deck.value"
+        v-model:players="createPrefs.players.value"
+        v-model:private="createPrivate"
+        v-model:invited="createInvited"
+        :friends="friends"
+        :balance="balance"
+        :busy="busy === 'create'"
+        @close="closeCreate"
+        @create="create"
+      />
+    </AnimatePresence>
+
+    <InviteCards class="invite-dock" :invites="invites" @accept="acceptInvite" @decline="rejectInvite" @expire="(inv) => dismissInvite(inv.tableId)" />
     <ToastStack />
   </div>
 </template>
 
 <style scoped>
 .client {
-  --rail-w: 84px;
+  --rail-w: 98px;
+  --friends-w: 100px;
   --rail-h: 0px;
 
   position: relative;
   display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) 360px;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--friends-w);
   height: 100dvh;
   overflow: hidden;
   background: var(--color-paper);
@@ -400,7 +712,7 @@ onUnmounted(() => {
 
 .rail,
 .main,
-.social-col {
+.friends-slot {
   position: relative;
   min-height: 0;
 }
@@ -413,26 +725,87 @@ onUnmounted(() => {
 .main-inner {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  max-width: 1280px;
+  gap: 24px;
+  max-width: 1480px;
+  min-height: 100%;
   margin: 0 auto;
-  padding: 8px 32px 48px;
+  padding: 8px 26px 26px;
+  box-sizing: border-box;
 }
 
-.social-col {
-  border-left: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-paper-sunken) 60%, transparent);
+.duo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1fr);
+  gap: 18px;
+  align-items: stretch;
 }
 
-.social-sheet {
+.friends-sheet {
   height: 100%;
   padding: 0;
 }
 
-@media (min-width: 1700px) {
-  .client {
-    grid-template-columns: var(--rail-w) minmax(0, 1fr) 400px;
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tabs button:hover:not(.on) {
+  color: var(--color-ink);
+}
+
+.tabs button.on {
+  background: var(--color-ink-soft);
+  box-shadow: none;
+  color: var(--color-paper);
+}
+
+.head-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-gold);
+  color: var(--color-on-gold);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.head-create:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-height: 860px) {
+  .main-inner {
+    gap: 18px;
+    padding-bottom: 16px;
   }
+}
+
+.client .invite-dock {
+  right: calc(var(--friends-w) + 12px);
 }
 
 @media (max-width: 1279px) {
@@ -440,8 +813,18 @@ onUnmounted(() => {
     grid-template-columns: var(--rail-w) minmax(0, 1fr);
   }
 
-  .social-col {
+  .client .invite-dock {
+    right: 16px;
+  }
+
+  .friends-slot {
     display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .duo {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -454,6 +837,10 @@ onUnmounted(() => {
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
+  .client .invite-dock {
+    bottom: calc(var(--rail-h) + 16px);
+  }
+
   .rail {
     grid-row: 2;
     z-index: 110;
@@ -464,7 +851,7 @@ onUnmounted(() => {
   }
 
   .main-inner {
-    gap: 16px;
+    gap: 18px;
     padding: 4px 16px 32px;
   }
 }

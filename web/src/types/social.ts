@@ -6,12 +6,20 @@ export interface Friend {
   id: string
   username: string
   status: FriendStatus
+  since?: string
   lastSeen?: string
 }
 
 export interface FriendRequest {
   id: string
   username: string
+  at?: string
+}
+
+export interface FriendsOverview {
+  friends: Friend[]
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
 }
 
 export interface ChatEntry {
@@ -23,6 +31,8 @@ export interface ChatEntry {
   system?: boolean
 }
 
+export type GameOutcome = 'win' | 'lose' | 'draw'
+
 export interface GameHistoryEntry {
   id: string
   finishedAt: string
@@ -32,6 +42,7 @@ export interface GameHistoryEntry {
   stake: number
   place: number
   payout: number
+  outcome?: GameOutcome
 }
 
 export interface ActiveTable {
@@ -39,4 +50,27 @@ export interface ActiveTable {
   mode: GameMode
   stake: number
   players: number
+}
+
+export type Relation = 'self' | 'friend' | 'incoming' | 'outgoing' | 'none'
+
+export interface PublicGame {
+  id: string
+  finishedAt: string
+  mode: GameMode
+  deck: DeckSize
+  players: number
+  stake: number
+  place: number
+  outcome: GameOutcome
+}
+
+export interface PlayerProfile {
+  id: string
+  username: string
+  createdAt: string
+  stats: { wins: number; losses: number; totalGames: number }
+  relation: Relation
+  status?: FriendStatus
+  games: PublicGame[]
 }

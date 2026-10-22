@@ -1,17 +1,22 @@
 package ws
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"sort"
 	"sync"
 	"time"
 
+	"bito/internal/game"
+	"bito/internal/model"
 	"bito/internal/pkg/jwt"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+var ErrSeatedElsewhere = errors.New("player already sits at another table")
 
 type TokenValidator interface {
 	ValidateAccessToken(token string) (*jwt.Claims, error)
@@ -20,6 +25,7 @@ type TokenValidator interface {
 type Hub struct {
 	mu             sync.RWMutex
 	rooms          map[string]*Room
+	lobby          *Lobby
 	tokenValidator TokenValidator
 	bank           Bank
 	upgrader       websocket.Upgrader
@@ -34,7 +40,7 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 		origins[o] = true
 	}
 
-	return &Hub{
+	h := &Hub{
 		rooms:          make(map[string]*Room),
 		tokenValidator: tokenValidator,
 		bank:           bank,
@@ -46,15 +52,35 @@ func NewHub(tokenValidator TokenValidator, allowedOrigins []string, bank Bank) *
 			},
 		},
 	}
+	h.lobby = NewLobby(h, lobbyRefresh)
+	go h.lobby.Run()
+	return h
 }
 
 func (h *Hub) CreateRoom(s RoomSettings) *Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.createRoomLocked(s)
+}
 
+func (h *Hub) CreateTable(s RoomSettings) (*Room, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.busyLocked(s.CreatedBy, nil) {
+		return nil, ErrSeatedElsewhere
+	}
+	h.releaseLocked(s.CreatedBy, nil)
+	room := h.createRoomLocked(s)
+	room.Reserve(s.CreatedBy)
+	return room, nil
+}
+
+func (h *Hub) createRoomLocked(s RoomSettings) *Room {
 	roomID := uuid.NewString()
 
 	room := NewRoom(roomID, s, h.bank)
+	room.rematch = h.rematchTable
 	h.rooms[roomID] = room
 
 	go func() {
@@ -77,7 +103,7 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	h.mu.RLock()
 	rooms := make([]RoomInfo, 0, len(h.rooms))
 	for _, room := range h.rooms {
-		if !room.Started() {
+		if !room.Started() && !room.matchmaking && !room.private && room.Occupancy() > 0 {
 			rooms = append(rooms, room.Info())
 		}
 	}
@@ -89,28 +115,70 @@ func (h *Hub) ListOpenRooms() []RoomInfo {
 	return rooms
 }
 
-func (h *Hub) FindOpenRoom(s RoomSettings, playerID string) (*Room, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+type MatchQuery struct {
+	Mode  game.GameMode
+	Deck  game.DeckType
+	Stake int64
+}
 
+func (q MatchQuery) fits(room *Room) bool {
+	return room.matchmaking && !room.Started() &&
+		room.stake == q.Stake &&
+		(q.Mode == 0 || room.gameMode == q.Mode) &&
+		(q.Deck == 0 || room.deckType == q.Deck)
+}
+
+func (q MatchQuery) settings(createdBy string) RoomSettings {
+	s := RoomSettings{
+		Mode:        q.Mode,
+		Deck:        q.Deck,
+		MaxPlayers:  duelPlayers,
+		Stake:       q.Stake,
+		CreatedBy:   createdBy,
+		Matchmaking: true,
+	}
+	if s.Mode == 0 {
+		s.Mode = defaultDuelMode
+	}
+	if s.Deck == 0 {
+		s.Deck = defaultDuelDeck
+	}
+	return s
+}
+
+func (h *Hub) MatchOrCreate(q MatchQuery, playerID string) (room *Room, created bool, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room = h.findMatchLocked(q, playerID)
+	if h.busyLocked(playerID, room) {
+		return nil, false, ErrSeatedElsewhere
+	}
+	h.releaseLocked(playerID, room)
+	if room == nil {
+		room, created = h.createRoomLocked(q.settings(playerID)), true
+	}
+	room.Reserve(playerID)
+	return room, created, nil
+}
+
+func (h *Hub) findMatchLocked(q MatchQuery, playerID string) *Room {
 	var best *Room
 	for _, room := range h.rooms {
-		if room.Started() || room.gameMode != s.Mode || room.deckType != s.Deck ||
-			room.maxUsers != s.MaxPlayers || room.stake != s.Stake {
+		if !q.fits(room) {
 			continue
 		}
-		if room.Holds(playerID) {
-			return room, true
+		if room.Holds(playerID) || room.Reserved(playerID) {
+			return room
 		}
-		if room.PlayersCount() >= room.maxUsers {
+		if room.Occupancy() >= room.maxUsers {
 			continue
 		}
-		if best == nil || room.PlayersCount() > best.PlayersCount() ||
-			(room.PlayersCount() == best.PlayersCount() && room.createdAt.Before(best.createdAt)) {
+		if best == nil || room.createdAt.Before(best.createdAt) {
 			best = room
 		}
 	}
-	return best, best != nil
+	return best
 }
 
 func (h *Hub) ActiveRoomOf(playerID string) (*Room, bool) {
@@ -130,11 +198,39 @@ func (h *Hub) SeatedElsewhere(playerID, exceptRoomID string) bool {
 	defer h.mu.RUnlock()
 
 	for id, room := range h.rooms {
-		if id != exceptRoomID && room.Holds(playerID) {
+		if id != exceptRoomID && room.Claims(playerID) {
 			return true
 		}
 	}
 	return false
+}
+
+func (h *Hub) claimSeat(room *Room, playerID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.busyLocked(playerID, room) {
+		return false
+	}
+	h.releaseLocked(playerID, room)
+	return true
+}
+
+func (h *Hub) busyLocked(playerID string, except *Room) bool {
+	for _, room := range h.rooms {
+		if room != except && room.Claims(playerID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hub) releaseLocked(playerID string, except *Room) {
+	for _, room := range h.rooms {
+		if room != except && room.matchmaking {
+			room.Unreserve(playerID)
+		}
+	}
 }
 
 func (h *Hub) RemoveRoom(id string) {
@@ -144,23 +240,12 @@ func (h *Hub) RemoveRoom(id string) {
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
-	accessToken := tokenFromRequest(r)
-	if accessToken == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	playerID, playerName, ok := h.authenticate(w, r)
+	if !ok {
 		return
 	}
-
-	claims, err := h.tokenValidator.ValidateAccessToken(accessToken)
-	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	playerID := claims.UserID.String()
-	playerName := claims.Username
 
 	query := r.URL.Query()
-
 	roomID := query.Get("room_id")
 	if roomID == "" {
 		http.Error(w, "missing room_id", http.StatusBadRequest)
@@ -182,7 +267,12 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reason := h.admit(room, playerID); reason != "" {
+	if query.Get("watch") == "1" && !room.Holds(playerID) {
+		h.watch(conn, room, playerID, playerName, query.Get("key"))
+		return
+	}
+
+	if reason := h.admit(room, playerID, query.Get("key")); reason != "" {
 		rejectConn(conn, reason)
 		return
 	}
@@ -198,11 +288,58 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	go client.ReadPump()
 }
 
-func (h *Hub) admit(room *Room, playerID string) string {
+func (h *Hub) ServeLobby(w http.ResponseWriter, r *http.Request) {
+	playerID, playerName, ok := h.authenticate(w, r)
+	if !ok {
+		return
+	}
+
+	conn, err := h.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Upgrade error: %v", err)
+		return
+	}
+
+	client := NewClient(playerID, playerName, conn, h.lobby)
+	if !h.lobby.Register(client) {
+		client.Close()
+		_ = conn.Close()
+		return
+	}
+
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+func (h *Hub) authenticate(w http.ResponseWriter, r *http.Request) (id, name string, ok bool) {
+	accessToken := tokenFromRequest(r)
+	if accessToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", "", false
+	}
+
+	claims, err := h.tokenValidator.ValidateAccessToken(accessToken)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return "", "", false
+	}
+
+	id = claims.UserID.String()
+	name = claims.Username
+	if name == "" {
+		name = "Player_" + id
+	}
+	return id, name, true
+}
+
+func (h *Hub) admit(room *Room, playerID, key string) string {
 	if room.Holds(playerID) {
 		return ""
 	}
-	if h.SeatedElsewhere(playerID, room.ID()) {
+	if !room.MayEnter(playerID, key) {
+		return errPrivateTable
+	}
+	if !h.claimSeat(room, playerID) {
 		return errOtherTable
 	}
 	if room.Stake() <= 0 {
@@ -236,4 +373,136 @@ func tokenFromRequest(r *http.Request) string {
 		return cookie.Value
 	}
 	return r.URL.Query().Get("token")
+}
+
+func (h *Hub) LobbyOnline() int {
+	return h.lobby.Online()
+}
+
+func (h *Hub) Presence(ids []uuid.UUID) map[uuid.UUID]model.Presence {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = id.String()
+	}
+	inLobby := h.lobby.OnlineOf(keys)
+
+	h.mu.RLock()
+	rooms := make([]*Room, 0, len(h.rooms))
+	for _, room := range h.rooms {
+		rooms = append(rooms, room)
+	}
+	h.mu.RUnlock()
+
+	out := make(map[uuid.UUID]model.Presence, len(ids))
+	for i, id := range ids {
+		out[id] = model.PresenceOffline
+		if inLobby[keys[i]] {
+			out[id] = model.PresenceOnline
+		}
+		for _, room := range rooms {
+			if room.Holds(keys[i]) {
+				out[id] = model.PresencePlaying
+				break
+			}
+		}
+	}
+	return out
+}
+
+func (h *Hub) FriendsChanged(ids ...uuid.UUID) {
+	data, err := NewMessage(TypeFriendsChanged, nil)
+	if err != nil {
+		log.Printf("[Hub] friends_changed: %v", err)
+		return
+	}
+	for _, id := range ids {
+		h.lobby.Notify(id.String(), data)
+	}
+}
+
+func inviteTable(room *Room) model.InviteTable {
+	return model.InviteTable{
+		ID:         room.id,
+		Mode:       room.gameMode.String(),
+		Deck:       int(room.deckType),
+		MaxPlayers: room.maxUsers,
+		Stake:      room.stake,
+	}
+}
+
+func (h *Hub) InviteTable(roomID string) (model.InviteTable, bool) {
+	room, ok := h.GetRoom(roomID)
+	if !ok {
+		return model.InviteTable{}, false
+	}
+	return inviteTable(room), true
+}
+
+func (h *Hub) Invite(roomID, from, to string) (model.InviteTable, time.Time, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room, ok := h.rooms[roomID]
+	switch {
+	case !ok:
+		return model.InviteTable{}, time.Time{}, model.ErrTableNotFound
+	case room.matchmaking || !(room.Holds(from) || room.Reserved(from)):
+		return model.InviteTable{}, time.Time{}, model.ErrNotAtTable
+	case room.Started():
+		return model.InviteTable{}, time.Time{}, model.ErrTableStarted
+	case room.Holds(to) || room.Invited(to):
+		return model.InviteTable{}, time.Time{}, model.ErrAlreadyInvited
+	case h.busyLocked(to, room):
+		return model.InviteTable{}, time.Time{}, model.ErrFriendBusy
+	case room.Occupancy() >= room.maxUsers:
+		return model.InviteTable{}, time.Time{}, model.ErrTableFull
+	}
+
+	room.Invite(to, inviteTTL)
+	return inviteTable(room), time.Now().Add(inviteTTL), nil
+}
+
+func (h *Hub) Decline(roomID, playerID, username string) bool {
+	room, ok := h.GetRoom(roomID)
+	if !ok || !room.Uninvite(playerID) {
+		return false
+	}
+	if data, err := NewMessage(TypeInviteDeclined, InviteDeclinedPayload{Username: username}); err == nil {
+		room.Announce(data)
+	}
+	return true
+}
+
+func (h *Hub) SendInvite(to uuid.UUID, inv model.TableInvite) {
+	data, err := NewMessage(TypeTableInvite, TableInvitePayload{
+		TableID:    inv.Table.ID,
+		FromID:     inv.FromID.String(),
+		FromName:   inv.FromName,
+		Mode:       inv.Table.Mode,
+		Deck:       inv.Table.Deck,
+		MaxPlayers: inv.Table.MaxPlayers,
+		Stake:      inv.Table.Stake,
+		ExpiresAt:  inv.ExpiresAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		log.Printf("[Hub] table_invite: %v", err)
+		return
+	}
+	h.lobby.Notify(to.String(), data)
+}
+
+func (h *Hub) rematchTable(s RoomSettings, players []string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, id := range players {
+		if h.busyLocked(id, nil) {
+			return "", ErrSeatedElsewhere
+		}
+	}
+	room := h.createRoomLocked(s)
+	for _, id := range players {
+		room.Reserve(id)
+	}
+	return room.id, nil
 }

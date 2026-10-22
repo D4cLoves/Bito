@@ -2,6 +2,7 @@
 import {
   PhArrowLeft,
   PhChatsCircle,
+  PhEye,
   PhFlag,
   PhLink,
   PhSpeakerHigh,
@@ -22,6 +23,8 @@ defineProps<{
   canSurrender: boolean
   waiting: boolean
   copied: boolean
+  watchers?: number
+  watching?: boolean
 }>()
 
 defineEmits<{
@@ -54,6 +57,10 @@ const STATUS_TEXT: Record<SocketStatus, string> = {
       </span>
       <span v-if="deck" class="pill">{{ deck }} карт</span>
       <span class="pill gold"><ChipIcon :size="16" />{{ stake.toLocaleString('ru-RU') }}</span>
+      <span v-if="watching" class="pill watch"><PhEye :size="15" weight="bold" aria-hidden="true" />Вы смотрите</span>
+      <span v-if="watchers" class="pill" :title="`Смотрят: ${watchers}`" :aria-label="`Смотрят: ${watchers}`">
+        <PhEye :size="15" aria-hidden="true" />{{ watchers }}
+      </span>
       <span class="conn" :class="status"><i aria-hidden="true"></i>{{ STATUS_TEXT[status] }}</span>
     </div>
 
@@ -164,6 +171,11 @@ const STATUS_TEXT: Record<SocketStatus, string> = {
 
 .pill.gold {
   padding-left: 6px;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+}
+
+.pill.watch {
   background: var(--color-gold-tint);
   color: var(--color-gold-ink);
 }

@@ -9,17 +9,22 @@ import (
 	"bito/internal/delivery/ws"
 	"bito/internal/economy"
 	"bito/internal/game"
+
+	"github.com/go-chi/chi/v5"
 )
 
 const (
-	minPlayers   = 2
-	maxPlayers   = 6
-	cardsPerHand = 6
+	minTableSize   = 2
+	maxCompanySize = 6
+	cardsPerHand   = 6
+	anyMode        = "any"
 )
 
 var (
 	ErrInvalidMode       = errors.New("mode must be podkidnoy or perevodnoy")
+	ErrInvalidQuickMode  = errors.New("mode must be podkidnoy, perevodnoy or any")
 	ErrInvalidDeck       = errors.New("deck must be 24, 36 or 52")
+	ErrInvalidQuickDeck  = errors.New("deck must be 24, 36, 52 or 0 for any")
 	ErrInvalidMaxPlayers = errors.New("maxPlayers must be between 2 and 6")
 	ErrNotEnoughCards    = errors.New("not enough cards for this many players")
 	ErrInvalidStake      = errors.New("stake must be one of 100, 250, 500, 1000, 2500, 5000")
@@ -36,27 +41,54 @@ type CreateTableRequest struct {
 	Deck       int    `json:"deck"`
 	MaxPlayers int    `json:"maxPlayers"`
 	Stake      int64  `json:"stake"`
+	Private    bool   `json:"private"`
+}
+
+type QuickMatchRequest struct {
+	Mode  string `json:"mode"`
+	Deck  int    `json:"deck"`
+	Stake int64  `json:"stake"`
+}
+
+func parseMode(raw string) (game.GameMode, bool) {
+	switch raw {
+	case "podkidnoy":
+		return game.ModePodkidnoy, true
+	case "perevodnoy":
+		return game.ModePerevodnoy, true
+	}
+	return 0, false
+}
+
+func parseDeck(raw int) (game.DeckType, bool) {
+	switch d := game.DeckType(raw); d {
+	case game.Deck24, game.Deck36, game.Deck52:
+		return d, true
+	}
+	return 0, false
+}
+
+func parseStake(raw int64) (int64, error) {
+	if raw == 0 {
+		return economy.MinStake, nil
+	}
+	if !economy.IsAllowedStake(raw) {
+		return 0, ErrInvalidStake
+	}
+	return raw, nil
 }
 
 func (req CreateTableRequest) validate() (ws.RoomSettings, error) {
 	var s ws.RoomSettings
-	switch req.Mode {
-	case "podkidnoy":
-		s.Mode = game.ModePodkidnoy
-	case "perevodnoy":
-		s.Mode = game.ModePerevodnoy
-	default:
+	var ok bool
+
+	if s.Mode, ok = parseMode(req.Mode); !ok {
 		return s, ErrInvalidMode
 	}
-
-	s.Deck = game.DeckType(req.Deck)
-	switch s.Deck {
-	case game.Deck24, game.Deck36, game.Deck52:
-	default:
+	if s.Deck, ok = parseDeck(req.Deck); !ok {
 		return s, ErrInvalidDeck
 	}
-
-	if req.MaxPlayers < minPlayers || req.MaxPlayers > maxPlayers {
+	if req.MaxPlayers < minTableSize || req.MaxPlayers > maxCompanySize {
 		return s, ErrInvalidMaxPlayers
 	}
 	if req.MaxPlayers*cardsPerHand > req.Deck {
@@ -64,15 +96,36 @@ func (req CreateTableRequest) validate() (ws.RoomSettings, error) {
 	}
 	s.MaxPlayers = req.MaxPlayers
 
-	s.Stake = req.Stake
-	if s.Stake == 0 {
-		s.Stake = economy.MinStake
+	stake, err := parseStake(req.Stake)
+	if err != nil {
+		return s, err
 	}
-	if !economy.IsAllowedStake(s.Stake) {
-		return s, ErrInvalidStake
+	s.Stake = stake
+	s.Private = req.Private
+	return s, nil
+}
+
+func (req QuickMatchRequest) validate() (ws.MatchQuery, error) {
+	var q ws.MatchQuery
+	var ok bool
+
+	if req.Mode != "" && req.Mode != anyMode {
+		if q.Mode, ok = parseMode(req.Mode); !ok {
+			return q, ErrInvalidQuickMode
+		}
+	}
+	if req.Deck != 0 {
+		if q.Deck, ok = parseDeck(req.Deck); !ok {
+			return q, ErrInvalidQuickDeck
+		}
 	}
 
-	return s, nil
+	stake, err := parseStake(req.Stake)
+	if err != nil {
+		return q, err
+	}
+	q.Stake = stake
+	return q, nil
 }
 
 type BalanceReader interface {
@@ -89,38 +142,97 @@ func NewTableHandler(hub *ws.Hub, wallet BalanceReader) *TableHandler {
 }
 
 func (th *TableHandler) Create(w http.ResponseWriter, r *http.Request) {
-	_, settings, ok := th.prepare(w, r)
+	userID, ok := th.userID(w, r)
 	if !ok {
 		return
 	}
 
-	room := th.hub.CreateRoom(settings)
-	respondJSON(w, http.StatusCreated, room.Info())
+	var req CreateTableRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	settings, err := req.validate()
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !th.admit(w, r, userID, settings.Stake) {
+		return
+	}
+
+	settings.CreatedBy = userID
+	room, err := th.hub.CreateTable(settings)
+	if err != nil {
+		respondError(w, http.StatusConflict, msgOtherTable)
+		return
+	}
+	respondJSON(w, http.StatusCreated, tableView(room, userID))
 }
 
 func (th *TableHandler) Quick(w http.ResponseWriter, r *http.Request) {
-	userID, settings, ok := th.prepare(w, r)
+	userID, ok := th.userID(w, r)
 	if !ok {
 		return
 	}
 
-	if room, found := th.hub.FindOpenRoom(settings, userID); found {
-		respondJSON(w, http.StatusOK, room.Info())
+	var req QuickMatchRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	query, err := req.validate()
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !th.admit(w, r, userID, query.Stake) {
 		return
 	}
 
-	room := th.hub.CreateRoom(settings)
-	respondJSON(w, http.StatusCreated, room.Info())
+	room, created, err := th.hub.MatchOrCreate(query, userID)
+	if err != nil {
+		respondError(w, http.StatusConflict, msgOtherTable)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	respondJSON(w, status, room.Info())
+}
+
+func (th *TableHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID, ok := th.userID(w, r)
+	if !ok {
+		return
+	}
+	room, found := th.hub.GetRoom(chi.URLParam(r, "id"))
+	if !found {
+		respondError(w, http.StatusNotFound, "table not found")
+		return
+	}
+	respondJSON(w, http.StatusOK, tableView(room, userID))
+}
+
+type TableResponse struct {
+	ws.RoomInfo
+	Key string `json:"key,omitempty"`
+}
+
+func tableView(room *ws.Room, userID string) TableResponse {
+	resp := TableResponse{RoomInfo: room.Info()}
+	if room.Private() && room.Member(userID) {
+		resp.Key = room.Key()
+	}
+	return resp
 }
 
 func (th *TableHandler) Active(w http.ResponseWriter, r *http.Request) {
-	userID, ok := UserIDFromContext(r.Context())
+	userID, ok := th.userID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	room, found := th.hub.ActiveRoomOf(userID.String())
+	room, found := th.hub.ActiveRoomOf(userID)
 	if !found {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -132,43 +244,37 @@ func (th *TableHandler) List(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, th.hub.ListOpenRooms())
 }
 
-func (th *TableHandler) prepare(w http.ResponseWriter, r *http.Request) (string, ws.RoomSettings, bool) {
+func (th *TableHandler) Live(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, th.hub.ListLiveRooms())
+}
+
+func (th *TableHandler) userID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, ok := UserIDFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
-		return "", ws.RoomSettings{}, false
+		return "", false
 	}
-	userID := uid.String()
+	return uid.String(), true
+}
 
-	var req CreateTableRequest
-	if !decodeJSON(w, r, &req) {
-		return "", ws.RoomSettings{}, false
-	}
-
-	settings, err := req.validate()
-	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
-		return "", ws.RoomSettings{}, false
-	}
-	settings.CreatedBy = userID
-
+func (th *TableHandler) admit(w http.ResponseWriter, r *http.Request, userID string, stake int64) bool {
 	if th.hub.SeatedElsewhere(userID, "") {
 		respondError(w, http.StatusConflict, msgOtherTable)
-		return "", ws.RoomSettings{}, false
+		return false
+	}
+	if th.wallet == nil {
+		return true
 	}
 
-	if th.wallet != nil {
-		balance, err := th.wallet.Balance(r.Context(), userID)
-		if err != nil {
-			log.Printf("tables: read balance of %s: %v", userID, err)
-			respondError(w, http.StatusServiceUnavailable, msgBankDown)
-			return "", ws.RoomSettings{}, false
-		}
-		if balance < settings.Stake {
-			respondError(w, http.StatusPaymentRequired, msgNoFunds)
-			return "", ws.RoomSettings{}, false
-		}
+	balance, err := th.wallet.Balance(r.Context(), userID)
+	if err != nil {
+		log.Printf("tables: read balance of %s: %v", userID, err)
+		respondError(w, http.StatusServiceUnavailable, msgBankDown)
+		return false
 	}
-
-	return userID, settings, true
+	if balance < stake {
+		respondError(w, http.StatusPaymentRequired, msgNoFunds)
+		return false
+	}
+	return true
 }

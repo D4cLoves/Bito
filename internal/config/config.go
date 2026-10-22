@@ -1,10 +1,23 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
+)
+
+const (
+	EnvProduction    = "production"
+	defaultJWTSecret = "secretkeysecretkeysecretkey"
+	minJWTSecretLen  = 32
+)
+
+var (
+	ErrDefaultJWTSecret = errors.New("JWT_SECRET must be set to a non-default value in production")
+	ErrShortJWTSecret   = errors.New("JWT_SECRET must be at least 32 bytes in production")
 )
 
 type Config struct {
@@ -23,9 +36,11 @@ type Config struct {
 	RedisPassword string `env:"REDIS_PASSWORD" env-default:""`
 	RedisDB       int    `env:"REDIS_DB" env-default:"0"`
 
-	SMTPHost string `env:"SMTP_HOST" env-default:"localhost"`
-	SMTPPort string `env:"SMTP_PORT" env-default:"1025"`
-	SMTPFrom string `env:"SMTP_FROM" env-default:"no-reply@bito.local"`
+	SMTPHost     string `env:"SMTP_HOST" env-default:"localhost"`
+	SMTPPort     string `env:"SMTP_PORT" env-default:"1025"`
+	SMTPFrom     string `env:"SMTP_FROM" env-default:"no-reply@bito.local"`
+	SMTPUser     string `env:"SMTP_USER" env-default:""`
+	SMTPPassword string `env:"SMTP_PASSWORD" env-default:""`
 
 	JWTSecret     string        `env:"JWT_SECRET" env-default:"secretkeysecretkeysecretkey"`
 	JWTAccessTTL  time.Duration `env:"JWT_ACCESS_EXPIRY" env-default:"15m"`
@@ -54,5 +69,25 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+func (c *Config) IsProduction() bool {
+	return strings.EqualFold(strings.TrimSpace(c.ServerEnv), EnvProduction)
+}
+
+func (c *Config) Validate() error {
+	if !c.IsProduction() {
+		return nil
+	}
+	if c.JWTSecret == defaultJWTSecret {
+		return ErrDefaultJWTSecret
+	}
+	if len(c.JWTSecret) < minJWTSecretLen {
+		return ErrShortJWTSecret
+	}
+	return nil
 }

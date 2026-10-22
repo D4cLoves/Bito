@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LandingView from '../views/landing/LandingView.vue'
 
 // Вход и регистрация живут в карточке на лендинге; старые адреса ведут туда.
 const router = createRouter({
@@ -8,7 +7,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'landing',
-      component: LandingView,
+      component: () => import('../views/landing/LandingView.vue'),
     },
     {
       path: '/login',

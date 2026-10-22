@@ -35,7 +35,7 @@ const since = computed(() => memberSince(props.profile?.createdAt))
 </script>
 
 <template>
-  <div ref="el" class="stage rise" data-theme="paper" @pointermove="onMove" @pointerleave="onLeave">
+  <div ref="el" class="stage rise" @pointermove="onMove" @pointerleave="onLeave">
     <motion.div
       class="card"
       :style="{ rotateX, rotateY }"
@@ -73,12 +73,12 @@ const since = computed(() => memberSince(props.profile?.createdAt))
   width: min(320px, 100%);
   aspect-ratio: 5 / 7;
   border-radius: 24px;
-  background: linear-gradient(160deg, var(--color-paper-raised), #f2efe7);
+  background: linear-gradient(160deg, var(--color-paper-raised), var(--color-paper-sunken));
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 0 0 1px rgba(160, 150, 132, 0.4),
+    0 1px 0 color-mix(in srgb, var(--color-paper-raised) 40%, #fff) inset,
+    0 0 0 1px var(--color-line-strong),
     0 40px 70px -36px rgba(70, 62, 48, 0.6);
-  color: var(--color-card-ink);
+  color: var(--color-ink);
   transform-style: preserve-3d;
   overflow: hidden;
 }
@@ -87,7 +87,7 @@ const since = computed(() => memberSince(props.profile?.createdAt))
   content: '';
   position: absolute;
   inset: 12px;
-  border: 1px solid rgba(160, 150, 132, 0.3);
+  border: 1px solid var(--color-line);
   border-radius: 16px;
   pointer-events: none;
 }

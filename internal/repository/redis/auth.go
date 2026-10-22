@@ -16,6 +16,10 @@ import (
 const (
 	pendingRegistrationPrefix = "auth:pending:"
 	refreshTokenPrefix        = "auth:refresh:"
+	codeAttemptsPrefix        = "auth:code-attempts:"
+	codeAttemptsTTL           = 15 * time.Minute
+
+	MaxCodeAttempts = 5
 )
 
 type AuthRepository struct {
@@ -35,11 +39,20 @@ func (r *AuthRepository) SavePending(ctx context.Context, data *model.PendingReg
 		return fmt.Errorf("redis: marshal pending: %w", err)
 	}
 
-	if err := r.client.Set(ctx, key, payload, ttl).Err(); err != nil {
+	_, err = r.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.Set(ctx, key, payload, ttl)
+		pipe.Set(ctx, codeAttemptsKey(data.Email), 0, ttl)
+		return nil
+	})
+	if err != nil {
 		return fmt.Errorf("redis: save pending: %w", err)
 	}
 
 	return nil
+}
+
+func codeAttemptsKey(email string) string {
+	return codeAttemptsPrefix + email
 }
 
 // VerifyAndGetPending считывает данные регистрации, сверяет код и при успехе удаляет ключ
@@ -59,11 +72,31 @@ func (r *AuthRepository) VerifyAndGetPending(ctx context.Context, email, code st
 		return nil, fmt.Errorf("redis: unmarshal pending: %w", err)
 	}
 
+	attemptsKey := codeAttemptsKey(email)
+	var attempts *redis.IntCmd
+	_, err = r.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		attempts = pipe.Incr(ctx, attemptsKey)
+		pipe.ExpireNX(ctx, attemptsKey, codeAttemptsTTL)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("redis: count code attempts: %w", err)
+	}
+
+	if attempts.Val() > MaxCodeAttempts {
+		_ = r.client.Del(ctx, key, attemptsKey)
+		return nil, model.ErrCodeAttempts
+	}
+
 	if data.Code != code {
+		if attempts.Val() == MaxCodeAttempts {
+			_ = r.client.Del(ctx, key, attemptsKey)
+			return nil, model.ErrCodeAttempts
+		}
 		return nil, model.ErrCodeMismatch
 	}
 
-	_ = r.client.Del(ctx, key)
+	_ = r.client.Del(ctx, key, attemptsKey)
 
 	return &data, nil
 }

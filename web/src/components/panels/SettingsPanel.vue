@@ -39,6 +39,7 @@ const owned = computed(() => ALL_ITEMS.filter((i) => settings.isOwned(i.kind, i.
 const ownedVisible = computed(() => (filter.value === 'all' ? owned.value : owned.value.filter((i) => i.kind === filter.value)))
 const ownedCounts = computed(() => ({
   all: owned.value.length,
+  avatar: owned.value.filter((i) => i.kind === 'avatar').length,
   back: owned.value.filter((i) => i.kind === 'back').length,
   felt: owned.value.filter((i) => i.kind === 'felt').length,
   theme: owned.value.filter((i) => i.kind === 'theme').length,
@@ -127,23 +128,6 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
               :aria-checked="settings.music"
               aria-label="Музыка за столом"
               @click="settings.music = !settings.music"
-            >
-              <span class="knob"></span>
-            </button>
-          </div>
-
-          <div class="setting">
-            <div class="setting-text">
-              <b>Общий чат в лобби</b>
-              <small>Скрыть, если отвлекает</small>
-            </div>
-            <button
-              type="button"
-              class="switch"
-              role="switch"
-              :aria-checked="settings.showChat"
-              aria-label="Общий чат в лобби"
-              @click="settings.showChat = !settings.showChat"
             >
               <span class="knob"></span>
             </button>
@@ -396,6 +380,11 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
     position: static;
     flex-direction: row;
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .tabs button {

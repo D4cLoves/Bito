@@ -11,7 +11,7 @@ export interface Wallet {
   balance: number
 }
 
-export type TransactionKind = 'signup_bonus' | 'opening' | 'stake_lock' | 'stake_refund' | 'win_payout' | 'top_up'
+export type TransactionKind = 'signup_bonus' | 'opening' | 'stake_lock' | 'stake_refund' | 'win_payout' | 'top_up' | 'purchase'
 
 export interface WalletTransaction {
   id: number
@@ -30,12 +30,4 @@ export interface Profile extends UserResponse {
 export interface ChangePasswordRequest {
   oldPassword: string
   newPassword: string
-}
-
-export interface LeaderboardEntry {
-  id: string
-  username: string
-  elo: number
-  wins: number
-  losses: number
 }

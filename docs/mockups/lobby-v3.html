@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Лобби — макет v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #131210;
+    --raised: #1c1a17;
+    --sunken: #0d0c0b;
+    --hover: #2a2723;
+    --line: #26241f;
+    --line-heavy: #5a544a;
+    --ink: #f3eee4;
+    --ink-muted: #bcb4a5;
+    --ink-faint: #8f887a;
+    --ink-ghost: #625c52;
+    --gold: #d6b16c;
+    --gold-ink: #e9c886;
+    --red: #d0665a;
+    --green: #7fb07a;
+    --felt: #1f5038;
+    --felt-deep: #12301f;
+    --felt-line: rgba(255, 255, 255, 0.12);
+    --felt-well: rgba(0, 0, 0, 0.28);
+    --on-felt: #f3eee4;
+    --on-felt-muted: rgba(243, 238, 228, 0.68);
+    --on-felt-faint: rgba(243, 238, 228, 0.44);
+    --plus: #b5e0a0;
+    --minus: #f0a99f;
+    --serif: Georgia, 'Times New Roman', serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 28px 0 60px;
+    background: #0a0908;
+    color: var(--ink);
+    font-family: Inter, system-ui, sans-serif;
+  }
+
+  .caption {
+    width: 1600px;
+    margin: 0 auto 12px;
+    padding: 0 6px;
+    color: #a59d8e;
+    font-size: 15px;
+  }
+
+  .caption b { color: var(--ink); font-weight: 500; }
+
+  .frame {
+    position: relative;
+    width: 1600px;
+    height: 900px;
+    margin: 0 auto 48px;
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px #2a2723, 0 40px 80px -40px #000;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) 96px;
+  }
+
+  .frame::before {
+    content: '';
+    position: absolute;
+    top: -260px;
+    left: 25%;
+    width: 900px;
+    height: 600px;
+    background: radial-gradient(ellipse at 50% 40%, rgba(233, 196, 120, 0.13), transparent 65%);
+    pointer-events: none;
+  }
+
+  .rail {
+    margin: 14px;
+    border-radius: 26px;
+    background: var(--raised);
+    box-shadow: inset 0 0 0 1px var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 0;
+  }
+
+  .rail .logo { width: 30px; height: 30px; border: 2px solid var(--ink-muted); border-radius: 7px; transform: rotate(-8deg); margin-bottom: 14px; }
+  .nav { display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--ink-faint); font-size: 10px; }
+  .nav i { width: 20px; height: 20px; border: 1.6px solid currentColor; border-radius: 6px; }
+  .nav.on { color: var(--gold-ink); background: #2d2518; padding: 8px 8px; border-radius: 14px; }
+
+  .friends {
+    margin: 14px;
+    border-radius: 30px;
+    background: var(--raised);
+    box-shadow: inset 0 0 0 1px var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 0;
+  }
+
+  .fav { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 16px; font-weight: 500; }
+  .fav.me { width: 48px; height: 48px; box-shadow: 0 0 0 3px var(--raised), 0 0 0 5px var(--gold); }
+  .fav .dot { position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2.5px var(--raised); }
+  .fav.off { filter: grayscale(.85); opacity: .45; }
+  .fsep { width: 28px; height: 1px; background: var(--line-heavy); }
+
+  .main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 14px 26px 26px;
+    min-width: 0;
+  }
+
+  .top { display: flex; align-items: center; justify-content: space-between; height: 48px; }
+  .top h1 { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 28px; color: var(--ink-muted); }
+  .top h1 b { color: var(--ink); font-weight: 400; }
+  .top .online { margin-left: 12px; font-size: 12px; color: var(--ink-faint); font-family: Inter; font-style: normal; }
+  .wallet { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 999px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--gold-ink); font-weight: 500; }
+  .wallet .plus { width: 26px; height: 26px; border-radius: 50%; background: var(--hover); display: grid; place-items: center; color: var(--ink-faint); }
+
+  .duo { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 18px; height: 330px; }
+
+  .felt {
+    position: relative;
+    isolation: isolate;
+    border-radius: 32px;
+    color: var(--on-felt);
+    background:
+      radial-gradient(ellipse 80% 120% at 72% 0%, rgba(255, 255, 255, 0.12), transparent 60%),
+      radial-gradient(ellipse at 50% 120%, var(--felt-deep), var(--felt) 70%);
+    box-shadow: inset 0 0 0 1px var(--felt-line), inset 0 0 90px rgba(18, 48, 31, .8), 0 30px 60px -36px rgba(0, 0, 0, .55);
+  }
+
+  .felt::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+
+  .hero { padding: 28px 32px; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; }
+  .badge { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--gold); color: #3a2a0c; font-size: 12px; font-weight: 500; }
+  .hero h2 { margin: 14px 0 8px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 54px; letter-spacing: -.02em; line-height: 1; }
+  .hero p { margin: 0 0 20px; color: var(--on-felt-muted); font-size: 14px; line-height: 1.45; }
+  .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .field { padding: 8px 12px; border-radius: 14px; background: var(--felt-well); box-shadow: inset 0 0 0 1px var(--felt-line); }
+  .field small { display: block; color: var(--on-felt-faint); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+  .field b { font-weight: 500; font-size: 15px; }
+  .act { display: flex; align-items: center; gap: 24px; }
+  .play { height: 54px; padding: 0 56px; border-radius: 999px; background: linear-gradient(180deg, #f1d79a, #c9a35c); color: #3a2a0c; font-weight: 600; font-size: 17px; display: grid; place-items: center; box-shadow: 0 12px 26px -12px rgba(214, 177, 108, .7), inset 0 1px 0 rgba(255,255,255,.5); }
+  .kv small { display: block; color: var(--on-felt-faint); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+  .kv b { font-weight: 600; font-size: 15px; }
+
+  .fan { position: relative; }
+  .fan .c { position: absolute; top: 40px; left: 70px; width: 92px; height: 128px; border-radius: 10px; background: repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0 2px, transparent 2px 7px), #1d4a33; box-shadow: inset 0 0 0 5px #f3eee4, 0 10px 20px -8px rgba(0,0,0,.6); transform-origin: 50% 160%; }
+  .stack { position: absolute; left: 82px; top: 196px; }
+  .chip { position: relative; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: #2b2824; background: radial-gradient(circle, #f3eee4 52%, transparent 53%), repeating-conic-gradient(#e9e4d8 0 18deg, #fff 18deg 22deg); box-shadow: 0 0 0 1px rgba(0,0,0,.15), 0 4px 0 #bdb6a6, 0 8px 0 #e9e4d8, 0 12px 0 #bdb6a6, 0 14px 14px -4px rgba(0,0,0,.6); }
+  .chip.r { color: #fff; background: radial-gradient(circle, #b5463c 52%, transparent 53%), repeating-conic-gradient(#b5463c 0 18deg, #fff 18deg 22deg); box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 3px 0 #7a2c25, 0 6px 0 #b5463c, 0 9px 0 #7a2c25, 0 12px 12px -4px rgba(0,0,0,.6); }
+  .chip.g { color: #fff; background: radial-gradient(circle, #2f7a53 52%, transparent 53%), repeating-conic-gradient(#2f7a53 0 18deg, #fff 18deg 22deg); box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 3px 0 #1d5236, 0 6px 0 #2f7a53, 0 9px 0 #1d5236, 0 12px 12px -4px rgba(0,0,0,.6); }
+  .chip.b { color: #fff; background: radial-gradient(circle, #2a2a2e 52%, transparent 53%), repeating-conic-gradient(#2a2a2e 0 18deg, #d6b16c 18deg 22deg); box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 3px 0 #111, 0 6px 0 #2a2a2e, 0 9px 0 #111, 0 12px 12px -4px rgba(0,0,0,.6); }
+
+  .player { padding: 24px 24px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .who { display: flex; align-items: center; gap: 16px; }
+  .ava { position: relative; width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-size: 30px; color: #fff; background: hsl(250 46% 50%); box-shadow: 0 0 0 3px rgba(18,48,31,.7), 0 0 0 5px var(--gold), 0 14px 24px -12px rgba(0,0,0,.6); }
+  .ava i { position: absolute; right: -4px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: #3a2a0c; font-style: normal; font-size: 13px; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--felt); }
+  .who small { display: block; color: var(--on-felt-faint); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .who h3 { margin: 2px 0 6px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 32px; line-height: 1; }
+  .rank { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(214,177,108,.22); box-shadow: inset 0 0 0 1px rgba(214,177,108,.45); color: #f6d68c; font-size: 12px; }
+  .who .nums { margin-left: auto; text-align: right; }
+  .who .nums b { display: block; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 38px; color: #f6d68c; line-height: 1; }
+  .who .nums span { font-size: 12px; color: var(--on-felt-faint); }
+
+  .line { display: flex; gap: 18px; color: var(--on-felt-muted); font-size: 13px; }
+  .line b { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--on-felt); font-size: 17px; margin-right: 4px; }
+  .line .hot b { color: #f2a65a; }
+
+  .minis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .mini { position: relative; aspect-ratio: 5 / 7; border-radius: 8px; display: grid; place-items: center; color: #2b2824; background: linear-gradient(160deg, #fbf8f1, #ece5d6); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 8px 14px -8px rgba(0,0,0,.55); }
+  .mini .cn { position: absolute; top: 4px; left: 5px; font-family: var(--serif); font-size: 11px; }
+  .mini .pip { margin-top: -8px; font-size: 18px; color: #b08a3e; }
+  .mini .s { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 600; color: #3f7a3a; }
+  .mini.lose { background: repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0 2px, transparent 2px 7px), linear-gradient(160deg, #8a3a33, #5a221d); box-shadow: inset 0 0 0 3px rgba(255,255,255,.12), 0 8px 14px -8px rgba(0,0,0,.55); }
+  .mini.lose .s { bottom: auto; color: #fbe3dd; font-size: 11px; }
+  .mini.slot { background: none; box-shadow: inset 0 0 0 1.5px var(--felt-line); }
+
+  .again { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 20px; background: var(--felt-well); box-shadow: inset 0 0 0 1px var(--felt-line); }
+  .again div small { display: block; color: var(--on-felt-faint); font-size: 11px; }
+  .again div b { font-size: 15px; font-weight: 500; }
+  .again .sum { margin-left: auto; font-family: var(--serif); font-style: italic; font-size: 24px; color: var(--plus); }
+  .again .btn { height: 40px; padding: 0 18px; border-radius: 999px; background: var(--on-felt); color: #1b1916; font-size: 14px; font-weight: 500; display: grid; place-items: center; }
+
+  .head { display: flex; align-items: baseline; gap: 12px; }
+  .head h2 { margin: 0; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 28px; }
+  .head span { color: var(--ink-faint); font-size: 13px; }
+  .head .all { margin-left: auto; padding: 7px 14px; border-radius: 999px; background: #2d2518; color: var(--gold-ink); font-size: 13px; font-weight: 500; }
+  .filters { display: flex; gap: 6px; margin-left: 18px; }
+  .filters span { padding: 5px 12px; border-radius: 999px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-muted); font-size: 12px; }
+  .filters span.on { background: var(--ink); color: var(--paper); box-shadow: none; }
+
+  .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+
+  .tc { position: relative; display: flex; flex-direction: column; border-radius: 26px; padding: 10px 10px 14px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line), 0 24px 40px -30px #000; }
+  .tc.mine { box-shadow: inset 0 0 0 1.5px var(--gold), 0 24px 40px -30px #000; }
+
+  .tbl { position: relative; height: 190px; }
+  .rim { position: absolute; inset: 22px 20px; border-radius: 999px; padding: 8px; background: linear-gradient(180deg, #7a5532, #4a3019); box-shadow: inset 0 2px 0 rgba(255,255,255,.18), inset 0 -3px 0 rgba(0,0,0,.35), 0 14px 22px -12px rgba(0,0,0,.8); }
+  .cloth { position: relative; height: 100%; border-radius: 999px; background: radial-gradient(ellipse at 50% 35%, #2c6a4a, var(--felt) 55%, var(--felt-deep)); box-shadow: inset 0 0 18px rgba(0,0,0,.5); display: grid; place-items: center; }
+  .cloth::after { content: ''; position: absolute; inset: 9px 16px; border-radius: 999px; border: 1px dashed rgba(255,255,255,.14); }
+  .pot { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .pot .chip { width: 38px; height: 38px; font-size: 10px; }
+  .pot em { font-style: normal; font-size: 11px; color: var(--on-felt-muted); margin-top: 10px; }
+
+  .seat { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 500; color: #fff; box-shadow: 0 0 0 3px var(--raised), 0 6px 10px -4px rgba(0,0,0,.7); z-index: 2; }
+  .seat.free { background: var(--sunken); color: var(--ink-ghost); box-shadow: 0 0 0 3px var(--raised), inset 0 0 0 1.5px var(--line-heavy); font-size: 16px; }
+  .seat.you { box-shadow: 0 0 0 2px var(--raised), 0 0 0 4px var(--gold); }
+
+  .info { display: flex; flex-direction: column; gap: 3px; padding: 4px 8px 12px; }
+  .info .t { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; }
+  .info .t .suit { color: var(--gold); }
+  .tc .tag { position: absolute; top: 14px; right: 14px; z-index: 3; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  .tag.mine { background: #2d2518; color: var(--gold-ink); }
+  .tag.hot { background: #2f1a17; color: #ea978c; }
+  .info .m { color: var(--ink-faint); font-size: 12px; }
+  .info .w { color: var(--green); font-size: 12px; }
+  .tc .go { margin: auto 2px 0; height: 42px; border-radius: 999px; background: var(--ink); color: var(--paper); font-weight: 500; font-size: 14px; display: grid; place-items: center; }
+  .tc .go.ghost { background: none; box-shadow: inset 0 0 0 1.5px var(--line-heavy); color: var(--ink-muted); }
+  .tc .go.gold { background: none; box-shadow: inset 0 0 0 1.5px var(--gold); color: var(--gold-ink); }
+  .tc .poor { margin: auto 2px 0; height: 42px; display: grid; place-items: center; color: var(--red); font-size: 13px; }
+
+  .tc.preset .tbl { opacity: .62; }
+  .tc.preset { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+
+  .tc.own { align-items: center; justify-content: center; gap: 10px; background: none; box-shadow: inset 0 0 0 1.5px var(--line-heavy); border: 0; text-align: center; }
+  .tc.own .pl { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: #3a2a0c; font-size: 28px; }
+  .tc.own b { font-size: 16px; font-weight: 500; }
+  .tc.own small { color: var(--ink-faint); font-size: 13px; max-width: 170px; line-height: 1.4; }
+
+  .note { width: 1600px; margin: -32px auto 40px; padding: 0 6px; color: #8f887a; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<p class="caption"><b>1. Столы есть.</b> Карточка игрока стоит рядом с героем, той же высоты и на том же сукне. Правой колонки нет — центр шире. Столы — обычного размера, с бортиком и креслами.</p>
+<div class="frame" id="full"></div>
+
+<p class="caption"><b>2. Столов нет.</b> Вместо коричневой коробки — те же столы, только пустые и приглушённые: готовые варианты, клик создаёт стол.</p>
+<div class="frame" id="empty"></div>
+
+<script>
+  const HUES = { Миша: 120, Оля: 10, Тузовый: 140, Лиса: 30, Петрович: 200, Козырь: 260, Vlad: 250, Ника: 320, Гоша: 50, Зоя: 180 }
+  const hue = (n) => HUES[n] ?? 90
+
+  function seatPos(n) {
+    const out = []
+    for (let i = 0; i < n; i++) {
+      const a = Math.PI / 2 + (i * 2 * Math.PI) / n
+      out.push([50 + 44 * Math.cos(a), 50 + 41 * Math.sin(a)])
+    }
+    return out
+  }
+
+  function chipClass(stake) {
+    return { 100: '', 250: 'r', 500: 'g', 1000: 'b' }[stake] ?? ''
+  }
+
+  function table(t) {
+    const pos = seatPos(t.seats)
+    const seats = pos.map(([x, y], i) => {
+      const who = t.players[i]
+      if (!who) return `<span class="seat free" style="left:${x}%;top:${y}%">+</span>`
+      const you = who === 'Vlad' ? ' you' : ''
+      return `<span class="seat${you}" style="left:${x}%;top:${y}%;background:hsl(${hue(who)} 46% 50%)">${who[0]}</span>`
+    }).join('')
+    return `<div class="tbl">
+      <div class="rim"><div class="cloth"><div class="pot"><span class="chip ${chipClass(t.stake)}">${t.stake}</span></div></div></div>
+      ${seats}
+    </div>`
+  }
+
+  function card(t) {
+    const left = t.seats - t.players.length
+    const tag = t.mine ? '<span class="tag mine">ваш</span>' : left === 1 ? '<span class="tag hot">ещё 1 место</span>' : ''
+    const btn = t.mine ? '<span class="go ghost">Ждём игроков…</span>' : t.poor ? '<span class="poor">Мало фишек</span>' : '<span class="go">Сесть</span>'
+    return `<div class="tc${t.mine ? ' mine' : ''}">
+      ${table(t)}
+      <div class="info">
+        <span class="t"><span class="suit">${t.mode === 'Переводной' ? '♥' : '♠'}</span>${t.mode} · ${t.deck}${tag}</span>
+        <span class="m">${t.players.length} из ${t.seats} · ${t.ago}</span>
+        <span class="w">выигрыш до +${t.win}</span>
+      </div>
+      ${btn}
+    </div>`
+  }
+
+  function preset(t) {
+    return `<div class="tc preset">
+      ${table({ ...t, players: [] })}
+      <div class="info">
+        <span class="t"><span class="suit">${t.mode === 'Переводной' ? '♥' : '♠'}</span>${t.seats} ${t.seats < 5 ? "игрока" : "игроков"} · ставка ${t.stake}</span>
+        <span class="m">${t.mode} · ${t.deck} карт</span>
+        <span class="w">выигрыш до +${t.win}</span>
+      </div>
+      <span class="go gold">Создать</span>
+    </div>`
+  }
+
+  const own = `<div class="tc own"><span class="pl">+</span><b>Свой стол</b><small>ставка, режим, колода и 3–6 игроков</small></div>`
+
+  function screen(rowHtml, count) {
+    return `
+    <nav class="rail">
+      <span class="logo"></span>
+      <span class="nav on"><i></i>Играть</span>
+      <span class="nav"><i></i>Профиль</span>
+      <span class="nav"><i></i>Рейтинг</span>
+      <span class="nav"><i></i>Магазин</span>
+      <span class="nav"><i></i>Настройки</span>
+    </nav>
+    <main class="main">
+      <div class="top">
+        <h1>Добрый день, <b>Vlad</b><span class="online">● 128 онлайн</span></h1>
+        <span class="wallet">◎ 2 690 <span class="plus">+</span></span>
+      </div>
+      <div class="duo">
+        <section class="felt hero">
+          <div>
+            <span class="badge">⚡ Быстрая игра</span>
+            <h2>Один на один</h2>
+            <p>Сервер сам найдёт соперника с такими же настройками.<br />«Любой» ускоряет поиск.</p>
+            <div class="fields">
+              <div class="field"><small>Ставка</small><b>● 100</b></div>
+              <div class="field"><small>Режим</small><b>Любой</b></div>
+              <div class="field"><small>Колода</small><b>Любая</b></div>
+            </div>
+            <div class="act">
+              <span class="play">⚡ Играть</span>
+              <span class="kv"><small>Выигрыш</small><b style="color:var(--plus)">+95</b></span>
+              <span class="kv"><small>Проигрыш</small><b style="color:var(--minus)">−100</b></span>
+              <span class="kv"><small>Комиссия</small><b>5%</b></span>
+            </div>
+          </div>
+          <div class="fan">
+            <span class="c" style="transform:rotate(-24deg)"></span>
+            <span class="c" style="transform:rotate(-12deg)"></span>
+            <span class="c" style="transform:rotate(0deg)"></span>
+            <span class="c" style="transform:rotate(12deg)"></span>
+            <span class="c" style="transform:rotate(24deg)"></span>
+            <span class="stack"><span class="chip">100</span></span>
+          </div>
+        </section>
+
+        <section class="felt player">
+          <div class="who">
+            <span class="ava">V<i>♠</i></span>
+            <div>
+              <small>Игрок</small>
+              <h3>Vlad</h3>
+              <span class="rank">Новичок</span>
+            </div>
+            <div class="nums"><b>67%</b><span>побед</span></div>
+          </div>
+          <div class="line">
+            <span><b>6</b>партий</span>
+            <span class="hot"><b>2</b>подряд</span>
+            <span><b>+712</b>лучший</span>
+          </div>
+          <div class="minis">
+            <span class="mini"><span class="cn">♠</span><span class="pip">♛</span><span class="s">+95</span></span>
+            <span class="mini"><span class="cn">♠</span><span class="pip">♛</span><span class="s">+95</span></span>
+            <span class="mini lose"><span class="s">−250</span></span>
+            <span class="mini"><span class="cn">♠</span><span class="pip">♛</span><span class="s">+712</span></span>
+            <span class="mini" style="opacity:.75"><span class="cn">=</span><span class="pip" style="color:#2b2824">♦</span><span class="s" style="color:#736d5f">0</span></span>
+            <span class="mini lose"><span class="s">−100</span></span>
+          </div>
+          <div class="again">
+            <div><small>Последняя · 1 на 1 · 56 мин назад</small><b>Победа</b></div>
+            <span class="sum">+95</span>
+            <span class="btn">↻ Ещё партия</span>
+          </div>
+        </section>
+      </div>
+
+      <div class="head">
+        <h2>Компании на 3–6</h2>
+        <span>${count}</span>
+        <div class="filters"><span class="on">По карману</span><span>Подкидной</span><span>Переводной</span><span>100</span><span>250</span><span>500+</span></div>
+        <span class="all">Все столы →</span>
+      </div>
+      <div class="row">${rowHtml}</div>
+    </main>
+    <aside class="friends">
+      <span class="fav me" style="background:hsl(250 46% 50%)">V</span>
+      <span class="fsep"></span>
+      <span class="fav" style="background:hsl(260 46% 50%);box-shadow:0 0 0 2px var(--raised),0 0 0 4px var(--gold)">К</span>
+      <span class="fsep"></span>
+      <span class="fav" style="background:hsl(120 46% 50%);box-shadow:0 0 0 2px var(--raised),0 0 0 4px var(--red)">М</span>
+      <span class="fav" style="background:hsl(10 46% 50%)">О<i class="dot"></i></span>
+      <span class="fav" style="background:hsl(140 46% 50%)">Т<i class="dot"></i></span>
+      <span class="fav off" style="background:hsl(200 46% 50%)">П</span>
+      <span class="fav off" style="background:hsl(30 46% 50%)">Л</span>
+    </aside>`
+  }
+
+  const tables = [
+    { seats: 4, players: ['Миша', 'Оля', 'Тузовый'], stake: 250, mode: 'Переводной', deck: 36, ago: '2 мин', win: 118 },
+    { seats: 3, players: ['Ника'], stake: 100, mode: 'Подкидной', deck: 36, ago: 'только что', win: 63 },
+    { seats: 6, players: ['Гоша', 'Зоя', 'Лиса', 'Петрович'], stake: 500, mode: 'Подкидной', deck: 36, ago: '5 мин', win: 158 },
+    { seats: 3, players: ['Vlad'], stake: 100, mode: 'Подкидной', deck: 24, ago: 'только что', win: 63, mine: true },
+  ]
+
+  const presets = [
+    { seats: 3, stake: 100, mode: 'Подкидной', deck: 36, win: 63 },
+    { seats: 4, stake: 250, mode: 'Переводной', deck: 36, win: 118 },
+    { seats: 6, stake: 500, mode: 'Подкидной', deck: 36, win: 158 },
+    { seats: 5, stake: 1000, mode: 'Переводной', deck: 52, win: 380 },
+  ]
+
+  document.getElementById('full').innerHTML = screen(tables.map(card).join('') + own, '4 стола')
+  document.getElementById('empty').innerHTML = screen(presets.map(preset).join('') + own, 'пока никого')
+
+  const fit = () => (document.body.style.zoom = Math.min(1, window.innerWidth / 1640))
+  fit()
+  window.addEventListener('resize', fit)
+</script>
+</body>
+</html>

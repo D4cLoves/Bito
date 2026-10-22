@@ -19,6 +19,7 @@ import (
 	"bito/internal/repository/postgres"
 	redisRepo "bito/internal/repository/redis"
 	"bito/internal/service"
+	"bito/migrations"
 )
 
 func Run() {
@@ -38,6 +39,12 @@ func Run() {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}
 	defer pool.Close()
+
+	if applied, err := postgres.Migrate(ctx, pool, migrations.FS); err != nil {
+		log.Fatalf("failed to apply migrations: %v", err)
+	} else if applied > 0 {
+		log.Printf("applied %d database migrations", applied)
+	}
 
 	// 4. Клиент и репозиторий Redis
 	redisClient, err := redisRepo.New(ctx, cfg)
@@ -61,7 +68,11 @@ func Run() {
 	authService := service.NewAuthService(userRepo, otpService, mailerClient, authRedisRepo, tokenManager, cfg.JWTRefreshTTL)
 
 	// 9. HTTP Хендлер
-	authHandler := deliveryHTTP.NewAuthHandler(authService)
+	authHandler := deliveryHTTP.NewAuthHandler(authService, redisRepo.NewRateLimiter(redisClient), deliveryHTTP.CookieConfig{
+		Secure:     cfg.IsProduction(),
+		AccessTTL:  cfg.JWTAccessTTL,
+		RefreshTTL: cfg.JWTRefreshTTL,
+	})
 
 	// 10. Экономика: возвращаем ставки партий, оборванных прошлым падением сервера
 	economyService := service.NewEconomyService(postgres.NewWalletRepository(pool))
@@ -81,6 +92,11 @@ func Run() {
 		Table:  deliveryHTTP.NewTableHandler(hub, economyService),
 		User:   deliveryHTTP.NewUserHandler(service.NewUserService(userRepo)),
 		Wallet: deliveryHTTP.NewWalletHandler(economyService),
+		Game:   deliveryHTTP.NewGameHandler(service.NewGameService(postgres.NewGameRepository(pool))),
+		Friend: deliveryHTTP.NewFriendHandler(service.NewFriendService(postgres.NewFriendRepository(pool), userRepo, hub, hub)),
+		Player: deliveryHTTP.NewPlayerHandler(service.NewPlayerService(userRepo, postgres.NewFriendRepository(pool), postgres.NewGameRepository(pool), hub)),
+		Invite: deliveryHTTP.NewInviteHandler(service.NewInviteService(hub, postgres.NewFriendRepository(pool), hub, userRepo, economyService, hub)),
+		Shop:   deliveryHTTP.NewShopHandler(service.NewShopService(postgres.NewShopRepository(pool))),
 	}, tokenManager)
 
 	// Запуск сервера в отдельной горутине

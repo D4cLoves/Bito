@@ -32,3 +32,15 @@ type GameRecord struct {
 	Deck  int
 	Stake int64
 }
+
+type GameHistoryEntry struct {
+	ID         uuid.UUID `json:"id"`
+	FinishedAt time.Time `json:"finishedAt"`
+	Mode       string    `json:"mode"`
+	Deck       int       `json:"deck"`
+	Players    int       `json:"players"`
+	Stake      int64     `json:"stake"`
+	Place      int       `json:"place"`
+	Payout     int64     `json:"payout"`
+	Outcome    string    `json:"outcome"`
+}

@@ -1,8 +1,11 @@
 package http
 
 import (
+	"bytes"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,5 +65,35 @@ func TestAuthMiddleware(t *testing.T) {
 				t.Error("next handler must not run on rejected request")
 			}
 		})
+	}
+}
+
+func TestRedactingLogger_DropsTokenFromLog(t *testing.T) {
+	var out bytes.Buffer
+	var seenToken string
+	handler := RedactingLogger(log.New(&out, "", 0))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenToken = r.URL.Query().Get("token")
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ws?room_id=abc&token=secret-jwt", nil))
+
+	if seenToken != "secret-jwt" {
+		t.Errorf("handler got token %q, want the original query untouched", seenToken)
+	}
+	logged := out.String()
+	if strings.Contains(logged, "secret-jwt") || strings.Contains(logged, "token=") {
+		t.Errorf("token leaked into the log: %s", logged)
+	}
+	if !strings.Contains(logged, "/ws?room_id=abc") {
+		t.Errorf("log lost the rest of the address: %s", logged)
+	}
+}
+
+func TestRedactingLogger_DropsTableKeyFromLog(t *testing.T) {
+	var out bytes.Buffer
+	handler := RedactingLogger(log.New(&out, "", 0))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ws?room_id=abc&key=secret-table-key", nil))
+	if strings.Contains(out.String(), "secret-table-key") {
+		t.Errorf("table key leaked into the log: %s", out.String())
 	}
 }
