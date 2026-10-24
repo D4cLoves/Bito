@@ -25,13 +25,13 @@
 <br>
 <br>
 
-<table width="100%">
+<table>
   <tr>
-    <td align="center" width="20%"><h3>2–6</h3><sub>игроков за столом</sub></td>
-    <td align="center" width="20%"><h3>24 · 36 · 52</h3><sub>карты в колоде</sub></td>
-    <td align="center" width="20%"><h3>20 с</h3><sub>на ход</sub></td>
-    <td align="center" width="20%"><h3>51</h3><sub>вещь в магазине</sub></td>
-    <td align="center" width="20%"><h3>246</h3><sub>тестов на Go</sub></td>
+    <td align="center"><h3>&nbsp;&nbsp;2–6&nbsp;&nbsp;</h3><sub>игроков&nbsp;за&nbsp;столом</sub></td>
+    <td align="center"><h3>&nbsp;&nbsp;24&nbsp;·&nbsp;36&nbsp;·&nbsp;52&nbsp;&nbsp;</h3><sub>карты&nbsp;в&nbsp;колоде</sub></td>
+    <td align="center"><h3>&nbsp;&nbsp;20&nbsp;с&nbsp;&nbsp;</h3><sub>на&nbsp;ход,&nbsp;потом&nbsp;ходит&nbsp;сервер</sub></td>
+    <td align="center"><h3>&nbsp;&nbsp;51&nbsp;&nbsp;</h3><sub>предмет&nbsp;в&nbsp;магазине</sub></td>
+    <td align="center"><h3>&nbsp;&nbsp;246&nbsp;&nbsp;</h3><sub>тестов&nbsp;на&nbsp;Go</sub></td>
   </tr>
 </table>
 
