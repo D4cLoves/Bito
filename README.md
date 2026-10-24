@@ -1,24 +1,83 @@
 <div align="center">
 
-# 🂡 Bito
+<img src="docs/banner.svg" alt="Bito — онлайн-дурак в реальном времени на виртуальные фишки" width="100%">
 
-**Онлайн-дурак в реальном времени на виртуальные фишки**
+<br>
+<br>
 
-[![CI](https://github.com/D4cLoves/Bito/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/D4cLoves/Bito/actions/workflows/ci.yml)
-![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
-![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+[![CI](https://img.shields.io/github/actions/workflow/status/D4cLoves/Bito/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/D4cLoves/Bito/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/D4cLoves/Bito?style=flat-square&color=d4a85a&label=версия)](https://github.com/D4cLoves/Bito/releases/latest)
+![Go](https://img.shields.io/badge/Go-1.27-00ADD8?style=flat-square&logo=go&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3-42b883?style=flat-square&logo=vuedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
 
-Подкидной и переводной · колоды 24 / 36 / 52 · от 2 до 6 игроков · ставки, друзья, магазин
+**[Возможности](#возможности)** · **[Скриншоты](#скриншоты)** · **[Как устроено](#как-устроено)** · **[Запуск](#запуск)** · **[Тесты](#тесты)**
 
 <br>
 
 <img src="docs/screenshots/table.jpg" alt="Партия в переводного: рука игрока, колода с козырем, таймер хода и чат стола" width="100%">
 
+<sub>Партия в переводного: своя рука, колода с козырем, таймер хода и чат стола</sub>
+
+<br>
+<br>
+
+<table>
+  <tr>
+    <td align="center" width="20%"><h3>2–6</h3><sub>игроков за столом</sub></td>
+    <td align="center" width="20%"><h3>24 · 36 · 52</h3><sub>карты в колоде</sub></td>
+    <td align="center" width="20%"><h3>20 с</h3><sub>на ход, потом ходит сервер</sub></td>
+    <td align="center" width="20%"><h3>51</h3><sub>предмет в магазине</sub></td>
+    <td align="center" width="20%"><h3>246</h3><sub>тестов на Go</sub></td>
+  </tr>
+</table>
+
 </div>
 
----
+## Возможности
+
+<table>
+  <tr>
+    <th width="33%">🃏 Игра</th>
+    <th width="33%">🪙 Вокруг стола</th>
+    <th width="33%">🎨 Оформление</th>
+  </tr>
+  <tr valign="top">
+    <td>
+
+- Подкидной и переводной дурак
+- Колоды на 24, 36 и 52 карты, тасовка через `crypto/rand`
+- Быстрая игра 1 на 1 с подбором соперника
+- Столы-компании на 3–6 игроков
+- Таймер хода: если игрок молчит, сервер ходит за него
+- 30 секунд на возвращение при обрыве связи
+
+</td>
+    <td>
+
+- Ставки в виртуальных фишках, выплаты по местам, комиссия 5%
+- Кошелёк с графиком баланса и журналом операций
+- Друзья со статусом «в лобби / за столом / не в сети»
+- Закрытые столы по приглашению или ссылке, реванш одной кнопкой
+- Режим зрителя без доступа к рукам
+- Чат за столом с быстрыми фразами и эмодзи
+
+</td>
+    <td>
+
+- Магазин за фишки: 7 тем, 9 сукон, 9 рубашек, 26 аватаров
+- Звуки карт и музыка
+- Сигнал «ваш ход» в свёрнутой вкладке
+- Мобильная вёрстка с нижним меню
+- Регистрация по коду из письма
+- История партий и профили игроков
+
+</td>
+  </tr>
+</table>
 
 ## Скриншоты
 
@@ -42,31 +101,9 @@
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/mobile.jpg" alt="Лобби на телефоне" width="300"><br>
+  <img src="docs/screenshots/mobile.jpg" alt="Лобби на телефоне" width="280"><br>
   <sub><b>На телефоне</b> · то же лобби с нижним меню</sub>
 </p>
-
-## Что умеет
-
-**Игра**
-- Подкидной и переводной дурак, колоды на 24, 36 и 52 карты, тасовка через `crypto/rand`
-- Быстрая игра 1 на 1 с подбором соперника и столы-компании на 3–6 игроков
-- Таймер хода 20 секунд: если игрок молчит, сервер ходит за него
-- 30 секунд на возвращение при обрыве связи, кнопка «Вернуться за стол» после перезагрузки
-
-**Вокруг стола**
-- Ставки в виртуальных фишках: выплаты по местам, комиссия 5%, пополнение при нуле
-- Кошелёк с графиком баланса и журналом всех операций
-- Друзья со статусом «в лобби / за столом / не в сети», приглашение за свой стол
-- Закрытые столы по приглашению или ссылке с ключом, реванш одной кнопкой
-- Режим зрителя: смотреть идущую партию, не видя рук
-- Живое лобби на WebSocket, чат за столом с быстрыми фразами и эмодзи
-- История партий и профили игроков
-
-**Оформление**
-- Магазин за фишки: 7 тем, 9 сукон, 9 рубашек карт, 26 аватаров
-- Звуки карт и музыка, сигнал «ваш ход» в свёрнутой вкладке
-- Мобильная вёрстка, регистрация по коду из письма
 
 ## Как устроено
 
@@ -93,10 +130,30 @@ flowchart LR
     R --> PG
 ```
 
-- **Один стол — одна горутина.** Сообщения игроков приходят в `Room` через канал, состоянием партии владеет только она, поэтому правилам не нужны блокировки.
-- **Сервер главный.** Клиент шлёт только намерение (`attack`, `defend`, `take`, `pass`, `transfer`, `surrender`), допустимость проверяет сервер. Каждый игрок получает только свою руку.
-- **Деньги в журнале.** Любое движение фишек — строка в `wallet_transactions` с `balance_after`. `CHECK (balance >= 0)`, атомарное списание ставки, расчёт партии ровно один раз.
-- **Две базы.** PostgreSQL для того, что нельзя терять, Redis для того, что должно истечь само.
+Так проходит один ход:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Атакующий
+    participant R as Room (горутина стола)
+    participant G as game
+    participant D as Защитник
+
+    A->>R: attack, карта 6♦
+    R->>G: проверить и применить ход
+    G-->>R: новое состояние стола
+    R-->>A: game_state со своей рукой
+    R-->>D: game_state со своей рукой
+    Note over R: таймер защитника 20 с
+```
+
+| Принцип | Как сделано |
+|---|---|
+| **Один стол — одна горутина** | Сообщения игроков приходят в `Room` через канал, состоянием партии владеет только она, поэтому правилам не нужны блокировки |
+| **Сервер главный** | Клиент шлёт только намерение (`attack`, `defend`, `take`, `pass`, `transfer`, `surrender`), допустимость проверяет сервер. Каждый игрок получает только свою руку |
+| **Деньги в журнале** | Любое движение фишек — строка в `wallet_transactions` с `balance_after`. `CHECK (balance >= 0)`, атомарное списание ставки, расчёт партии ровно один раз |
+| **Две базы** | PostgreSQL для того, что нельзя терять, Redis для того, что должно истечь само |
 
 ## Стек
 
@@ -105,28 +162,51 @@ flowchart LR
 | **Сервер** | Go 1.27, chi, gorilla/websocket, pgx v5, go-redis v9, golang-jwt v5, bcrypt, cleanenv |
 | **Клиент** | Vue 3, TypeScript, Vite, Pinia, Vue Router, Tailwind CSS 4, anime.js, motion-v, Web Audio API |
 | **Данные** | PostgreSQL 16 (11 таблиц, миграции встроены в бинарник), Redis 7 |
-| **Инфраструктура** | Docker Compose, Mailpit, GitHub Actions |
+| **Инфраструктура** | Docker Compose, Mailpit, GitHub Actions, образ сервера в ghcr.io |
 
 ## Запуск
 
-Понадобятся Go 1.27, Node.js 22 и Docker.
+Понадобятся Docker и Node.js 22, для запуска сервера без Docker ещё Go 1.27.
+
+### Быстрый старт
+
+Сервер, PostgreSQL, Redis и Mailpit поднимаются в Docker, клиент — dev-сервером Vite:
+
+```bash
+git clone https://github.com/D4cLoves/Bito.git
+cd Bito
+docker compose up -d --build
+npm --prefix web ci
+npm --prefix web run dev
+```
+
+Откройте http://localhost:5173 и зарегистрируйтесь. Письмо с кодом придёт в Mailpit: http://localhost:8025
+
+### Для разработки
+
+Инфраструктура в Docker, сервер запускается из исходников:
 
 ```bash
 cp .env.example .env
-make up        # PostgreSQL, Redis и Mailpit в Docker
+make up        # PostgreSQL, Redis и Mailpit
 make run       # сервер на :8080, миграции применяются при старте
-```
-
-В соседнем терминале:
-
-```bash
-npm --prefix web ci
 make web       # клиент на http://localhost:5173
 ```
 
-Письма с кодом подтверждения по умолчанию попадают в Mailpit: http://localhost:8025
+| Порт | Что там |
+|---|---|
+| `5173` | клиент |
+| `8080` | REST API и WebSocket |
+| `8025` | Mailpit, письма с кодами |
+| `5433` | PostgreSQL |
+| `6379` | Redis |
 
-Чтобы коды приходили на настоящую почту, укажите в `.env` SMTP своего ящика и пароль приложения. Например, для mail.ru:
+<details>
+<summary><b>Настоящая почта вместо Mailpit</b></summary>
+
+<br>
+
+Укажите в `.env` SMTP своего ящика и пароль приложения. Например, для mail.ru:
 
 ```env
 SMTP_HOST=smtp.mail.ru
@@ -136,17 +216,35 @@ SMTP_PASSWORD=пароль-для-внешнего-приложения
 SMTP_FROM=you@mail.ru
 ```
 
-Порт 465 шифрует соединение сразу, 587 переходит на TLS через STARTTLS.
+Порт 465 шифрует соединение сразу, 587 переходит на TLS через STARTTLS. Эти настройки подхватывают и `make run`, и `docker compose`.
+
+</details>
 
 ## Тесты
 
 ```bash
-make test         # все тесты на Go
-make test-race    # то же с детектором гонок
-npm --prefix web run build   # проверка типов и сборка клиента
+make test                     # все тесты на Go
+make test-race                # то же с детектором гонок
+npm --prefix web run build    # проверка типов и сборка клиента
 ```
 
-CI на каждый push гоняет тесты с настоящими PostgreSQL и Redis, собирает клиент и Docker-образ.
+<details>
+<summary><b>Интеграционные тесты на настоящих PostgreSQL и Redis</b></summary>
+
+<br>
+
+Поднимите инфраструктуру через `make up` и запустите:
+
+```bash
+BITO_TEST_ADMIN_DSN="postgres://postgres:1221@localhost:5433/postgres?sslmode=disable" \
+BITO_TEST_REDIS_ADDR="localhost:6379" \
+go test -tags integration ./...
+```
+
+</details>
+
+> [!NOTE]
+> CI на каждый pull request и push в `main` проверяет форматирование, гоняет тесты с детектором гонок на настоящих PostgreSQL и Redis, собирает клиент и Docker-образ. После слияния в `main` образ сервера публикуется в `ghcr.io/d4cloves/bito`.
 
 ## Структура
 
@@ -171,3 +269,9 @@ docs/                  описание фич и планы реализаци�
 
 - [docs/features.md](docs/features.md) — все фичи, приоритеты и что сделано
 - [docs/plans](docs/plans) — как устроены экономика, лобби, друзья, приглашения, зрители и CI
+
+<br>
+
+<div align="center">
+<sub>Дипломный проект · Компьютерная академия STEP · 2026</sub>
+</div>
