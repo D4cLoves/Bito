@@ -29,8 +29,8 @@
   <tr>
     <td align="center" width="20%"><h3>2–6</h3><sub>игроков за столом</sub></td>
     <td align="center" width="20%"><h3>24 · 36 · 52</h3><sub>карты в колоде</sub></td>
-    <td align="center" width="20%"><h3>20 с</h3><sub>на ход, потом ходит сервер</sub></td>
-    <td align="center" width="20%"><h3>51</h3><sub>предмет в магазине</sub></td>
+    <td align="center" width="20%"><h3>20 с</h3><sub>на ход</sub></td>
+    <td align="center" width="20%"><h3>51</h3><sub>вещь в магазине</sub></td>
     <td align="center" width="20%"><h3>246</h3><sub>тестов на Go</sub></td>
   </tr>
 </table>
