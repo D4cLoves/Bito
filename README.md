@@ -25,7 +25,7 @@
 <br>
 <br>
 
-<table>
+<table width="100%">
   <tr>
     <td align="center" width="20%"><h3>2–6</h3><sub>игроков за столом</sub></td>
     <td align="center" width="20%"><h3>24 · 36 · 52</h3><sub>карты в колоде</sub></td>
