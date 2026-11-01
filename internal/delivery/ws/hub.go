@@ -213,6 +213,7 @@ func (h *Hub) claimSeat(room *Room, playerID string) bool {
 		return false
 	}
 	h.releaseLocked(playerID, room)
+	room.holdJoin(playerID)
 	return true
 }
 
@@ -279,6 +280,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	client := NewClient(playerID, playerName, conn, room)
 	if !room.RegisterClient(client) {
+		room.dropJoin(playerID)
 		client.Close()
 		_ = conn.Close()
 		return
@@ -342,6 +344,14 @@ func (h *Hub) admit(room *Room, playerID, key string) string {
 	if !h.claimSeat(room, playerID) {
 		return errOtherTable
 	}
+	if reason := h.checkFunds(room, playerID); reason != "" {
+		room.dropJoin(playerID)
+		return reason
+	}
+	return ""
+}
+
+func (h *Hub) checkFunds(room *Room, playerID string) string {
 	if room.Stake() <= 0 {
 		return ""
 	}

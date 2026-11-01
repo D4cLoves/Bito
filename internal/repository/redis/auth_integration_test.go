@@ -35,9 +35,11 @@ func setupRedis(t *testing.T) *redis.Client {
 	return client
 }
 
+const testTicket = "ticket-of-this-request"
+
 func savePending(t *testing.T, repo *AuthRepository, email, code string) {
 	t.Helper()
-	err := repo.SavePending(context.Background(), &model.PendingRegistration{Email: email, Code: code, Name: "p"}, time.Minute)
+	err := repo.SavePending(context.Background(), &model.PendingRegistration{Email: email, Code: code, Ticket: testTicket, Name: "p"}, time.Minute)
 	if err != nil {
 		t.Fatalf("save pending: %v", err)
 	}
@@ -50,14 +52,14 @@ func TestAuth_CodeBurnsAfterFiveWrongAttempts(t *testing.T) {
 	savePending(t, repo, email, "111111")
 
 	for i := 1; i < MaxCodeAttempts; i++ {
-		if _, err := repo.VerifyAndGetPending(ctx, email, "000000"); !errors.Is(err, model.ErrCodeMismatch) {
+		if _, err := repo.VerifyAndGetPending(ctx, email, "000000", testTicket); !errors.Is(err, model.ErrCodeMismatch) {
 			t.Fatalf("wrong attempt %d: err = %v, want mismatch", i, err)
 		}
 	}
-	if _, err := repo.VerifyAndGetPending(ctx, email, "000000"); !errors.Is(err, model.ErrCodeAttempts) {
+	if _, err := repo.VerifyAndGetPending(ctx, email, "000000", testTicket); !errors.Is(err, model.ErrCodeAttempts) {
 		t.Fatalf("fifth wrong attempt: err = %v, want ErrCodeAttempts", err)
 	}
-	if _, err := repo.VerifyAndGetPending(ctx, email, "111111"); !errors.Is(err, model.ErrPendingNotFound) {
+	if _, err := repo.VerifyAndGetPending(ctx, email, "111111", testTicket); !errors.Is(err, model.ErrPendingNotFound) {
 		t.Errorf("right code after the burn: err = %v, want ErrPendingNotFound", err)
 	}
 }
@@ -69,21 +71,35 @@ func TestAuth_NewCodeResetsAttempts(t *testing.T) {
 	savePending(t, repo, email, "111111")
 
 	for i := 1; i < MaxCodeAttempts; i++ {
-		_, _ = repo.VerifyAndGetPending(ctx, email, "000000")
+		_, _ = repo.VerifyAndGetPending(ctx, email, "000000", testTicket)
 	}
 	savePending(t, repo, email, "222222")
 
 	for i := 1; i < MaxCodeAttempts; i++ {
-		if _, err := repo.VerifyAndGetPending(ctx, email, "000000"); !errors.Is(err, model.ErrCodeMismatch) {
+		if _, err := repo.VerifyAndGetPending(ctx, email, "000000", testTicket); !errors.Is(err, model.ErrCodeMismatch) {
 			t.Fatalf("wrong attempt %d on the new code: err = %v, want mismatch", i, err)
 		}
 	}
-	got, err := repo.VerifyAndGetPending(ctx, email, "222222")
+	got, err := repo.VerifyAndGetPending(ctx, email, "222222", testTicket)
 	if err != nil || got.Email != email {
 		t.Fatalf("right code: %+v, %v", got, err)
 	}
-	if _, err = repo.VerifyAndGetPending(ctx, email, "222222"); !errors.Is(err, model.ErrPendingNotFound) {
+	if _, err = repo.VerifyAndGetPending(ctx, email, "222222", testTicket); !errors.Is(err, model.ErrPendingNotFound) {
 		t.Errorf("code must be single-use, err = %v", err)
+	}
+}
+
+func TestAuth_CodeNeedsTheTicketOfItsRequest(t *testing.T) {
+	repo := NewAuthRepository(setupRedis(t))
+	ctx := context.Background()
+	email := uuid.NewString() + "@bito.test"
+	savePending(t, repo, email, "111111")
+
+	if _, err := repo.VerifyAndGetPending(ctx, email, "111111", "someone-else"); !errors.Is(err, model.ErrCodeMismatch) {
+		t.Fatalf("right code with a foreign ticket: err = %v, want mismatch", err)
+	}
+	if got, err := repo.VerifyAndGetPending(ctx, email, "111111", testTicket); err != nil || got.Email != email {
+		t.Fatalf("right code and ticket: %+v, %v", got, err)
 	}
 }
 

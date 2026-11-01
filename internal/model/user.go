@@ -52,6 +52,7 @@ type OAuthAccount struct {
 
 type PendingRegistration struct {
 	Code         string `json:"code"`
+	Ticket       string `json:"ticket"`
 	Email        string `json:"email"`
 	Name         string `json:"name"`
 	PasswordHash string `json:"passwordHash"`

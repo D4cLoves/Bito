@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -42,6 +45,7 @@ type UserRepository interface {
 	CreateUser(ctx context.Context, user *model.User, stats *model.UserStats, wallet *model.UserWallet) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
+	GetByName(ctx context.Context, name string) (*model.User, error)
 	Update(ctx context.Context, user *model.User) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -56,7 +60,7 @@ type MailerProvider interface {
 
 type RedisProvider interface {
 	SavePending(ctx context.Context, data *model.PendingRegistration, ttl time.Duration) error
-	VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error)
+	VerifyAndGetPending(ctx context.Context, email, code, ticket string) (*model.PendingRegistration, error)
 	SaveRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string, ttl time.Duration) error
 	ValidateAndRevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) (bool, error)
 	RevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) error
@@ -87,78 +91,91 @@ func NewAuthService(repo UserRepository, otp CodeProvider, mail MailerProvider, 
 	}
 }
 
-func (s *AuthService) SendCode(ctx context.Context, email, username, password string) error {
+func (s *AuthService) SendCode(ctx context.Context, email, username, password string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	username = strings.TrimSpace(username)
 
-	if email == "" || !strings.Contains(email, "@") {
-		return ErrInvalidEmail
+	if !validEmail(email) {
+		return "", ErrInvalidEmail
 	}
 
 	if n := utf8.RuneCountInString(username); n < minUsernameLength || n > maxUsernameLength {
-		return ErrInvalidUsername
+		return "", ErrInvalidUsername
 	}
 
 	if len(password) < minPasswordLength {
-		return ErrPasswordTooShort
+		return "", ErrPasswordTooShort
 	}
 	if len(password) > maxPasswordLength {
-		return ErrPasswordTooLong
+		return "", ErrPasswordTooLong
 	}
 
 	// 1. Проверяем, существует ли пользователь в базе
 	existingUser, err := s.repo.GetByEmail(ctx, email)
 	if err != nil && !errors.Is(err, model.ErrUserNotFound) {
-		return fmt.Errorf("check existing email: %w", err)
+		return "", fmt.Errorf("check existing email: %w", err)
 	}
 	if existingUser != nil {
-		return model.ErrUserAlreadyExists
+		return "", model.ErrUserAlreadyExists
+	}
+
+	takenName, err := s.repo.GetByName(ctx, username)
+	if err != nil && !errors.Is(err, model.ErrUserNotFound) {
+		return "", fmt.Errorf("check existing username: %w", err)
+	}
+	if takenName != nil {
+		return "", model.ErrUsernameTaken
 	}
 
 	// 2. Хешируем пароль
 	hashedPassword, err := HashPassword(password)
 	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
+		return "", fmt.Errorf("hash password: %w", err)
 	}
 
 	// 3. Генерируем 6-значный OTP код
 	code, err := s.otp.GenerateNumericOTP()
 	if err != nil {
-		return ErrGeneratePassword
+		return "", ErrGeneratePassword
+	}
+	ticket, err := newTicket()
+	if err != nil {
+		return "", ErrGeneratePassword
 	}
 
 	// 4. Сохраняем в Redis с правильным TTL (15 минут)1111
 	pending := &model.PendingRegistration{
 		Code:         code,
+		Ticket:       ticket,
 		Email:        email,
 		Name:         username,
 		PasswordHash: hashedPassword,
 	}
 
 	if err := s.redis.SavePending(ctx, pending, 15*time.Minute); err != nil {
-		return fmt.Errorf("save pending registration in redis: %w", err)
+		return "", fmt.Errorf("save pending registration in redis: %w", err)
 	}
 
 	// 5. Отправляем письмо с кодом
 	if err := s.mail.SendVerificationCode(ctx, email, code); err != nil {
-		return fmt.Errorf("send verification code: %w", err)
+		return "", fmt.Errorf("send verification code: %w", err)
 	}
 
-	return nil
+	return ticket, nil
 }
 
-func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code string) (*Session, error) {
+func (s *AuthService) VerifyAndRegister(ctx context.Context, email, code, ticket string) (*Session, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	code = strings.TrimSpace(code)
 
-	if email == "" || !strings.Contains(email, "@") {
+	if !validEmail(email) {
 		return nil, ErrInvalidEmail
 	}
 	if len(code) != 6 {
 		return nil, ErrInvalidCode
 	}
 
-	pending, err := s.redis.VerifyAndGetPending(ctx, email, code)
+	pending, err := s.redis.VerifyAndGetPending(ctx, email, code, ticket)
 	if err != nil {
 		return nil, err
 	}
@@ -267,4 +284,17 @@ func HashPassword(password string) (string, error) {
 func CheckPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+func validEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+func newTicket() (string, error) {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,7 +57,7 @@ func codeAttemptsKey(email string) string {
 }
 
 // VerifyAndGetPending считывает данные регистрации, сверяет код и при успехе удаляет ключ
-func (r *AuthRepository) VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error) {
+func (r *AuthRepository) VerifyAndGetPending(ctx context.Context, email, code, ticket string) (*model.PendingRegistration, error) {
 	key := fmt.Sprintf("%s%s", pendingRegistrationPrefix, email)
 
 	payload, err := r.client.Get(ctx, key).Bytes()
@@ -88,7 +89,7 @@ func (r *AuthRepository) VerifyAndGetPending(ctx context.Context, email, code st
 		return nil, model.ErrCodeAttempts
 	}
 
-	if data.Code != code {
+	if !sameSecret(data.Code, code) || !sameSecret(data.Ticket, ticket) {
 		if attempts.Val() == MaxCodeAttempts {
 			_ = r.client.Del(ctx, key, attemptsKey)
 			return nil, model.ErrCodeAttempts
@@ -123,4 +124,27 @@ func (r *AuthRepository) ValidateAndRevokeRefreshToken(ctx context.Context, user
 func (r *AuthRepository) RevokeRefreshToken(ctx context.Context, userID uuid.UUID, tokenID string) error {
 	key := fmt.Sprintf("%s%s:%s", refreshTokenPrefix, userID.String(), tokenID)
 	return r.client.Del(ctx, key).Err()
+}
+
+func sameSecret(want, got string) bool {
+	return subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
+}
+
+func (r *AuthRepository) RevokeAllRefreshTokens(ctx context.Context, userID uuid.UUID) error {
+	pattern := fmt.Sprintf("%s%s:*", refreshTokenPrefix, userID.String())
+	iter := r.client.Scan(ctx, 0, pattern, 100).Iterator()
+	var keys []string
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("redis: scan refresh tokens: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	if err := r.client.Del(ctx, keys...).Err(); err != nil {
+		return fmt.Errorf("redis: revoke refresh tokens: %w", err)
+	}
+	return nil
 }

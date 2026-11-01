@@ -1,21 +1,45 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { loginUser, refreshAccessToken, sendVerificationCode, verifyCodeAndRegister } from '../api/auth'
+import { loginUser, refreshAccessToken, revokeSession, sendVerificationCode, verifyCodeAndRegister } from '../api/auth'
+import { ApiError } from '../api/errors'
+import { expiresSoon } from '../api/token'
 import type { LoginRequest, RegisterRequest, VerifyCodeRequest, UserResponse } from '../types/auth'
+
+const SESSION_KEYS = ['token', 'refreshToken', 'user']
+
+function storedUser(): UserResponse | null {
+  const saved = localStorage.getItem('user')
+  if (!saved) return null
+  try {
+    return JSON.parse(saved) as UserResponse
+  } catch {
+    localStorage.removeItem('user')
+    return null
+  }
+}
+
+function withRefreshLock<T>(task: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks) {
+    return navigator.locks.request('bito-session-refresh', task)
+  }
+  return task()
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
   const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
-  const user = ref<UserResponse | null>(null)
-  
-  const savedUser = localStorage.getItem('user')
-  if (savedUser) {
-    try {
-      user.value = JSON.parse(savedUser) as UserResponse
-    } catch {
-      localStorage.removeItem('user')
-    }
+  const user = ref<UserResponse | null>(storedUser())
+  const registrationTicket = ref<string | null>(null)
+
+  function adoptStoredSession() {
+    token.value = localStorage.getItem('token')
+    refreshToken.value = localStorage.getItem('refreshToken')
+    user.value = storedUser()
   }
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || SESSION_KEYS.includes(e.key)) adoptStoredSession()
+  })
 
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -58,7 +82,8 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     error.value = null
     try {
-      await sendVerificationCode(payload)
+      const { ticket } = await sendVerificationCode(payload)
+      registrationTicket.value = ticket
       return true
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -72,11 +97,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function verifyAndRegister(payload: VerifyCodeRequest): Promise<boolean> {
+  async function verifyAndRegister(payload: Omit<VerifyCodeRequest, 'ticket'>): Promise<boolean> {
     isLoading.value = true
     error.value = null
     try {
-      const data = await verifyCodeAndRegister(payload)
+      const data = await verifyCodeAndRegister({ ...payload, ticket: registrationTicket.value ?? '' })
+      registrationTicket.value = null
       persistSession(data)
       return true
     } catch (err: unknown) {
@@ -93,16 +119,25 @@ export const useAuthStore = defineStore('auth', () => {
 
   let refreshing: Promise<boolean> | null = null
 
-  async function rotateSession(): Promise<boolean> {
-    if (!refreshToken.value) return false
-    try {
-      const data = await refreshAccessToken(refreshToken.value)
-      persistSession(data)
-      return true
-    } catch {
-      logout()
-      return false
-    }
+  function rotateSession(): Promise<boolean> {
+    const tokenBefore = token.value
+    return withRefreshLock(async () => {
+      adoptStoredSession()
+      if (token.value && token.value !== tokenBefore && !expiresSoon(token.value)) return true
+
+      const used = refreshToken.value
+      if (!used) return false
+      try {
+        persistSession(await refreshAccessToken(used))
+        return true
+      } catch (err) {
+        if (!(err instanceof ApiError) || (err.status !== 400 && err.status !== 401)) return false
+        adoptStoredSession()
+        if (refreshToken.value && refreshToken.value !== used) return true
+        forget()
+        return false
+      }
+    })
   }
 
   function refreshSession(): Promise<boolean> {
@@ -118,6 +153,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    revokeSession(refreshToken.value)
+    forget()
+  }
+
+  function forget() {
     token.value = null
     refreshToken.value = null
     user.value = null

@@ -1,13 +1,8 @@
 import { useAuthStore } from '../stores/auth'
+import { ApiError } from './errors'
+import { expiresSoon } from './token'
 
-export class ApiError extends Error {
-  status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
-}
+export { ApiError }
 
 async function send(url: string, init: RequestInit, token: string | null): Promise<Response> {
   const headers = new Headers(init.headers)
@@ -48,19 +43,10 @@ export async function authedFetch<T>(url: string, init: RequestInit = {}): Promi
   return body as T
 }
 
-function tokenExpiresAt(token: string): number {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    return typeof payload.exp === 'number' ? payload.exp * 1000 : 0
-  } catch {
-    return 0
-  }
-}
-
 export async function freshAccessToken(): Promise<string | null> {
   const auth = useAuthStore()
   if (!auth.token) return null
-  if (tokenExpiresAt(auth.token) - Date.now() < 60_000) {
+  if (expiresSoon(auth.token)) {
     await auth.refreshSession()
   }
   return auth.token

@@ -37,6 +37,10 @@ func (f *fakeUserRepo) GetByEmail(ctx context.Context, email string) (*model.Use
 	return nil, model.ErrUserNotFound
 }
 
+func (f *fakeUserRepo) GetByName(ctx context.Context, name string) (*model.User, error) {
+	return nil, model.ErrUserNotFound
+}
+
 func (f *fakeUserRepo) Update(ctx context.Context, user *model.User) error { return nil }
 
 func (f *fakeUserRepo) Delete(ctx context.Context, id uuid.UUID) error { return nil }
@@ -51,7 +55,7 @@ func (f *fakeRedis) SavePending(ctx context.Context, data *model.PendingRegistra
 	return nil
 }
 
-func (f *fakeRedis) VerifyAndGetPending(ctx context.Context, email, code string) (*model.PendingRegistration, error) {
+func (f *fakeRedis) VerifyAndGetPending(ctx context.Context, email, code, ticket string) (*model.PendingRegistration, error) {
 	if f.verifyErr != nil {
 		return nil, f.verifyErr
 	}
@@ -326,5 +330,26 @@ func TestAuthHandler_SecureCookies(t *testing.T) {
 				t.Errorf("secure=%v: cookie %s has Secure=%v", secure, c.Name, c.Secure)
 			}
 		}
+	}
+}
+
+func TestSendCode_TakenUsernameStopsBeforeTheLetter(t *testing.T) {
+	tokenManager := jwt.NewTokenManager("test-secret-key-super-secure-12345", time.Minute, time.Hour)
+	alice := &model.User{ID: uuid.New(), Name: "Alice"}
+	repo := &memUserRepo{users: map[uuid.UUID]*model.User{alice.ID: alice}}
+	handler := NewAuthHandler(service.NewAuthService(repo, nil, nil, &fakeRedis{activeTokens: map[string]bool{}}, tokenManager, time.Hour), nil, CookieConfig{})
+
+	body := `{"email":"new@bito.local","username":"alice","password":"long-enough-1"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/send-code", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	handler.SendCode(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body %s", rec.Code, rec.Body.String())
+	}
+	var resp ErrorResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.Error != model.ErrUsernameTaken.Error() {
+		t.Errorf("error = %q, want %q", resp.Error, model.ErrUsernameTaken.Error())
 	}
 }
