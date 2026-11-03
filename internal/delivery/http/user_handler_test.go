@@ -38,6 +38,16 @@ func (m *memUserRepo) GetByEmail(ctx context.Context, email string) (*model.User
 	return nil, model.ErrUserNotFound
 }
 
+func (m *memUserRepo) GetByName(ctx context.Context, name string) (*model.User, error) {
+	for _, u := range m.users {
+		if strings.EqualFold(u.Name, name) {
+			cp := *u
+			return &cp, nil
+		}
+	}
+	return nil, model.ErrUserNotFound
+}
+
 func (m *memUserRepo) Update(ctx context.Context, user *model.User) error {
 	for id, u := range m.users {
 		if id != user.ID && strings.EqualFold(u.Name, user.Name) {
@@ -85,7 +95,7 @@ func newTestUsersRouter(t *testing.T) (http.Handler, string, *model.User) {
 	repo := &memUserRepo{users: map[uuid.UUID]*model.User{alice.ID: alice, bob.ID: bob}}
 
 	hub := ws.NewHub(tokenManager, nil, nil)
-	server := NewServer(":0", hub, Handlers{User: NewUserHandler(service.NewUserService(repo))}, tokenManager)
+	server := NewServer(":0", hub, Handlers{User: NewUserHandler(service.NewUserService(repo, nil))}, tokenManager)
 
 	token, err := tokenManager.GenerateAccessToken(alice.ID, alice.Name)
 	if err != nil {

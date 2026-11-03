@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"time"
 
 	"bito/internal/config"
@@ -19,17 +21,7 @@ const (
 )
 
 func NewDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		cfg.DBUser,
-		cfg.DBPassword,
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBName,
-		cfg.DBSSLMode,
-	)
-
-	poolConfig, err := pgxpool.ParseConfig(dsn)
+	poolConfig, err := pgxpool.ParseConfig(dsn(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("postgres parse config: %w", err)
 	}
@@ -54,4 +46,15 @@ func NewDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+func dsn(cfg *config.Config) string {
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.DBUser, cfg.DBPassword),
+		Host:     net.JoinHostPort(cfg.DBHost, cfg.DBPort),
+		Path:     cfg.DBName,
+		RawQuery: url.Values{"sslmode": {cfg.DBSSLMode}}.Encode(),
+	}
+	return u.String()
 }

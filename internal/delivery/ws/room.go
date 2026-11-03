@@ -19,6 +19,7 @@ const (
 	defaultDuelMode = game.ModePodkidnoy
 	defaultDuelDeck = game.Deck36
 	reservationTTL  = 15 * time.Second
+	joinHoldTTL     = 10 * time.Second
 	inviteTTL       = 45 * time.Second
 	settleAttempts  = 3
 	settleRetryWait = time.Second
@@ -77,6 +78,7 @@ type Room struct {
 	watchers          map[string]*Client
 	seated            map[string]bool
 	reservations      map[string]time.Time
+	joining           map[string]time.Time
 	invites           map[string]time.Time
 	game              *game.Game
 	payouts           map[string]int64
@@ -126,6 +128,7 @@ func NewRoom(id string, s RoomSettings, bank Bank) *Room {
 		watchers:          make(map[string]*Client),
 		seated:            make(map[string]bool),
 		reservations:      make(map[string]time.Time),
+		joining:           make(map[string]time.Time),
 		invites:           make(map[string]time.Time),
 		register:          make(chan *Client),
 		unregister:        make(chan *Client),
@@ -194,7 +197,26 @@ func (r *Room) Unreserve(playerID string) {
 }
 
 func (r *Room) Claims(playerID string) bool {
-	return r.Holds(playerID) || (!r.matchmaking && r.Reserved(playerID))
+	return r.Holds(playerID) || r.Joining(playerID) || (!r.matchmaking && r.Reserved(playerID))
+}
+
+func (r *Room) holdJoin(playerID string) {
+	r.mu.Lock()
+	r.joining[playerID] = time.Now().Add(joinHoldTTL)
+	r.mu.Unlock()
+}
+
+func (r *Room) dropJoin(playerID string) {
+	r.mu.Lock()
+	delete(r.joining, playerID)
+	r.mu.Unlock()
+}
+
+func (r *Room) Joining(playerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	until, ok := r.joining[playerID]
+	return ok && !r.closed && time.Now().Before(until)
 }
 
 func (r *Room) Reserved(playerID string) bool {
@@ -358,6 +380,7 @@ func (r *Room) handleRegister(client *Client) {
 		return
 	}
 	playerID := client.ID()
+	defer r.dropJoin(playerID)
 
 	r.mu.Lock()
 	timer, exists := r.disconnectTimers[playerID]

@@ -46,6 +46,8 @@ type Config struct {
 	JWTAccessTTL  time.Duration `env:"JWT_ACCESS_EXPIRY" env-default:"15m"`
 	JWTRefreshTTL time.Duration `env:"JWT_REFRESH_EXPIRY" env-default:"168h"`
 
+	TrustProxy bool `env:"TRUST_PROXY" env-default:"false"`
+
 	AllowedOrigins []string `env:"ALLOWED_ORIGINS" env-default:"http://localhost:5173,http://127.0.0.1:5173"`
 }
 

@@ -27,8 +27,9 @@ type RegisterRequest struct {
 }
 
 type VerifyCodeRequest struct {
-	Email string `json:"email"`
-	Code  string `json:"code"`
+	Email  string `json:"email"`
+	Code   string `json:"code"`
+	Ticket string `json:"ticket"`
 }
 
 type RefreshRequest struct {
@@ -58,8 +59,8 @@ type ErrorResponse struct {
 }
 
 type AuthService interface {
-	SendCode(ctx context.Context, email, username, password string) error
-	VerifyAndRegister(ctx context.Context, email, code string) (*service.Session, error)
+	SendCode(ctx context.Context, email, username, password string) (string, error)
+	VerifyAndRegister(ctx context.Context, email, code, ticket string) (*service.Session, error)
 	Login(ctx context.Context, email, password string) (*service.Session, error)
 	Refresh(ctx context.Context, refreshToken string) (*service.Session, error)
 	Logout(ctx context.Context, refreshToken string) error
@@ -145,9 +146,10 @@ func (ah *AuthHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := ah.authService.SendCode(r.Context(), req.Email, req.Username, req.Password); err != nil {
+	ticket, err := ah.authService.SendCode(r.Context(), req.Email, req.Username, req.Password)
+	if err != nil {
 		switch {
-		case errors.Is(err, model.ErrUserAlreadyExists):
+		case errors.Is(err, model.ErrUserAlreadyExists), errors.Is(err, model.ErrUsernameTaken):
 			respondError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, service.ErrInvalidEmail),
 			errors.Is(err, service.ErrInvalidUsername),
@@ -162,6 +164,7 @@ func (ah *AuthHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "verification code sent",
+		"ticket":  ticket,
 	})
 }
 
@@ -171,7 +174,7 @@ func (ah *AuthHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := ah.authService.VerifyAndRegister(r.Context(), req.Email, req.Code)
+	session, err := ah.authService.VerifyAndRegister(r.Context(), req.Email, req.Code, req.Ticket)
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrUserAlreadyExists):
@@ -217,23 +220,22 @@ func (ah *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ah.writeSession(w, http.StatusOK, session)
 }
 
-func (ah *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	var refreshToken string
-
+func refreshTokenFromRequest(w http.ResponseWriter, r *http.Request) string {
 	if r.Body != nil {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		var req RefreshRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
-			refreshToken = req.RefreshToken
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.RefreshToken != "" {
+			return req.RefreshToken
 		}
 	}
-
-	if refreshToken == "" {
-		if cookie, err := r.Cookie("refreshToken"); err == nil {
-			refreshToken = cookie.Value
-		}
+	if cookie, err := r.Cookie("refreshToken"); err == nil {
+		return cookie.Value
 	}
+	return ""
+}
 
+func (ah *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	refreshToken := refreshTokenFromRequest(w, r)
 	if refreshToken == "" {
 		respondError(w, http.StatusBadRequest, "refresh token is required")
 		return
@@ -260,8 +262,8 @@ func (ah *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ah *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie("refreshToken"); err == nil && cookie.Value != "" {
-		_ = ah.authService.Logout(r.Context(), cookie.Value)
+	if refreshToken := refreshTokenFromRequest(w, r); refreshToken != "" {
+		_ = ah.authService.Logout(r.Context(), refreshToken)
 	}
 
 	http.SetCookie(w, &http.Cookie{

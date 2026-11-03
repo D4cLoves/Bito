@@ -7,6 +7,12 @@ export interface RegisterRequest {
 export interface VerifyCodeRequest {
   email: string
   code: string
+  ticket: string
+}
+
+export interface SendCodeResponse {
+  message: string
+  ticket: string
 }
 
 

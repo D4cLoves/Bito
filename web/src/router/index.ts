@@ -37,6 +37,10 @@ const router = createRouter({
     ...(import.meta.env.DEV
       ? [{ path: '/dev/sounds', name: 'dev-sounds', component: () => import('../views/dev/SoundsView.vue') }]
       : []),
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: { name: 'landing' },
+    },
   ],
 })
 

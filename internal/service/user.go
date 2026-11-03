@@ -12,14 +12,30 @@ import (
 	"github.com/google/uuid"
 )
 
-type UserService struct {
-	repo UserRepository
+type SessionRevoker interface {
+	RevokeAllRefreshTokens(ctx context.Context, userID uuid.UUID) error
 }
 
-func NewUserService(repo UserRepository) *UserService {
+type UserService struct {
+	repo     UserRepository
+	sessions SessionRevoker
+}
+
+func NewUserService(repo UserRepository, sessions SessionRevoker) *UserService {
 	return &UserService{
-		repo: repo,
+		repo:     repo,
+		sessions: sessions,
 	}
+}
+
+func (s *UserService) endSessions(ctx context.Context, userID uuid.UUID) error {
+	if s.sessions == nil {
+		return nil
+	}
+	if err := s.sessions.RevokeAllRefreshTokens(ctx, userID); err != nil {
+		return fmt.Errorf("end sessions: %w", err)
+	}
+	return nil
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
@@ -95,6 +111,10 @@ func (s *UserService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 		return fmt.Errorf("change password: hash: %w", err)
 	}
 
+	if err := s.endSessions(ctx, userID); err != nil {
+		return err
+	}
+
 	user.PasswordHash = newHash
 
 	if err := s.repo.Update(ctx, user); err != nil {
@@ -108,6 +128,9 @@ func (s *UserService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 }
 
 func (s *UserService) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
+	if err := s.endSessions(ctx, userID); err != nil {
+		return err
+	}
 	if err := s.repo.Delete(ctx, userID); err != nil {
 		if errors.Is(err, model.ErrUserNotFound) {
 			return model.ErrUserNotFound

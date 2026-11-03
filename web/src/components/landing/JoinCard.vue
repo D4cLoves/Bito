@@ -142,6 +142,7 @@ async function fail(message: string) {
 function humanize(raw: string | null | undefined): string {
   const msg = (raw || '').toLowerCase()
   if (msg.includes('invalid credentials')) return 'Неверная почта или пароль.'
+  if (msg.includes('username already taken')) return 'Этот ник уже занят. Попробуйте другой.'
   if (msg.includes('already exists')) return 'Эта почта или ник уже заняты.'
   if (msg.includes('неверный') || msg.includes('invalid verification')) return 'Код не подходит. Попробуйте ещё раз.'
   if (msg.includes('истек') || msg.includes('expired')) return 'Срок действия кода истёк. Запросите новый.'
@@ -180,7 +181,10 @@ async function requestCode(advance: boolean) {
     password: password.value,
   })
   busy.value = false
-  if (!ok) return fail(humanize(authStore.error))
+  if (!ok) {
+    if (authStore.error?.includes('username already taken')) go('join', -1)
+    return fail(humanize(authStore.error))
+  }
 
   sound.playCardDeal()
   otp.value = ['', '', '', '', '', '']

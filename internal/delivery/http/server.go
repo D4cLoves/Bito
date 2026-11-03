@@ -28,6 +28,7 @@ type Server struct {
 	inviteHandler *InviteHandler
 	shopHandler   *ShopHandler
 	tokens        TokenValidator
+	trustProxy    bool
 }
 
 type Handlers struct {
@@ -42,7 +43,15 @@ type Handlers struct {
 	Shop   *ShopHandler
 }
 
-func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Server {
+type ServerOption func(*Server)
+
+func WithTrustedProxy(trust bool) ServerOption {
+	return func(s *Server) {
+		s.trustProxy = trust
+	}
+}
+
+func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator, opts ...ServerOption) *Server {
 	s := &Server{
 		hub:           hub,
 		router:        chi.NewRouter(),
@@ -56,6 +65,9 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 		inviteHandler: h.Invite,
 		shopHandler:   h.Shop,
 		tokens:        tokens,
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	s.setupMiddlewares()
@@ -74,7 +86,9 @@ func NewServer(addr string, hub *ws.Hub, h Handlers, tokens TokenValidator) *Ser
 
 func (s *Server) setupMiddlewares() {
 	s.router.Use(middleware.RequestID)
-	s.router.Use(middleware.RealIP)
+	if s.trustProxy {
+		s.router.Use(middleware.RealIP)
+	}
 	s.router.Use(RedactingLogger(log.New(os.Stdout, "", log.LstdFlags)))
 	s.router.Use(middleware.Recoverer)
 

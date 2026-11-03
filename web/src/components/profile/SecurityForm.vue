@@ -61,7 +61,15 @@ async function save() {
 
   busy.value = true
   try {
-    await changePassword({ oldPassword: oldPassword.value, newPassword: newPassword.value })
+    const fresh = newPassword.value
+    await changePassword({ oldPassword: oldPassword.value, newPassword: fresh })
+    const email = auth.user?.email
+    if (!email || !(await auth.login({ email, password: fresh }))) {
+      auth.logout()
+      toast.show('Пароль изменён, войдите заново')
+      router.push({ name: 'landing', query: { auth: 'login' } })
+      return
+    }
     oldPassword.value = ''
     newPassword.value = ''
     repeatPassword.value = ''

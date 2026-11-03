@@ -475,3 +475,23 @@ func TestRoom_SecondTabTakesOverAndOldTabIsIgnored(t *testing.T) {
 		t.Fatalf("occupancy = %d, want 2: one seat per player", room.Occupancy())
 	}
 }
+
+func TestHub_SecondTableWaitsWhileFirstJoinIsInFlight(t *testing.T) {
+	hub := NewHub(nil, nil, nil)
+	first := hub.CreateRoom(RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 3})
+	second := hub.CreateRoom(RoomSettings{Mode: game.ModePodkidnoy, Deck: game.Deck36, MaxPlayers: 3})
+	defer first.Close()
+	defer second.Close()
+
+	if !hub.claimSeat(first, "p1") {
+		t.Fatal("first claim must pass")
+	}
+	if hub.claimSeat(second, "p1") {
+		t.Fatal("second table claimed before the first join finished")
+	}
+
+	first.dropJoin("p1")
+	if !hub.claimSeat(second, "p1") {
+		t.Fatal("claim must pass once the first join is dropped")
+	}
+}
