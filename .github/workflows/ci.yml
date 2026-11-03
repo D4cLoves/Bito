@@ -102,5 +102,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: build image
+      - name: build server image
         run: docker build .
+
+      - name: build web image
+        run: docker build web
