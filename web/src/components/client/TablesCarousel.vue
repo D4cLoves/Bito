@@ -638,7 +638,7 @@ h2 {
   }
 
   .row-chip {
-    display: inline-flex;
+    display: inline-grid;
   }
 
   .info {

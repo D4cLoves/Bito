@@ -210,7 +210,7 @@ const label = computed(
   }
 
   .row-chip {
-    display: inline-flex;
+    display: inline-grid;
   }
 
   .tag {
