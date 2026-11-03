@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AnimatePresence } from 'motion-v'
 import { useElementSize, useMediaQuery } from '@vueuse/core'
-import { PhX } from '@phosphor-icons/vue'
+import { PhCheck, PhLink, PhX } from '@phosphor-icons/vue'
 import AvatarGlyph from '../../components/client/AvatarGlyph.vue'
 import ToastStack from '../../components/app/ToastStack.vue'
 import OverlayPanel from '../../components/client/OverlayPanel.vue'
@@ -232,6 +232,12 @@ const seats = computed<SeatView[]>(() => {
   const angles = SEAT_ANGLES[total - 1] ?? SEAT_ANGLES[5]
   return angles.map((a, i) => ({ key: `wait-${i}`, player: null, waitingName: i < taken - 1 ? 'Игрок' : null, ...polar(a) }))
 })
+
+function arcLift(i: number, n: number) {
+  if (n < 3) return 0
+  const mid = (n - 1) / 2
+  return Math.round(((i - mid) / mid) ** 2 * 22)
+}
 
 function polar(deg: number) {
   const rad = (deg * Math.PI) / 180
@@ -693,14 +699,14 @@ onUnmounted(() => {
         <div class="oval">
           <span class="rim" aria-hidden="true"></span>
 
-          <div class="seats">
+          <div class="seats" :class="{ arc: seats.length >= 3, crowded: seats.length >= 4 }" :style="{ '--n': seats.length }">
             <TableSeat
-              v-for="s in seats"
+              v-for="(s, i) in seats"
               :key="s.key"
               class="seat-pos"
               :data-fly-seat="s.player?.id"
               :user-id="s.player?.id"
-              :style="{ '--x': `${s.x}%`, '--y': `${s.y}%` }"
+              :style="{ '--x': `${s.x}%`, '--y': `${s.y}%`, '--lift': arcLift(i, seats.length) }"
               :name="s.player?.name ?? s.waitingName"
               :hand-count="s.player?.handCount ?? 0"
               :role="s.player ? roleOf(s.player.id) : null"
@@ -766,7 +772,12 @@ onUnmounted(() => {
                     <span class="call-state">{{ isCalled(f.id) ? 'позван' : 'позвать' }}</span>
                   </button>
                 </div>
-                  <span v-else class="call-none">Друзей в лобби сейчас нет. Позовите по ссылке сверху.</span>
+                <span v-else class="call-none">Друзей в лобби сейчас нет — отправьте им ссылку на стол.</span>
+                <button type="button" class="felt-btn ghost call-link" @click="copyLink">
+                  <PhCheck v-if="copied" :size="18" weight="bold" aria-hidden="true" />
+                  <PhLink v-else :size="18" weight="bold" aria-hidden="true" />
+                  {{ copied ? 'Ссылка скопирована' : 'Скопировать ссылку' }}
+                </button>
               </div>
               <button v-if="status === 'closed'" type="button" class="felt-btn" @click="router.push('/lobby')">В лобби</button>
             </div>
@@ -774,7 +785,7 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <section class="dock" :class="{ 'my-turn': myTurn }">
+      <section class="dock" :class="{ 'my-turn': myTurn, idle: !state }">
         <div class="action-row">
           <TableSeat
             v-if="watching"
@@ -1129,6 +1140,13 @@ onUnmounted(() => {
   font: inherit;
   font-size: 14px;
   cursor: pointer;
+}
+
+.call-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .call-friend:hover:not(:disabled) {
@@ -1805,22 +1823,71 @@ onUnmounted(() => {
 
   .seats {
     position: relative;
-    display: flex;
-    justify-content: space-around;
-    padding: 12px 6px 0;
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    justify-items: center;
+    gap: 4px;
+    padding: 12px 12px 0;
   }
 
-  .seat-pos {
+  .seats.arc {
+    padding-bottom: 22px;
+  }
+
+  .seats .seat-pos {
     position: relative;
     left: auto;
     top: auto;
-    translate: none;
-    width: auto;
-    max-width: 96px;
+    translate: 0 calc(var(--lift) * 1px);
+    width: 100%;
+    max-width: 112px;
   }
 
   .seat-pos :deep(.backs) {
     display: none;
+  }
+
+  .seat-pos :deep(.info) {
+    width: 100%;
+  }
+
+  .seat-pos :deep(.name) {
+    max-width: 100%;
+  }
+
+  .seats .seat-pos.empty :deep(.sub) {
+    display: none;
+  }
+
+  .crowded .seat-pos :deep(.avatar-wrap) {
+    width: 46px;
+    height: 46px;
+  }
+
+  .crowded .seat-pos :deep(.avatar) {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .crowded .seat-pos :deep(.info) {
+    gap: 2px;
+    margin-top: 2px;
+    padding: 3px 4px 4px;
+    border-radius: 10px;
+  }
+
+  .crowded .seat-pos :deep(.name) {
+    font-size: 12px;
+  }
+
+  .crowded .seat-pos :deep(.sub),
+  .crowded .seat-pos :deep(.tag) {
+    font-size: 10px;
+  }
+
+  .crowded .seat-pos :deep(.tag) {
+    padding: 1px 6px;
   }
 
   .felt-content {
@@ -1835,11 +1902,24 @@ onUnmounted(() => {
   }
 
   .action-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 12px;
+    padding-top: 6px;
   }
 
-  .me-seat {
+  .action-row .me-seat {
+    width: auto;
+  }
+
+  .me-seat :deep(.info) {
+    display: none;
+  }
+
+  .dock.idle {
+    padding-bottom: 14px;
+  }
+
+  .dock.idle .hand {
     display: none;
   }
 

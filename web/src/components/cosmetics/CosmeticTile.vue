@@ -132,6 +132,34 @@ defineEmits<{ (e: 'pick'): void }>()
   }
 }
 
+@container tile (max-width: 140px) {
+  .stage {
+    aspect-ratio: 1;
+    margin: 4px 4px 0;
+    border-radius: 14px;
+  }
+
+  .badge {
+    top: 6px;
+    left: 6px;
+    padding: 3px;
+    font-size: 0;
+  }
+
+  .foot {
+    gap: 6px;
+    padding: 6px 8px 8px;
+  }
+
+  .meta small {
+    display: none;
+  }
+
+  .meta b {
+    font-size: 12px;
+  }
+}
+
 .meta {
   display: flex;
   flex-direction: column;

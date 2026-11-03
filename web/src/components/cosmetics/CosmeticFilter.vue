@@ -46,6 +46,12 @@ const spring = { type: 'spring', stiffness: 380, damping: 30 } as const
   scrollbar-width: none;
 }
 
+@media (max-width: 560px) {
+  .filter {
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
+
 button {
   position: relative;
   display: inline-flex;
