@@ -14,12 +14,21 @@ permissions:
 
 jobs:
   publish:
-    name: Publish server image
+    name: Publish ${{ matrix.name }} image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - name: server
+            context: .
+            image: ghcr.io/d4cloves/bito
+          - name: web
+            context: web
+            image: ghcr.io/d4cloves/bito-web
 
     steps:
       - uses: actions/checkout@v4
@@ -34,10 +43,10 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           push: true
           tags: |
-            ghcr.io/d4cloves/bito:${{ github.sha }}
-            ghcr.io/d4cloves/bito:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ matrix.image }}:${{ github.sha }}
+            ${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
