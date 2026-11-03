@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { PhArrowRight, PhCaretLeft, PhCaretRight, PhPlus } from '@phosphor-icons/vue'
 import TableCard from './TableCard.vue'
 import TableTop from './TableTop.vue'
+import StakeChip from './StakeChip.vue'
 import { plural } from '../../composables/useLanding'
 import { canAfford, sortTables, stakeOf, TABLE_PRESETS, type TablePreset } from '../../composables/tableList'
 import { bestPayout } from '../../constants/economy'
@@ -181,14 +182,19 @@ watch(
         <template v-else>
           <div v-for="p in TABLE_PRESETS" :key="`${p.players}-${p.stake}`" class="slot" role="listitem">
             <article class="preset" :class="{ poor: !presetAffordable(p) }">
-              <TableTop :seats="p.players" :taken="0" :stake="p.stake" muted />
+              <TableTop class="top" :seats="p.players" :taken="0" :stake="p.stake" muted />
+              <StakeChip class="row-chip" :value="p.stake" :size="40" />
               <div class="info">
                 <span class="title">
                   <span class="suit" aria-hidden="true">{{ p.mode === 'perevodnoy' ? '♥' : '♠' }}</span>
-                  {{ presetWho(p) }} · ставка {{ p.stake.toLocaleString('ru-RU') }}
+                  {{ presetWho(p) }}<span class="long"> · ставка {{ p.stake.toLocaleString('ru-RU') }}</span>
                 </span>
                 <span class="meta">{{ presetMode(p) }} · {{ p.deck }} карт</span>
                 <span class="win">выигрыш до +{{ bestPayout(p.stake, p.players).toLocaleString('ru-RU') }}</span>
+                <span class="row-meta">
+                  {{ presetMode(p) }} · {{ p.deck }} ·
+                  <span class="win">до +{{ bestPayout(p.stake, p.players).toLocaleString('ru-RU') }}</span>
+                </span>
               </div>
               <button
                 type="button"
@@ -203,7 +209,7 @@ watch(
           </div>
         </template>
 
-        <div v-if="loaded" class="slot" role="listitem">
+        <div v-if="loaded" class="slot slot-new" role="listitem">
           <button type="button" class="create" @click="$emit('create')">
             <span class="plus" aria-hidden="true"><PhPlus :size="24" weight="bold" /></span>
             <b>Свой стол</b>
@@ -536,6 +542,11 @@ h2 {
   white-space: nowrap;
 }
 
+.row-chip,
+.row-meta {
+  display: none;
+}
+
 @media (max-height: 920px) {
   .track {
     --table-h: 156px;
@@ -563,17 +574,144 @@ h2 {
 }
 
 @media (max-width: 767px) {
+  .carousel {
+    gap: 8px;
+  }
+
   .head {
-    flex-wrap: wrap;
-    row-gap: 8px;
+    align-items: center;
+    gap: 8px;
   }
 
   h2 {
-    font-size: 22px;
+    font-size: 21px;
+  }
+
+  .count {
+    display: none;
+  }
+
+  .all {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .track-wrap {
+    margin: 0;
+    mask-image: none;
+  }
+
+  .track {
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    overflow: visible;
+    scroll-snap-type: none;
   }
 
   .slot {
-    flex-basis: 220px;
+    flex: none;
+    min-height: 0;
+  }
+
+  .slot:nth-child(n + 4):not(.slot-new) {
+    display: none;
+  }
+
+  .skeleton {
+    height: 62px;
+    border-radius: 18px;
+  }
+
+  .preset {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 10px 10px 12px;
+    border-radius: 18px;
+  }
+
+  .preset .top {
+    display: none;
+  }
+
+  .row-chip {
+    display: inline-flex;
+  }
+
+  .info {
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .title {
+    font-size: 15px;
+  }
+
+  .title .long,
+  .info > .meta,
+  .info > .win {
+    display: none;
+  }
+
+  .row-meta {
+    display: block;
+    overflow: hidden;
+    color: var(--color-ink-faint);
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .make {
+    height: 36px;
+    margin: 0;
+    padding: 0 16px;
+  }
+
+  .create {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    text-align: left;
+  }
+
+  .plus {
+    width: 40px;
+    height: 40px;
+  }
+
+  .plus :deep(svg) {
+    width: 20px;
+    height: 20px;
+  }
+
+  .create b {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .create small {
+    flex: 1;
+    max-width: none;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 767px) and (min-height: 780px) {
+  .slot:nth-child(4):not(.slot-new) {
+    display: block;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 700px) {
+  .slot:nth-child(n + 3):not(.slot-new) {
+    display: none;
   }
 }
 

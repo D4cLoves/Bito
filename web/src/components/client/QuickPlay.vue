@@ -410,29 +410,93 @@ h2 {
 
 @container (max-width: 470px) {
   .hero {
-    padding: 22px 18px 24px;
+    padding: 16px 14px;
+    border-radius: 26px;
+  }
+
+  .rim {
+    inset: 6px;
+    border-radius: 20px;
+  }
+
+  .controls {
+    gap: 10px;
+  }
+
+  .badge {
+    padding: 4px 10px 4px 8px;
+    font-size: 11px;
+  }
+
+  h2 {
+    font-size: 30px;
+  }
+
+  .lead {
+    display: none;
   }
 
   .fields {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 0.8fr 1.1fr 1.1fr;
+    gap: 6px;
   }
 
-  .field-stake {
-    grid-column: 1 / -1;
+  .fields :deep(.trigger) {
+    min-height: 0;
+    padding: 7px 9px 8px;
+    border-radius: 14px;
   }
 
-  .fields :deep(.value .suit) {
+  .fields :deep(.label) {
+    font-size: 10px;
+  }
+
+  .fields :deep(.value) {
+    gap: 5px;
+    font-size: 14px;
+  }
+
+  .fields :deep(.value .suit),
+  .fields :deep(.value .stake-chip) {
     display: none;
+  }
+
+  .go-row {
+    gap: 8px;
+    margin-top: 2px;
   }
 
   .go {
     width: 100%;
     min-width: 0;
+    height: 52px;
+    font-size: 18px;
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-gold) 18%, transparent),
+      0 16px 30px -16px rgba(0, 0, 0, 0.8);
   }
 
   .odds {
     width: 100%;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 14px;
+  }
+
+  .odds div {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .odds dt {
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: lowercase;
+  }
+
+  .odds dd {
+    margin: 0;
+    font-size: 13px;
   }
 }
 
