@@ -179,19 +179,39 @@ onMounted(() => window.setTimeout(() => (ringReady.value = true), 250))
 }
 
 @media (max-width: 560px) {
-  .tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .rate {
-    grid-column: span 2;
-  }
-
-  .wallet {
-    grid-column: span 1;
-    flex-direction: column;
-    align-items: flex-start;
+  .tiles,
+  .no-wallet {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .tile {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .rate,
+  .no-wallet .rate,
+  .wallet {
+    grid-column: 1 / -1;
+    gap: 12px;
+  }
+
+  .ring-svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .icon {
+    margin-bottom: 4px;
+  }
+
+  .value {
+    font-size: 22px;
+  }
+
+  .label {
+    font-size: 12px;
   }
 }
 </style>

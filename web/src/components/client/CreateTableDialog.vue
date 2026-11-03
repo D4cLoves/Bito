@@ -139,7 +139,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
       <div ref="body" class="body">
         <p v-if="isPrivate" class="sub">Приватный стол не видно в списке. Сесть смогут только те, кого вы позовёте, или у кого есть ссылка.</p>
         <p v-else-if="invited.length" class="sub">Позванным держим места 45 секунд. Остальные места займут игроки из списка столов.</p>
-        <p v-else class="sub">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
+        <p v-else class="sub long">Компания на 3–6 игроков. Стол появится в списке, соперники подсядут, и партия начнётся сама, когда соберутся все.</p>
 
         <div class="group">
           <span id="c-stake" class="label">Ставка</span>
@@ -359,9 +359,9 @@ h2 {
 }
 
 .row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px 16px;
 }
 
 .group {
@@ -378,9 +378,10 @@ h2 {
 }
 
 .chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  justify-items: center;
+  gap: 8px;
   padding-top: 6px;
 }
 
@@ -412,20 +413,33 @@ h2 {
 
 .chip-btn.locked {
   cursor: not-allowed;
-  filter: grayscale(1) brightness(0.8);
-  opacity: 0.6;
+}
+
+.chip-btn.locked :deep(.stake-chip) {
+  opacity: 0.38;
 }
 
 .lock {
   position: absolute;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  right: -4px;
+  bottom: -2px;
+  box-sizing: content-box;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--color-paper-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-muted);
 }
 
 .seg {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--color-paper-sunken);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .seg button {
@@ -433,13 +447,13 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-width: 46px;
-  height: 42px;
-  padding: 0 16px;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  background: var(--color-paper-sunken);
-  box-shadow: inset 0 0 0 1px var(--color-line);
+  background: none;
+  white-space: nowrap;
   color: var(--color-ink-muted);
   font: inherit;
   font-size: 15px;
@@ -645,6 +659,21 @@ h2 {
 
   .chips {
     gap: 6px;
+  }
+
+  .sub.long {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .seg button {
+    gap: 5px;
+    padding: 0 8px;
+    font-size: 14px;
   }
 
   .odds {

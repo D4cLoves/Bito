@@ -3,7 +3,8 @@ import { PhPencilSimple, PhLockKey } from '@phosphor-icons/vue'
 import PlayerCard from '../profile/PlayerCard.vue'
 import StatTiles from '../profile/StatTiles.vue'
 import GameHistory from './GameHistory.vue'
-import { memberSince } from '../../composables/usePlayerRank'
+import AvatarGlyph from '../client/AvatarGlyph.vue'
+import { memberSince, rankTitle } from '../../composables/usePlayerRank'
 import type { Profile } from '../../types/user'
 import type { GameHistoryEntry } from '../../types/social'
 
@@ -23,8 +24,12 @@ defineEmits<{ (e: 'settings', section: string): void; (e: 'retry'): void }>()
 
       <div class="side">
         <div class="who">
-          <span class="name">{{ profile?.username ?? '…' }}</span>
-          <span class="meta">{{ profile?.email }}<template v-if="profile"> · в Bito с {{ memberSince(profile.createdAt) }}</template></span>
+          <span class="mini" aria-hidden="true"><AvatarGlyph v-if="profile" :name="profile.username" self /></span>
+          <div class="who-text">
+            <span class="name">{{ profile?.username ?? '…' }}</span>
+            <span class="meta">{{ profile?.email }}<template v-if="profile"> · в Bito с {{ memberSince(profile.createdAt) }}</template></span>
+            <span v-if="profile" class="mini-rank">{{ rankTitle(profile.stats.totalGames) }}</span>
+          </div>
         </div>
 
         <StatTiles :profile="profile" />
@@ -91,8 +96,21 @@ defineEmits<{ (e: 'settings', section: string): void; (e: 'retry'): void }>()
 
 .who {
   display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.who-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.mini,
+.mini-rank {
+  display: none;
 }
 
 .name {
@@ -135,14 +153,62 @@ defineEmits<{ (e: 'settings', section: string): void; (e: 'retry'): void }>()
 }
 
 @media (max-width: 760px) {
+  .profile {
+    gap: 22px;
+  }
+
   .top {
     grid-template-columns: 1fr;
   }
 
-  .player-card {
-    justify-self: center;
-    width: 100%;
-    max-width: 210px;
+  .top .player-card {
+    display: none;
+  }
+
+  .mini {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--color-gold);
+    box-shadow: 0 0 0 3px var(--color-paper-raised), 0 0 0 4.5px var(--color-gold);
+    color: var(--color-on-gold);
+    font-family: var(--font-card);
+    font-size: 26px;
+  }
+
+  .mini :deep(svg) {
+    width: 32px;
+    height: 32px;
+  }
+
+  .mini-rank {
+    display: inline-block;
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--color-gold-tint);
+    color: var(--color-gold-ink);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .name {
+    font-size: 22px;
+  }
+
+  .meta {
+    font-size: 13px;
+  }
+
+  .link {
+    flex: 1 0 auto;
+    justify-content: center;
+    padding: 0 14px;
+    white-space: nowrap;
   }
 }
 </style>

@@ -396,4 +396,58 @@ const spring = { type: 'spring', stiffness: 380, damping: 32 } as const
     gap: 10px;
   }
 }
+
+@media (max-width: 560px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+    padding: 4px;
+    overflow: visible;
+    border-radius: 18px;
+    background: var(--color-paper-sunken);
+  }
+
+  .tabs button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    height: 54px;
+    padding: 0 2px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .tab-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pill {
+    border-radius: 14px;
+    background: var(--color-paper-raised);
+    box-shadow: 0 2px 8px -4px rgba(0, 0, 0, 0.35);
+  }
+
+  .wardrobe {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .more {
+    min-height: 0;
+    padding: 10px 6px;
+    border-radius: 16px;
+  }
+
+  .more b {
+    font-size: 12px;
+  }
+
+  .more small {
+    display: none;
+  }
+}
 </style>
