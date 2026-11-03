@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { PhLockSimple } from '@phosphor-icons/vue'
 import TableTop from './TableTop.vue'
+import StakeChip from './StakeChip.vue'
 import { MIN_STAKE, bestPayout } from '../../constants/economy'
 import type { TableInfo } from '../../types/game'
 
@@ -32,7 +33,8 @@ const label = computed(
     <span v-if="mine" class="tag gold">ваш</span>
     <span v-else-if="almost" class="tag hot">ещё 1 место</span>
 
-    <TableTop :seats="table.maxPlayers" :taken="table.players" :stake="stake" :me="mine ? me : undefined" />
+    <TableTop class="top" :seats="table.maxPlayers" :taken="table.players" :stake="stake" :me="mine ? me : undefined" />
+    <StakeChip class="row-chip" :value="stake" :size="40" />
 
     <div class="info">
       <span class="title">
@@ -41,6 +43,9 @@ const label = computed(
       </span>
       <span class="meta">{{ table.players }} из {{ table.maxPlayers }} · {{ ago }}</span>
       <span class="win">выигрыш до +{{ win.toLocaleString('ru-RU') }}</span>
+      <span class="row-meta">
+        {{ table.players }} из {{ table.maxPlayers }} · <span class="win">до +{{ win.toLocaleString('ru-RU') }}</span>
+      </span>
     </div>
 
     <span v-if="mine" class="join ghost">Ждём игроков…</span>
@@ -179,5 +184,70 @@ const label = computed(
   box-shadow: inset 0 0 0 1.5px var(--color-line-heavy);
   color: var(--color-ink-muted);
   cursor: default;
+}
+
+.row-chip,
+.row-meta {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .table-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 10px 10px 12px;
+    border-radius: 18px;
+  }
+
+  .table-card:hover {
+    transform: none;
+  }
+
+  .top {
+    display: none;
+  }
+
+  .row-chip {
+    display: inline-flex;
+  }
+
+  .tag {
+    top: -7px;
+    right: 14px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .info {
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .title {
+    font-size: 15px;
+  }
+
+  .info > .meta,
+  .info > .win {
+    display: none;
+  }
+
+  .row-meta {
+    display: block;
+    overflow: hidden;
+    color: var(--color-ink-faint);
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .join {
+    height: 36px;
+    margin: 0;
+    padding: 0 16px;
+  }
 }
 </style>

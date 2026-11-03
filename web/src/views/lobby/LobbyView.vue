@@ -517,7 +517,7 @@ onUnmounted(() => {
           />
 
           <LobbyPlayerCard
-            class="rise"
+            class="rise player-card"
             style="--d: 3"
             :username="username"
             :profile="profile"
@@ -851,8 +851,12 @@ onUnmounted(() => {
   }
 
   .main-inner {
-    gap: 18px;
-    padding: 4px 16px 32px;
+    gap: 14px;
+    padding: 4px 16px 12px;
+  }
+
+  .duo .player-card {
+    display: none;
   }
 }
 </style>
